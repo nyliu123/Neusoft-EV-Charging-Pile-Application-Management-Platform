@@ -40,8 +40,12 @@ private:
                                             ServiceResult *failureResult = nullptr) const;
     ServiceResult registerUser(const QJsonObject &payload);
     ServiceResult login(const QJsonObject &payload);
+    ServiceResult phoneLogin(const QJsonObject &payload);
     ServiceResult logout(const QString &token);
     ServiceResult userProfile(const QString &token);
+    ServiceResult updateUserProfile(const QJsonObject &payload, const QString &token);
+    ServiceResult updateUserAvatar(const QJsonObject &payload, const QString &token);
+    ServiceResult rechargeWallet(const QJsonObject &payload, const QString &token);
     ServiceResult listStations(const QJsonObject &payload, const QString &token);
     ServiceResult getStation(const QJsonObject &payload, const QString &token);
     ServiceResult createReservation(const QJsonObject &payload, const QString &token);
@@ -60,9 +64,11 @@ private:
     ServiceResult adminListChargers(const QJsonObject &payload, const QString &token);
     ServiceResult adminSaveCharger(const QJsonObject &payload, const QString &token);
     ServiceResult adminSetChargerStatus(const QJsonObject &payload, const QString &token);
-    ServiceResult adminListUsers(const QString &token);
+    ServiceResult adminRestartCharger(const QJsonObject &payload, const QString &token);
+    ServiceResult adminListChargerOperations(const QJsonObject &payload, const QString &token);
+    ServiceResult adminListUsers(const QJsonObject &payload, const QString &token);
     ServiceResult adminSetUserStatus(const QJsonObject &payload, const QString &token);
-    ServiceResult adminListOrders(const QString &token);
+    ServiceResult adminListOrders(const QJsonObject &payload, const QString &token);
     ServiceResult adminListReservations(const QString &token);
     ServiceResult adminListChargingSessions(const QString &token);
     ServiceResult adminListTariffs(const QString &token);

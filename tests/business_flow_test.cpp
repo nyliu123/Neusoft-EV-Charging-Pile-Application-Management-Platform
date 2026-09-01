@@ -2,6 +2,8 @@
 #include "database.h"
 
 #include <QJsonArray>
+#include <QSqlDatabase>
+#include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -12,6 +14,8 @@ class BusinessFlowTest final : public QObject
 private slots:
     void completesReservationChargingAndOrderFlow();
     void administratorCanManageCoreRecords();
+    void addedMatrixRequirementsWorkEndToEnd();
+    void upgradesLegacyDatabaseSchema();
 };
 
 void BusinessFlowTest::completesReservationChargingAndOrderFlow()
@@ -209,6 +213,189 @@ void BusinessFlowTest::administratorCanManageCoreRecords()
     QCOMPARE(analytics.data.value(QStringLiteral("dailyTrend")).toArray().size(), 30);
     QVERIFY(analytics.data.value(QStringLiteral("summary")).toObject()
                 .value(QStringLiteral("orderCount")).toInt() >= 60);
+}
+
+void BusinessFlowTest::addedMatrixRequirementsWorkEndToEnd()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    evcs::server::Database database;
+    QString error;
+    QVERIFY2(database.initialize(
+                 temporaryDirectory.filePath(QStringLiteral("matrix-gaps.db")),
+                 QStringLiteral(EVCS_TEST_SCHEMA_PATH), &error),
+             qPrintable(error));
+    evcs::server::BusinessService service(database);
+
+    const auto invalidPhone = service.handle(
+        QStringLiteral("auth.phoneLogin"),
+        {{QStringLiteral("phone"), QStringLiteral("123456")}}, {});
+    QVERIFY(!invalidPhone.ok);
+    QCOMPARE(invalidPhone.errorCode, QStringLiteral("INVALID_ARGUMENT"));
+
+    const QString phone = QStringLiteral("13912345678");
+    const auto firstPhoneLogin = service.handle(
+        QStringLiteral("auth.phoneLogin"), {{QStringLiteral("phone"), phone}}, {});
+    QVERIFY2(firstPhoneLogin.ok, qPrintable(firstPhoneLogin.errorMessage));
+    QVERIFY(firstPhoneLogin.data.value(QStringLiteral("autoRegistered")).toBool());
+    const QString userToken = firstPhoneLogin.data.value(QStringLiteral("token")).toString();
+    QVERIFY(!userToken.isEmpty());
+    const auto secondPhoneLogin = service.handle(
+        QStringLiteral("auth.phoneLogin"), {{QStringLiteral("phone"), phone}}, {});
+    QVERIFY2(secondPhoneLogin.ok, qPrintable(secondPhoneLogin.errorMessage));
+    QVERIFY(!secondPhoneLogin.data.value(QStringLiteral("autoRegistered")).toBool(true));
+
+    const auto renamed = service.handle(
+        QStringLiteral("user.profile.update"),
+        {{QStringLiteral("displayName"), QStringLiteral("矩阵测试用户")}}, userToken);
+    QVERIFY2(renamed.ok, qPrintable(renamed.errorMessage));
+    const auto avatar = service.handle(
+        QStringLiteral("user.avatar.update"),
+        {{QStringLiteral("mimeType"), QStringLiteral("image/png")},
+         {QStringLiteral("dataBase64"), QStringLiteral("iVBORw0KGgo=")}}, userToken);
+    QVERIFY2(avatar.ok, qPrintable(avatar.errorMessage));
+    const auto recharge = service.handle(
+        QStringLiteral("wallet.recharge"),
+        {{QStringLiteral("amountCents"), 1234}}, userToken);
+    QVERIFY2(recharge.ok, qPrintable(recharge.errorMessage));
+    QCOMPARE(recharge.data.value(QStringLiteral("balanceCents")).toInt(), 11234);
+    const auto profile = service.handle(QStringLiteral("user.profile"), {}, userToken);
+    QVERIFY2(profile.ok, qPrintable(profile.errorMessage));
+    const QJsonObject user = profile.data.value(QStringLiteral("user")).toObject();
+    QCOMPARE(user.value(QStringLiteral("displayName")).toString(), QStringLiteral("矩阵测试用户"));
+    QCOMPARE(user.value(QStringLiteral("avatarMime")).toString(), QStringLiteral("image/png"));
+    QVERIFY(!user.value(QStringLiteral("avatarBase64")).toString().isEmpty());
+
+    const auto nearby = service.handle(
+        QStringLiteral("station.list"),
+        {{QStringLiteral("latitude"), 39.908}, {QStringLiteral("longitude"), 116.397}},
+        userToken);
+    QVERIFY2(nearby.ok, qPrintable(nearby.errorMessage));
+    const QJsonArray nearbyStations = nearby.data.value(QStringLiteral("stations")).toArray();
+    QVERIFY(nearbyStations.size() >= 3);
+    double lastDistance = -1.0;
+    for (const QJsonValue &value : nearbyStations) {
+        const double distance = value.toObject().value(QStringLiteral("distanceKm")).toDouble(-1.0);
+        QVERIFY(distance >= 0.0);
+        QVERIFY(distance >= lastDistance);
+        lastDistance = distance;
+    }
+
+    const auto adminLogin = service.handle(
+        QStringLiteral("auth.login"),
+        {{QStringLiteral("username"), QStringLiteral("admin")},
+         {QStringLiteral("password"), QStringLiteral("Admin123!")}}, {});
+    QVERIFY2(adminLogin.ok, qPrintable(adminLogin.errorMessage));
+    const QString adminToken = adminLogin.data.value(QStringLiteral("token")).toString();
+
+    const auto filteredUsers = service.handle(
+        QStringLiteral("admin.user.list"),
+        {{QStringLiteral("phoneKeyword"), QStringLiteral("91234")}}, adminToken);
+    QVERIFY2(filteredUsers.ok, qPrintable(filteredUsers.errorMessage));
+    const QJsonArray filteredUserRows = filteredUsers.data.value(QStringLiteral("users")).toArray();
+    QCOMPARE(filteredUserRows.size(), 1);
+    QCOMPARE(filteredUserRows.first().toObject().value(QStringLiteral("phone")).toString(), phone);
+
+    const auto station = service.handle(
+        QStringLiteral("admin.station.save"),
+        {{QStringLiteral("name"), QStringLiteral("联动测试站")},
+         {QStringLiteral("region"), QStringLiteral("测试区")},
+         {QStringLiteral("address"), QStringLiteral("联动路 1 号")},
+         {QStringLiteral("longitude"), 116.4},
+         {QStringLiteral("latitude"), 39.9},
+         {QStringLiteral("chargerCount"), 2},
+         {QStringLiteral("defaultPowerKw"), 120.0},
+         {QStringLiteral("tariffId"), 1},
+         {QStringLiteral("status"), QStringLiteral("active")}}, adminToken);
+    QVERIFY2(station.ok, qPrintable(station.errorMessage));
+    QCOMPARE(station.data.value(QStringLiteral("createdChargers")).toInt(), 2);
+    const double stationId = station.data.value(QStringLiteral("stationId")).toDouble();
+    const auto linkedChargers = service.handle(
+        QStringLiteral("admin.charger.list"),
+        {{QStringLiteral("stationId"), stationId}}, adminToken);
+    QVERIFY2(linkedChargers.ok, qPrintable(linkedChargers.errorMessage));
+    const QJsonArray chargerRows = linkedChargers.data.value(QStringLiteral("chargers")).toArray();
+    QCOMPARE(chargerRows.size(), 2);
+    QVERIFY(chargerRows.first().toObject().contains(QStringLiteral("sessionCount")));
+    QVERIFY(chargerRows.first().toObject().contains(QStringLiteral("totalDurationSeconds")));
+    const double chargerId = chargerRows.first().toObject().value(QStringLiteral("id")).toDouble();
+
+    const auto faulted = service.handle(
+        QStringLiteral("admin.charger.setStatus"),
+        {{QStringLiteral("chargerId"), chargerId}, {QStringLiteral("status"), QStringLiteral("fault")}},
+        adminToken);
+    QVERIFY2(faulted.ok, qPrintable(faulted.errorMessage));
+    const auto restarted = service.handle(
+        QStringLiteral("admin.charger.restart"),
+        {{QStringLiteral("chargerId"), chargerId}}, adminToken);
+    QVERIFY2(restarted.ok, qPrintable(restarted.errorMessage));
+    QVERIFY(restarted.data.value(QStringLiteral("success")).toBool());
+    QCOMPARE(restarted.data.value(QStringLiteral("resultStatus")).toString(), QStringLiteral("idle"));
+    const auto operationLogs = service.handle(
+        QStringLiteral("admin.charger.operation.list"),
+        {{QStringLiteral("chargerId"), chargerId}}, adminToken);
+    QVERIFY2(operationLogs.ok, qPrintable(operationLogs.errorMessage));
+    QCOMPARE(operationLogs.data.value(QStringLiteral("operations")).toArray().size(), 1);
+
+    const auto generated = service.handle(
+        QStringLiteral("admin.demo.generateHistory"),
+        {{QStringLiteral("confirmed"), true}}, adminToken);
+    QVERIFY2(generated.ok, qPrintable(generated.errorMessage));
+    const auto allOrders = service.handle(QStringLiteral("admin.order.list"), {}, adminToken);
+    QVERIFY2(allOrders.ok, qPrintable(allOrders.errorMessage));
+    const QJsonObject sampleOrder = allOrders.data.value(QStringLiteral("orders")).toArray().first().toObject();
+    const QString orderNeedle = sampleOrder.value(QStringLiteral("orderNo")).toString().right(8);
+    const auto filteredOrders = service.handle(
+        QStringLiteral("admin.order.list"),
+        {{QStringLiteral("orderNo"), orderNeedle},
+         {QStringLiteral("stationKeyword"), sampleOrder.value(QStringLiteral("stationName"))}},
+        adminToken);
+    QVERIFY2(filteredOrders.ok, qPrintable(filteredOrders.errorMessage));
+    QVERIFY(!filteredOrders.data.value(QStringLiteral("orders")).toArray().isEmpty());
+}
+
+void BusinessFlowTest::upgradesLegacyDatabaseSchema()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    const QString databasePath = temporaryDirectory.filePath(QStringLiteral("legacy.db"));
+    const QString connectionName = QStringLiteral("legacy-schema-setup");
+    {
+        QSqlDatabase legacy = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+        legacy.setDatabaseName(databasePath);
+        QVERIFY(legacy.open());
+        QSqlQuery query(legacy);
+        QVERIFY(query.exec(QStringLiteral(
+            "CREATE TABLE users(id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE, "
+            "password_hash TEXT NOT NULL, password_salt TEXT NOT NULL, role TEXT NOT NULL, "
+            "display_name TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', balance_cents INTEGER NOT NULL, "
+            "status TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)")));
+        QVERIFY(query.exec(QStringLiteral(
+            "CREATE TABLE schema_version(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)")));
+        QVERIFY(query.exec(QStringLiteral(
+            "INSERT INTO schema_version(version, applied_at) VALUES(1, '2026-08-31T00:00:00Z')")));
+        legacy.close();
+    }
+    QSqlDatabase::removeDatabase(connectionName);
+
+    evcs::server::Database database;
+    QString error;
+    QVERIFY2(database.initialize(databasePath, QStringLiteral(EVCS_TEST_SCHEMA_PATH), &error),
+             qPrintable(error));
+    QSqlQuery columns(database.connection());
+    QVERIFY(columns.exec(QStringLiteral("PRAGMA table_info(users)")));
+    bool foundAvatarMime = false;
+    bool foundAvatarData = false;
+    while (columns.next()) {
+        foundAvatarMime |= columns.value(1).toString() == QStringLiteral("avatar_mime");
+        foundAvatarData |= columns.value(1).toString() == QStringLiteral("avatar_data");
+    }
+    QVERIFY(foundAvatarMime);
+    QVERIFY(foundAvatarData);
+    QSqlQuery version(database.connection());
+    QVERIFY(version.exec(QStringLiteral("SELECT COUNT(*) FROM schema_version WHERE version = 2")));
+    QVERIFY(version.next());
+    QCOMPARE(version.value(0).toInt(), 1);
 }
 
 QTEST_APPLESS_MAIN(BusinessFlowTest)

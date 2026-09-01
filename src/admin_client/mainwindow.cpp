@@ -3,6 +3,9 @@
 #include <QAbstractItemView>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDate>
+#include <QDateEdit>
+#include <QDateTime>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
@@ -15,6 +18,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QPainter>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QStackedWidget>
@@ -23,6 +27,13 @@
 #include <QTabWidget>
 #include <QTimer>
 #include <QVBoxLayout>
+#include <QtMath>
+
+#include <QtCharts/QChart>
+#include <QtCharts/QChartView>
+#include <QtCharts/QDateTimeAxis>
+#include <QtCharts/QLineSeries>
+#include <QtCharts/QValueAxis>
 
 namespace evcs::adminclient {
 namespace {
@@ -152,9 +163,18 @@ QWidget *MainWindow::createDashboardPage()
 {
     auto *page = new QWidget;
     auto *layout = new QVBoxLayout(page);
+    auto *topBar = toolbar();
     auto *refresh = new QPushButton(QStringLiteral("刷新概览"));
     connect(refresh, &QPushButton::clicked, this, &MainWindow::refreshDashboard);
-    layout->addWidget(refresh, 0, Qt::AlignRight);
+    trendRangeCombo_ = new QComboBox;
+    trendRangeCombo_->addItem(QStringLiteral("近 7 天"), 7);
+    trendRangeCombo_->addItem(QStringLiteral("近 30 天"), 30);
+    connect(trendRangeCombo_, &QComboBox::currentIndexChanged, this, &MainWindow::updateTrendDisplay);
+    topBar->addWidget(new QLabel(QStringLiteral("趋势范围")));
+    topBar->addWidget(trendRangeCombo_);
+    topBar->addStretch();
+    topBar->addWidget(refresh);
+    layout->addLayout(topBar);
     auto *cards = new QGridLayout;
     userCountLabel_ = new QLabel;
     userCountLabel_->setObjectName(QStringLiteral("dashboardUserCount"));
@@ -181,9 +201,14 @@ QWidget *MainWindow::createDashboardPage()
         cards->addWidget(box, i / 3, i % 3);
     }
     layout->addLayout(cards);
-    layout->addWidget(new QLabel(QStringLiteral("近 7 天订单与营收趋势")));
+    layout->addWidget(new QLabel(QStringLiteral("订单与营收趋势（Qt Charts）")));
+    trendChart_ = new QChartView;
+    trendChart_->setMinimumHeight(250);
+    trendChart_->setRenderHint(QPainter::Antialiasing);
+    layout->addWidget(trendChart_);
     trendTable_ = makeTable({QStringLiteral("日期"), QStringLiteral("订单数"), QStringLiteral("营收/元")});
     trendTable_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    trendTable_->setMaximumHeight(190);
     layout->addWidget(trendTable_);
     return page;
 }
@@ -196,18 +221,23 @@ QWidget *MainWindow::createStationPage()
     auto *refresh = new QPushButton(QStringLiteral("刷新"));
     auto *add = new QPushButton(QStringLiteral("新增站点"));
     auto *edit = new QPushButton(QStringLiteral("编辑选中"));
+    auto *devices = new QPushButton(QStringLiteral("查看站内设备"));
     bar->addWidget(refresh);
     bar->addWidget(add);
     bar->addWidget(edit);
+    bar->addWidget(devices);
     bar->addStretch();
     connect(refresh, &QPushButton::clicked, this, &MainWindow::refreshStations);
     connect(add, &QPushButton::clicked, this, [this] { editStation(true); });
     connect(edit, &QPushButton::clicked, this, [this] { editStation(false); });
+    connect(devices, &QPushButton::clicked, this, &MainWindow::showSelectedStationDevices);
     layout->addLayout(bar);
     stationTable_ = makeTable({QStringLiteral("ID"), QStringLiteral("名称"), QStringLiteral("区域"),
                                QStringLiteral("地址"), QStringLiteral("经度"), QStringLiteral("纬度"),
                                QStringLiteral("营业时间"), QStringLiteral("状态"), QStringLiteral("桩数"),
-                               QStringLiteral("空闲"), QStringLiteral("最低价/元")});
+                               QStringLiteral("空闲"), QStringLiteral("在线率"), QStringLiteral("最低价/元")});
+    connect(stationTable_, &QTableWidget::cellDoubleClicked, this,
+            [this](int, int) { showSelectedStationDevices(); });
     layout->addWidget(stationTable_);
     return page;
 }
@@ -221,17 +251,26 @@ QWidget *MainWindow::createChargerPage()
     auto *add = new QPushButton(QStringLiteral("新增充电桩"));
     auto *edit = new QPushButton(QStringLiteral("编辑选中"));
     auto *status = new QPushButton(QStringLiteral("设置运行状态"));
-    for (auto *button : {refresh, add, edit, status}) bar->addWidget(button);
+    auto *restart = new QPushButton(QStringLiteral("远程重启"));
+    auto *operations = new QPushButton(QStringLiteral("操作日志"));
+    auto *showAll = new QPushButton(QStringLiteral("显示全部"));
+    for (auto *button : {refresh, add, edit, status, restart, operations, showAll}) bar->addWidget(button);
     bar->addStretch();
     connect(refresh, &QPushButton::clicked, this, &MainWindow::refreshChargers);
     connect(add, &QPushButton::clicked, this, [this] { editCharger(true); });
     connect(edit, &QPushButton::clicked, this, [this] { editCharger(false); });
     connect(status, &QPushButton::clicked, this, &MainWindow::setChargerStatus);
+    connect(restart, &QPushButton::clicked, this, &MainWindow::restartCharger);
+    connect(operations, &QPushButton::clicked, this, &MainWindow::showChargerOperations);
+    connect(showAll, &QPushButton::clicked, this, &MainWindow::showAllChargers);
+    chargerFilterLabel_ = new QLabel(QStringLiteral("当前：全部站点"));
+    bar->addWidget(chargerFilterLabel_);
     layout->addLayout(bar);
     chargerTable_ = makeTable({QStringLiteral("ID"), QStringLiteral("站点ID"), QStringLiteral("站点"),
                                QStringLiteral("编号"), QStringLiteral("接口"), QStringLiteral("功率/kW"),
                                QStringLiteral("状态"), QStringLiteral("价格ID"), QStringLiteral("价格方案"),
-                               QStringLiteral("单价/元"), QStringLiteral("更新时间")});
+                               QStringLiteral("单价/元"), QStringLiteral("累计充电次数"),
+                               QStringLiteral("累计时长/分钟"), QStringLiteral("更新时间")});
     layout->addWidget(chargerTable_);
     return page;
 }
@@ -242,12 +281,16 @@ QWidget *MainWindow::createUserPage()
     auto *layout = new QVBoxLayout(page);
     auto *bar = toolbar();
     auto *refresh = new QPushButton(QStringLiteral("刷新"));
+    userPhoneFilterEdit_ = new QLineEdit;
+    userPhoneFilterEdit_->setPlaceholderText(QStringLiteral("手机号模糊查询"));
     auto *toggle = new QPushButton(QStringLiteral("启用/停用选中用户"));
+    bar->addWidget(userPhoneFilterEdit_);
     bar->addWidget(refresh);
     bar->addWidget(toggle);
     bar->addStretch();
     connect(refresh, &QPushButton::clicked, this, &MainWindow::refreshUsers);
     connect(toggle, &QPushButton::clicked, this, &MainWindow::setUserStatus);
+    connect(userPhoneFilterEdit_, &QLineEdit::returnPressed, this, &MainWindow::refreshUsers);
     layout->addLayout(bar);
     userTable_ = makeTable({QStringLiteral("ID"), QStringLiteral("用户名"), QStringLiteral("角色"),
                             QStringLiteral("姓名"), QStringLiteral("手机号"), QStringLiteral("余额/元"),
@@ -260,10 +303,26 @@ QWidget *MainWindow::createOrderPage()
 {
     auto *page = new QWidget;
     auto *layout = new QVBoxLayout(page);
+    auto *filters = new QGridLayout;
+    orderNoFilterEdit_ = new QLineEdit; orderNoFilterEdit_->setPlaceholderText(QStringLiteral("订单号"));
+    orderPhoneFilterEdit_ = new QLineEdit; orderPhoneFilterEdit_->setPlaceholderText(QStringLiteral("手机号"));
+    orderStationFilterEdit_ = new QLineEdit; orderStationFilterEdit_->setPlaceholderText(QStringLiteral("站点名称"));
+    orderChargerFilterEdit_ = new QLineEdit; orderChargerFilterEdit_->setPlaceholderText(QStringLiteral("充电桩编号"));
+    orderStatusFilterCombo_ = new QComboBox;
+    orderStatusFilterCombo_->addItems({QStringLiteral("全部状态"), QStringLiteral("paid"), QStringLiteral("pending"), QStringLiteral("cancelled")});
+    orderDateFilterCheck_ = new QCheckBox(QStringLiteral("按日期"));
+    orderStartDateEdit_ = new QDateEdit(QDate::currentDate().addDays(-30));
+    orderEndDateEdit_ = new QDateEdit(QDate::currentDate());
+    orderStartDateEdit_->setCalendarPopup(true); orderEndDateEdit_->setCalendarPopup(true);
     auto *refresh = new QPushButton(QStringLiteral("刷新订单"));
     connect(refresh, &QPushButton::clicked, this, &MainWindow::refreshOrders);
-    layout->addWidget(refresh, 0, Qt::AlignLeft);
-    orderTable_ = makeTable({QStringLiteral("ID"), QStringLiteral("订单号"), QStringLiteral("用户"),
+    filters->addWidget(orderNoFilterEdit_, 0, 0); filters->addWidget(orderPhoneFilterEdit_, 0, 1);
+    filters->addWidget(orderStationFilterEdit_, 0, 2); filters->addWidget(orderChargerFilterEdit_, 0, 3);
+    filters->addWidget(orderStatusFilterCombo_, 1, 0); filters->addWidget(orderDateFilterCheck_, 1, 1);
+    filters->addWidget(orderStartDateEdit_, 1, 2); filters->addWidget(orderEndDateEdit_, 1, 3);
+    filters->addWidget(refresh, 1, 4);
+    layout->addLayout(filters);
+    orderTable_ = makeTable({QStringLiteral("ID"), QStringLiteral("订单号"), QStringLiteral("用户"), QStringLiteral("手机号"),
                              QStringLiteral("站点"), QStringLiteral("充电桩"), QStringLiteral("电量/kWh"),
                              QStringLiteral("金额/元"), QStringLiteral("状态"), QStringLiteral("创建时间")});
     layout->addWidget(orderTable_);
@@ -398,9 +457,36 @@ void MainWindow::refreshAll()
 
 void MainWindow::refreshDashboard() { apiClient_.sendRequest(QStringLiteral("admin.dashboard")); }
 void MainWindow::refreshStations() { apiClient_.sendRequest(QStringLiteral("admin.station.list")); }
-void MainWindow::refreshChargers() { apiClient_.sendRequest(QStringLiteral("admin.charger.list")); }
-void MainWindow::refreshUsers() { apiClient_.sendRequest(QStringLiteral("admin.user.list")); }
-void MainWindow::refreshOrders() { apiClient_.sendRequest(QStringLiteral("admin.order.list")); }
+void MainWindow::refreshChargers()
+{
+    QJsonObject payload;
+    if (chargerStationFilterId_ > 0) payload.insert(QStringLiteral("stationId"), static_cast<double>(chargerStationFilterId_));
+    apiClient_.sendRequest(QStringLiteral("admin.charger.list"), payload);
+}
+
+void MainWindow::refreshUsers()
+{
+    apiClient_.sendRequest(QStringLiteral("admin.user.list"), {
+        {QStringLiteral("phoneKeyword"), userPhoneFilterEdit_->text().trimmed()}
+    });
+}
+
+void MainWindow::refreshOrders()
+{
+    QJsonObject payload{
+        {QStringLiteral("orderNo"), orderNoFilterEdit_->text().trimmed()},
+        {QStringLiteral("phone"), orderPhoneFilterEdit_->text().trimmed()},
+        {QStringLiteral("stationKeyword"), orderStationFilterEdit_->text().trimmed()},
+        {QStringLiteral("chargerCode"), orderChargerFilterEdit_->text().trimmed()}
+    };
+    if (orderStatusFilterCombo_->currentIndex() > 0)
+        payload.insert(QStringLiteral("status"), orderStatusFilterCombo_->currentText());
+    if (orderDateFilterCheck_->isChecked()) {
+        payload.insert(QStringLiteral("startDate"), orderStartDateEdit_->date().toString(Qt::ISODate));
+        payload.insert(QStringLiteral("endDate"), orderEndDateEdit_->date().toString(Qt::ISODate));
+    }
+    apiClient_.sendRequest(QStringLiteral("admin.order.list"), payload);
+}
 void MainWindow::refreshReservations() { apiClient_.sendRequest(QStringLiteral("admin.reservation.list")); }
 void MainWindow::refreshSessions() { apiClient_.sendRequest(QStringLiteral("admin.session.list")); }
 void MainWindow::refreshTariffs() { apiClient_.sendRequest(QStringLiteral("admin.tariff.list")); }
@@ -410,6 +496,28 @@ qint64 MainWindow::selectedId(QTableWidget *table) const
 {
     const int row = table->currentRow();
     return row < 0 ? 0 : cellText(table, row, 0).toLongLong();
+}
+
+void MainWindow::showSelectedStationDevices()
+{
+    const int row = stationTable_->currentRow();
+    const qint64 stationId = selectedId(stationTable_);
+    if (row < 0 || stationId <= 0) {
+        QMessageBox::information(this, QStringLiteral("请选择"), QStringLiteral("请先选择一个站点。"));
+        return;
+    }
+    chargerStationFilterId_ = stationId;
+    chargerFilterLabel_->setText(QStringLiteral("当前站点：%1（ID %2）")
+                                     .arg(cellText(stationTable_, row, 1)).arg(stationId));
+    tabs_->setCurrentIndex(2);
+    refreshChargers();
+}
+
+void MainWindow::showAllChargers()
+{
+    chargerStationFilterId_ = 0;
+    chargerFilterLabel_->setText(QStringLiteral("当前：全部站点"));
+    refreshChargers();
 }
 
 void MainWindow::editStation(bool createNew)
@@ -435,17 +543,33 @@ void MainWindow::editStation(bool createNew)
     auto *status = new QComboBox;
     status->addItems({QStringLiteral("active"), QStringLiteral("disabled")});
     if (!createNew) status->setCurrentText(cellText(stationTable_, row, 7));
+    auto *chargerCount = new QSpinBox;
+    chargerCount->setRange(0, 50);
+    chargerCount->setValue(createNew ? 4 : 0);
+    chargerCount->setEnabled(createNew);
+    auto *defaultPower = new QDoubleSpinBox;
+    defaultPower->setRange(1, 1000); defaultPower->setDecimals(1); defaultPower->setValue(60.0);
+    defaultPower->setEnabled(createNew);
+    auto *tariffId = new QSpinBox;
+    tariffId->setRange(1, 100000000); tariffId->setValue(1); tariffId->setEnabled(createNew);
     form->addRow(QStringLiteral("名称"), name); form->addRow(QStringLiteral("区域"), region);
     form->addRow(QStringLiteral("地址"), address); form->addRow(QStringLiteral("经度"), longitude);
     form->addRow(QStringLiteral("纬度"), latitude); form->addRow(QStringLiteral("营业时间"), hours);
-    form->addRow(QStringLiteral("状态"), status); finishDialog(dialog, form);
+    form->addRow(QStringLiteral("状态"), status);
+    form->addRow(QStringLiteral("同步创建充电桩"), chargerCount);
+    form->addRow(QStringLiteral("默认功率/kW"), defaultPower);
+    form->addRow(QStringLiteral("价格方案 ID"), tariffId);
+    finishDialog(dialog, form);
     if (dialog.exec() != QDialog::Accepted) return;
     apiClient_.sendRequest(QStringLiteral("admin.station.save"), {
         {QStringLiteral("id"), createNew ? 0.0 : static_cast<double>(selectedId(stationTable_))},
         {QStringLiteral("name"), name->text()}, {QStringLiteral("region"), region->text()},
         {QStringLiteral("address"), address->text()}, {QStringLiteral("longitude"), longitude->value()},
         {QStringLiteral("latitude"), latitude->value()}, {QStringLiteral("businessHours"), hours->text()},
-        {QStringLiteral("status"), status->currentText()}
+        {QStringLiteral("status"), status->currentText()},
+        {QStringLiteral("chargerCount"), chargerCount->value()},
+        {QStringLiteral("defaultPowerKw"), defaultPower->value()},
+        {QStringLiteral("tariffId"), tariffId->value()}
     });
 }
 
@@ -496,6 +620,29 @@ void MainWindow::setChargerStatus()
         {QStringLiteral("idle"), QStringLiteral("fault"), QStringLiteral("offline"), QStringLiteral("disabled")}, 0, false, &ok);
     if (ok) apiClient_.sendRequest(QStringLiteral("admin.charger.setStatus"), {
         {QStringLiteral("chargerId"), static_cast<double>(id)}, {QStringLiteral("status"), status}});
+}
+
+void MainWindow::restartCharger()
+{
+    const qint64 id = selectedId(chargerTable_);
+    if (id <= 0) {
+        QMessageBox::information(this, QStringLiteral("请选择"), QStringLiteral("请先选择一个充电桩。"));
+        return;
+    }
+    if (QMessageBox::question(this, QStringLiteral("远程重启"),
+            QStringLiteral("确认向充电桩 %1 发送重启指令？").arg(cellText(chargerTable_, chargerTable_->currentRow(), 3)))
+        != QMessageBox::Yes) return;
+    apiClient_.sendRequest(QStringLiteral("admin.charger.restart"), {
+        {QStringLiteral("chargerId"), static_cast<double>(id)}
+    });
+}
+
+void MainWindow::showChargerOperations()
+{
+    QJsonObject payload;
+    const qint64 id = selectedId(chargerTable_);
+    if (id > 0) payload.insert(QStringLiteral("chargerId"), static_cast<double>(id));
+    apiClient_.sendRequest(QStringLiteral("admin.charger.operation.list"), payload);
 }
 
 void MainWindow::setUserStatus()
@@ -585,8 +732,44 @@ void MainWindow::handleResponse(const QString &action, bool ok, const QJsonObjec
     else if (action == QStringLiteral("admin.session.list")) populateSessions(data);
     else if (action == QStringLiteral("admin.tariff.list")) populateTariffs(data);
     else if (action == QStringLiteral("admin.fault.list")) populateFaults(data);
+    else if (action == QStringLiteral("admin.charger.operation.list")) {
+        const QJsonArray items = data.value(QStringLiteral("operations")).toArray();
+        QDialog dialog(this);
+        dialog.setWindowTitle(QStringLiteral("充电桩远程操作日志"));
+        dialog.resize(1040, 480);
+        auto *layout = new QVBoxLayout(&dialog);
+        auto *table = makeTable({QStringLiteral("ID"), QStringLiteral("充电桩"), QStringLiteral("管理员"),
+                                 QStringLiteral("操作"), QStringLiteral("原状态"), QStringLiteral("结果状态"),
+                                 QStringLiteral("成功"), QStringLiteral("说明"), QStringLiteral("时间")});
+        table->setRowCount(items.size());
+        for (int row = 0; row < items.size(); ++row) {
+            const QJsonObject x = items.at(row).toObject();
+            const QStringList values{
+                QString::number(jsonInteger(x.value(QStringLiteral("id")))),
+                x.value(QStringLiteral("chargerCode")).toString(),
+                x.value(QStringLiteral("operator")).toString(),
+                x.value(QStringLiteral("operation")).toString(),
+                x.value(QStringLiteral("previousStatus")).toString(),
+                x.value(QStringLiteral("resultStatus")).toString(),
+                x.value(QStringLiteral("success")).toBool() ? QStringLiteral("是") : QStringLiteral("否"),
+                x.value(QStringLiteral("message")).toString(),
+                x.value(QStringLiteral("createdAt")).toString()
+            };
+            for (int column = 0; column < values.size(); ++column) setCell(table, row, column, values.at(column));
+        }
+        table->resizeColumnsToContents();
+        layout->addWidget(table);
+        auto *close = new QPushButton(QStringLiteral("关闭"));
+        connect(close, &QPushButton::clicked, &dialog, &QDialog::accept);
+        layout->addWidget(close, 0, Qt::AlignRight);
+        dialog.exec();
+    }
     else if (action == QStringLiteral("admin.station.save")) { statusBar()->showMessage(QStringLiteral("站点已保存"), 4000); refreshStations(); refreshDashboard(); }
     else if (action == QStringLiteral("admin.charger.save") || action == QStringLiteral("admin.charger.setStatus")) { statusBar()->showMessage(QStringLiteral("充电桩已更新"), 4000); refreshChargers(); refreshDashboard(); }
+    else if (action == QStringLiteral("admin.charger.restart")) {
+        QMessageBox::information(this, QStringLiteral("远程重启"), data.value(QStringLiteral("message")).toString());
+        refreshChargers(); refreshFaults(); refreshDashboard();
+    }
     else if (action == QStringLiteral("admin.user.setStatus")) { statusBar()->showMessage(QStringLiteral("用户状态已更新"), 4000); refreshUsers(); }
     else if (action == QStringLiteral("admin.tariff.save")) { statusBar()->showMessage(QStringLiteral("价格方案已保存"), 4000); refreshTariffs(); refreshChargers(); }
     else if (action == QStringLiteral("admin.fault.save")) { statusBar()->showMessage(QStringLiteral("故障记录已保存"), 4000); refreshFaults(); refreshChargers(); refreshDashboard(); }
@@ -594,6 +777,7 @@ void MainWindow::handleResponse(const QString &action, bool ok, const QJsonObjec
 
 void MainWindow::populateDashboard(const QJsonObject &data)
 {
+    dashboardData_ = data;
     userCountLabel_->setText(QString::number(jsonInteger(data.value(QStringLiteral("userCount")))));
     stationCountLabel_->setText(QString::number(jsonInteger(data.value(QStringLiteral("stationCount")))));
     chargerCountLabel_->setText(QString::number(jsonInteger(data.value(QStringLiteral("chargerCount")))));
@@ -607,14 +791,69 @@ void MainWindow::populateDashboard(const QJsonObject &data)
     revenueLabel_->setText(QStringLiteral("本月 ¥%1 / 累计 ¥%2")
         .arg(money(jsonInteger(data.value(QStringLiteral("monthRevenueCents")))))
         .arg(money(jsonInteger(data.value(QStringLiteral("totalRevenueCents"))))));
-    const QJsonArray trend = data.value(QStringLiteral("sevenDayTrend")).toArray();
+    updateTrendDisplay();
+}
+
+void MainWindow::updateTrendDisplay()
+{
+    const int days = trendRangeCombo_ ? trendRangeCombo_->currentData().toInt() : 7;
+    const QJsonArray trend = dashboardData_.value(days == 30
+            ? QStringLiteral("thirtyDayTrend") : QStringLiteral("sevenDayTrend")).toArray();
     trendTable_->setRowCount(trend.size());
+    auto *orderSeries = new QLineSeries;
+    auto *revenueSeries = new QLineSeries;
+    orderSeries->setName(QStringLiteral("订单数"));
+    revenueSeries->setName(QStringLiteral("营收/元"));
+    qreal maximumOrders = 1;
+    qreal maximumRevenue = 1;
     for (int row = 0; row < trend.size(); ++row) {
         const QJsonObject item = trend.at(row).toObject();
+        const qreal orderCount = jsonInteger(item.value(QStringLiteral("orderCount")));
+        const qreal revenue = jsonInteger(item.value(QStringLiteral("revenueCents"))) / 100.0;
+        const QDate date = QDate::fromString(item.value(QStringLiteral("date")).toString(), Qt::ISODate);
+        const qreal timestamp = QDateTime(date.startOfDay()).toMSecsSinceEpoch();
+        orderSeries->append(timestamp, orderCount);
+        revenueSeries->append(timestamp, revenue);
+        maximumOrders = qMax(maximumOrders, orderCount);
+        maximumRevenue = qMax(maximumRevenue, revenue);
         setCell(trendTable_, row, 0, item.value(QStringLiteral("date")).toString());
         setCell(trendTable_, row, 1, QString::number(jsonInteger(item.value(QStringLiteral("orderCount")))));
         setCell(trendTable_, row, 2, money(jsonInteger(item.value(QStringLiteral("revenueCents")))));
     }
+    auto *chart = new QChart;
+    chart->setTitle(QStringLiteral("近 %1 天订单与营收趋势").arg(days));
+    chart->addSeries(orderSeries);
+    chart->addSeries(revenueSeries);
+    auto *dateAxis = new QDateTimeAxis;
+    dateAxis->setFormat(days == 30 ? QStringLiteral("MM-dd") : QStringLiteral("MM-dd"));
+    dateAxis->setTickCount(days == 30 ? 7 : 7);
+    if (!trend.isEmpty()) {
+        const QDate firstDate = QDate::fromString(
+            trend.first().toObject().value(QStringLiteral("date")).toString(), Qt::ISODate);
+        const QDate lastDate = QDate::fromString(
+            trend.last().toObject().value(QStringLiteral("date")).toString(), Qt::ISODate);
+        if (firstDate.isValid() && lastDate.isValid()) {
+            dateAxis->setRange(firstDate.startOfDay(), lastDate.endOfDay());
+        }
+    }
+    chart->addAxis(dateAxis, Qt::AlignBottom);
+    orderSeries->attachAxis(dateAxis);
+    revenueSeries->attachAxis(dateAxis);
+    auto *orderAxis = new QValueAxis;
+    orderAxis->setTitleText(QStringLiteral("订单数"));
+    orderAxis->setRange(0, qCeil(maximumOrders * 1.2));
+    orderAxis->setLabelFormat(QStringLiteral("%.0f"));
+    chart->addAxis(orderAxis, Qt::AlignLeft);
+    orderSeries->attachAxis(orderAxis);
+    auto *revenueAxis = new QValueAxis;
+    revenueAxis->setTitleText(QStringLiteral("营收/元"));
+    revenueAxis->setRange(0, maximumRevenue * 1.2);
+    revenueAxis->setLabelFormat(QStringLiteral("%.2f"));
+    chart->addAxis(revenueAxis, Qt::AlignRight);
+    revenueSeries->attachAxis(revenueAxis);
+    QChart *oldChart = trendChart_->chart();
+    trendChart_->setChart(chart);
+    delete oldChart;
 }
 
 void MainWindow::populateStations(const QJsonObject &data)
@@ -625,7 +864,9 @@ void MainWindow::populateStations(const QJsonObject &data)
         const QStringList values{QString::number(jsonInteger(x.value("id"))), x.value("name").toString(), x.value("region").toString(),
             x.value("address").toString(), QString::number(x.value("longitude").toDouble(), 'f', 6), QString::number(x.value("latitude").toDouble(), 'f', 6),
             x.value("businessHours").toString(), x.value("status").toString(), QString::number(jsonInteger(x.value("chargerCount"))),
-            QString::number(jsonInteger(x.value("idleCount"))), money(jsonInteger(x.value("minimumPriceCentsPerKwh")))};
+            QString::number(jsonInteger(x.value("idleCount"))),
+            QStringLiteral("%1%").arg(x.value("onlineRate").toDouble() * 100.0, 0, 'f', 1),
+            money(jsonInteger(x.value("minimumPriceCentsPerKwh")))};
         for (int column = 0; column < values.size(); ++column) setCell(stationTable_, row, column, values.at(column));
     }
     stationTable_->resizeColumnsToContents();
@@ -639,7 +880,10 @@ void MainWindow::populateChargers(const QJsonObject &data)
         const QStringList values{QString::number(jsonInteger(x.value("id"))), QString::number(jsonInteger(x.value("stationId"))), x.value("stationName").toString(),
             x.value("code").toString(), x.value("connectorType").toString(), QString::number(x.value("ratedPowerKw").toDouble(), 'f', 1),
             x.value("status").toString(), QString::number(jsonInteger(x.value("tariffId"))), x.value("tariffName").toString(),
-            money(jsonInteger(x.value("priceCentsPerKwh"))), x.value("updatedAt").toString()};
+            money(jsonInteger(x.value("priceCentsPerKwh"))),
+            QString::number(jsonInteger(x.value("sessionCount"))),
+            QString::number(jsonInteger(x.value("totalDurationSeconds")) / 60.0, 'f', 1),
+            x.value("updatedAt").toString()};
         for (int column = 0; column < values.size(); ++column) setCell(chargerTable_, row, column, values.at(column));
     }
     chargerTable_->resizeColumnsToContents();
@@ -664,7 +908,7 @@ void MainWindow::populateOrders(const QJsonObject &data)
     for (int row = 0; row < items.size(); ++row) {
         const QJsonObject x = items.at(row).toObject();
         const QStringList values{QString::number(jsonInteger(x.value("id"))), x.value("orderNo").toString(), x.value("username").toString(),
-            x.value("stationName").toString(), x.value("chargerCode").toString(), QString::number(jsonInteger(x.value("energyWh")) / 1000.0, 'f', 3),
+            x.value("phone").toString(), x.value("stationName").toString(), x.value("chargerCode").toString(), QString::number(jsonInteger(x.value("energyWh")) / 1000.0, 'f', 3),
             money(jsonInteger(x.value("amountCents"))), x.value("status").toString(), x.value("createdAt").toString()};
         for (int column = 0; column < values.size(); ++column) setCell(orderTable_, row, column, values.at(column));
     }

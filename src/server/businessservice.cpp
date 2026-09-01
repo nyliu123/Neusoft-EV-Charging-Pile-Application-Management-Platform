@@ -12,6 +12,8 @@
 #include <QUuid>
 #include <QtMath>
 
+#include <algorithm>
+
 namespace evcs::server {
 
 namespace {
@@ -51,6 +53,8 @@ bool beginImmediate(const QSqlDatabase &database, QString *errorMessage)
 
 QJsonObject stationFromQuery(const QSqlQuery &query)
 {
+    const int chargerCount = query.value(QStringLiteral("charger_count")).toInt();
+    const int onlineCount = query.value(QStringLiteral("online_count")).toInt();
     return {
         {QStringLiteral("id"), jsonId(query.value(QStringLiteral("id")).toLongLong())},
         {QStringLiteral("name"), query.value(QStringLiteral("name")).toString()},
@@ -60,11 +64,27 @@ QJsonObject stationFromQuery(const QSqlQuery &query)
         {QStringLiteral("latitude"), query.value(QStringLiteral("latitude")).toDouble()},
         {QStringLiteral("businessHours"), query.value(QStringLiteral("business_hours")).toString()},
         {QStringLiteral("status"), query.value(QStringLiteral("status")).toString()},
-        {QStringLiteral("chargerCount"), query.value(QStringLiteral("charger_count")).toInt()},
+        {QStringLiteral("chargerCount"), chargerCount},
         {QStringLiteral("idleCount"), query.value(QStringLiteral("idle_count")).toInt()},
+        {QStringLiteral("onlineCount"), onlineCount},
+        {QStringLiteral("onlineRate"), chargerCount > 0
+             ? static_cast<double>(onlineCount) / chargerCount : 0.0},
         {QStringLiteral("minimumPriceCentsPerKwh"),
          query.value(QStringLiteral("minimum_price")).toInt()}
     };
+}
+
+double distanceKm(double latitude1, double longitude1,
+                  double latitude2, double longitude2)
+{
+    constexpr double earthRadiusKm = 6371.0088;
+    const double lat1 = qDegreesToRadians(latitude1);
+    const double lat2 = qDegreesToRadians(latitude2);
+    const double deltaLat = qDegreesToRadians(latitude2 - latitude1);
+    const double deltaLon = qDegreesToRadians(longitude2 - longitude1);
+    const double a = qSin(deltaLat / 2.0) * qSin(deltaLat / 2.0)
+        + qCos(lat1) * qCos(lat2) * qSin(deltaLon / 2.0) * qSin(deltaLon / 2.0);
+    return earthRadiusKm * 2.0 * qAtan2(qSqrt(a), qSqrt(1.0 - a));
 }
 
 } // namespace
@@ -90,8 +110,12 @@ ServiceResult BusinessService::handle(const QString &action,
 {
     if (action == QStringLiteral("auth.register")) return registerUser(payload);
     if (action == QStringLiteral("auth.login")) return login(payload);
+    if (action == QStringLiteral("auth.phoneLogin")) return phoneLogin(payload);
     if (action == QStringLiteral("auth.logout")) return logout(token);
     if (action == QStringLiteral("user.profile")) return userProfile(token);
+    if (action == QStringLiteral("user.profile.update")) return updateUserProfile(payload, token);
+    if (action == QStringLiteral("user.avatar.update")) return updateUserAvatar(payload, token);
+    if (action == QStringLiteral("wallet.recharge")) return rechargeWallet(payload, token);
     if (action == QStringLiteral("station.list")) return listStations(payload, token);
     if (action == QStringLiteral("station.get")) return getStation(payload, token);
     if (action == QStringLiteral("reservation.create")) return createReservation(payload, token);
@@ -112,9 +136,13 @@ ServiceResult BusinessService::handle(const QString &action,
     if (action == QStringLiteral("admin.charger.list")) return adminListChargers(payload, token);
     if (action == QStringLiteral("admin.charger.save")) return adminSaveCharger(payload, token);
     if (action == QStringLiteral("admin.charger.setStatus")) return adminSetChargerStatus(payload, token);
-    if (action == QStringLiteral("admin.user.list")) return adminListUsers(token);
+    if (action == QStringLiteral("admin.charger.restart")) return adminRestartCharger(payload, token);
+    if (action == QStringLiteral("admin.charger.operation.list")) {
+        return adminListChargerOperations(payload, token);
+    }
+    if (action == QStringLiteral("admin.user.list")) return adminListUsers(payload, token);
     if (action == QStringLiteral("admin.user.setStatus")) return adminSetUserStatus(payload, token);
-    if (action == QStringLiteral("admin.order.list")) return adminListOrders(token);
+    if (action == QStringLiteral("admin.order.list")) return adminListOrders(payload, token);
     if (action == QStringLiteral("admin.reservation.list")) return adminListReservations(token);
     if (action == QStringLiteral("admin.session.list")) return adminListChargingSessions(token);
     if (action == QStringLiteral("admin.tariff.list")) return adminListTariffs(token);
@@ -194,6 +222,11 @@ ServiceResult BusinessService::registerUser(const QJsonObject &payload)
         return ServiceResult::failure(QStringLiteral("INVALID_ARGUMENT"),
                                       QStringLiteral("密码长度必须为 6 到 128 位"));
     }
+    static const QRegularExpression phonePattern(QStringLiteral("^1[3-9][0-9]{9}$"));
+    if (!phone.isEmpty() && !phonePattern.match(phone).hasMatch()) {
+        return ServiceResult::failure(QStringLiteral("INVALID_ARGUMENT"),
+                                      QStringLiteral("手机号必须是合法的 11 位中国大陆手机号"));
+    }
 
     QSqlQuery exists(database_.connection());
     exists.prepare(QStringLiteral("SELECT 1 FROM users WHERE username = ?"));
@@ -202,6 +235,16 @@ ServiceResult BusinessService::registerUser(const QJsonObject &payload)
     if (exists.next()) {
         return ServiceResult::failure(QStringLiteral("CONFLICT"),
                                       QStringLiteral("用户名已存在"));
+    }
+    if (!phone.isEmpty()) {
+        QSqlQuery phoneExists(database_.connection());
+        phoneExists.prepare(QStringLiteral("SELECT 1 FROM users WHERE phone = ?"));
+        phoneExists.addBindValue(phone);
+        if (!phoneExists.exec()) return databaseFailure(phoneExists);
+        if (phoneExists.next()) {
+            return ServiceResult::failure(QStringLiteral("CONFLICT"),
+                                          QStringLiteral("手机号已被使用"));
+        }
     }
 
     const QString salt = security::createSalt();
@@ -286,6 +329,117 @@ ServiceResult BusinessService::login(const QJsonObject &payload)
     });
 }
 
+ServiceResult BusinessService::phoneLogin(const QJsonObject &payload)
+{
+    const QString phone = payload.value(QStringLiteral("phone")).toString().trimmed();
+    static const QRegularExpression phonePattern(QStringLiteral("^1[3-9][0-9]{9}$"));
+    if (!phonePattern.match(phone).hasMatch()) {
+        return ServiceResult::failure(QStringLiteral("INVALID_ARGUMENT"),
+                                      QStringLiteral("请输入合法的 11 位中国大陆手机号"));
+    }
+
+    QSqlDatabase database = database_.connection();
+    QString error;
+    if (!beginImmediate(database, &error)) {
+        return ServiceResult::failure(QStringLiteral("DATABASE_ERROR"), error);
+    }
+    auto rollback = [&database](const QSqlQuery &query) {
+        const ServiceResult result = databaseFailure(query);
+        database.rollback();
+        return result;
+    };
+
+    qint64 userId = 0;
+    QString username;
+    QString displayName;
+    qint64 balanceCents = 0;
+    QString status;
+    bool autoRegistered = false;
+
+    QSqlQuery userQuery(database);
+    userQuery.prepare(QStringLiteral(
+        "SELECT id, username, display_name, balance_cents, status, role "
+        "FROM users WHERE phone = ?"));
+    userQuery.addBindValue(phone);
+    if (!userQuery.exec()) return rollback(userQuery);
+    if (userQuery.next()) {
+        userId = userQuery.value(0).toLongLong();
+        username = userQuery.value(1).toString();
+        displayName = userQuery.value(2).toString();
+        balanceCents = userQuery.value(3).toLongLong();
+        status = userQuery.value(4).toString();
+        if (userQuery.value(5).toString() != QStringLiteral("user")) {
+            database.rollback();
+            return ServiceResult::failure(QStringLiteral("FORBIDDEN"),
+                                          QStringLiteral("管理员请使用账号密码登录"));
+        }
+    } else {
+        username = QStringLiteral("phone_%1").arg(phone);
+        displayName = QStringLiteral("用户%1").arg(phone.right(4));
+        balanceCents = 10000;
+        status = QStringLiteral("active");
+        const QString salt = security::createSalt();
+        const QString generatedPassword = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        const QString now = utcNow();
+        QSqlQuery insert(database);
+        insert.prepare(QStringLiteral(
+            "INSERT INTO users(username, password_hash, password_salt, role, display_name, phone, "
+            "balance_cents, status, created_at, updated_at) "
+            "VALUES(?, ?, ?, 'user', ?, ?, ?, 'active', ?, ?)"));
+        insert.addBindValue(username);
+        insert.addBindValue(security::hashPassword(generatedPassword, salt));
+        insert.addBindValue(salt);
+        insert.addBindValue(displayName);
+        insert.addBindValue(phone);
+        insert.addBindValue(balanceCents);
+        insert.addBindValue(now);
+        insert.addBindValue(now);
+        if (!insert.exec()) return rollback(insert);
+        userId = insert.lastInsertId().toLongLong();
+        autoRegistered = true;
+    }
+
+    if (status != QStringLiteral("active")) {
+        database.rollback();
+        return ServiceResult::failure(QStringLiteral("FORBIDDEN"),
+                                      QStringLiteral("用户已被停用"));
+    }
+
+    const QString token = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const QString now = utcNow();
+    const QString expiresAt = QDateTime::currentDateTimeUtc().addDays(1).toString(Qt::ISODateWithMs);
+    QSqlQuery cleanup(database);
+    cleanup.prepare(QStringLiteral("DELETE FROM sessions WHERE expires_at <= ?"));
+    cleanup.addBindValue(now);
+    if (!cleanup.exec()) return rollback(cleanup);
+
+    QSqlQuery session(database);
+    session.prepare(QStringLiteral(
+        "INSERT INTO sessions(token, user_id, expires_at, created_at) VALUES(?, ?, ?, ?)"));
+    session.addBindValue(token);
+    session.addBindValue(userId);
+    session.addBindValue(expiresAt);
+    session.addBindValue(now);
+    if (!session.exec()) return rollback(session);
+    if (!database.commit()) {
+        return ServiceResult::failure(QStringLiteral("DATABASE_ERROR"), database.lastError().text());
+    }
+
+    return ServiceResult::success({
+        {QStringLiteral("token"), token},
+        {QStringLiteral("expiresAt"), expiresAt},
+        {QStringLiteral("autoRegistered"), autoRegistered},
+        {QStringLiteral("user"), QJsonObject{
+             {QStringLiteral("id"), jsonId(userId)},
+             {QStringLiteral("username"), username},
+             {QStringLiteral("displayName"), displayName},
+             {QStringLiteral("phone"), phone},
+             {QStringLiteral("role"), QStringLiteral("user")},
+             {QStringLiteral("balanceCents"), jsonId(balanceCents)}
+         }}
+    });
+}
+
 ServiceResult BusinessService::logout(const QString &token)
 {
     ServiceResult failure;
@@ -306,7 +460,8 @@ ServiceResult BusinessService::userProfile(const QString &token)
 
     QSqlQuery query(database_.connection());
     query.prepare(QStringLiteral(
-        "SELECT id, username, display_name, phone, role, balance_cents, status, created_at "
+        "SELECT id, username, display_name, phone, role, balance_cents, status, created_at, "
+        "avatar_mime, avatar_data "
         "FROM users WHERE id = ?"));
     query.addBindValue(user->id);
     if (!query.exec()) return databaseFailure(query);
@@ -314,8 +469,7 @@ ServiceResult BusinessService::userProfile(const QString &token)
         return ServiceResult::failure(QStringLiteral("NOT_FOUND"),
                                       QStringLiteral("用户不存在"));
     }
-    return ServiceResult::success({
-        {QStringLiteral("user"), QJsonObject{
+    QJsonObject userObject{
              {QStringLiteral("id"), jsonId(query.value(0).toLongLong())},
              {QStringLiteral("username"), query.value(1).toString()},
              {QStringLiteral("displayName"), query.value(2).toString()},
@@ -323,8 +477,129 @@ ServiceResult BusinessService::userProfile(const QString &token)
              {QStringLiteral("role"), query.value(4).toString()},
              {QStringLiteral("balanceCents"), jsonId(query.value(5).toLongLong())},
              {QStringLiteral("status"), query.value(6).toString()},
-             {QStringLiteral("createdAt"), query.value(7).toString()}
-         }}
+             {QStringLiteral("createdAt"), query.value(7).toString()},
+             {QStringLiteral("avatarMime"), query.value(8).toString()}
+    };
+    const QByteArray avatarData = query.value(9).toByteArray();
+    if (!avatarData.isEmpty()) {
+        userObject.insert(QStringLiteral("avatarBase64"),
+                          QString::fromLatin1(avatarData.toBase64()));
+    }
+    return ServiceResult::success({{QStringLiteral("user"), userObject}});
+}
+
+ServiceResult BusinessService::updateUserProfile(const QJsonObject &payload,
+                                                 const QString &token)
+{
+    ServiceResult failure;
+    const auto user = authenticate(token, &failure);
+    if (!user) return failure;
+    const QString displayName = payload.value(QStringLiteral("displayName")).toString().trimmed();
+    if (displayName.isEmpty() || displayName.size() > 32) {
+        return ServiceResult::failure(QStringLiteral("INVALID_ARGUMENT"),
+                                      QStringLiteral("昵称长度必须为 1 到 32 个字符"));
+    }
+    QSqlQuery query(database_.connection());
+    query.prepare(QStringLiteral(
+        "UPDATE users SET display_name = ?, updated_at = ? WHERE id = ?"));
+    query.addBindValue(displayName);
+    query.addBindValue(utcNow());
+    query.addBindValue(user->id);
+    if (!query.exec()) return databaseFailure(query);
+    return ServiceResult::success({{QStringLiteral("displayName"), displayName}});
+}
+
+ServiceResult BusinessService::updateUserAvatar(const QJsonObject &payload,
+                                                const QString &token)
+{
+    ServiceResult failure;
+    const auto user = authenticate(token, &failure);
+    if (!user) return failure;
+    const QString mime = payload.value(QStringLiteral("mimeType")).toString().trimmed().toLower();
+    const QString encoded = payload.value(QStringLiteral("dataBase64")).toString();
+    if (!QStringList{QStringLiteral("image/png"), QStringLiteral("image/jpeg")}.contains(mime)) {
+        return ServiceResult::failure(QStringLiteral("INVALID_ARGUMENT"),
+                                      QStringLiteral("头像仅支持 PNG 或 JPEG"));
+    }
+    const QByteArray data = QByteArray::fromBase64(encoded.toLatin1());
+    if (data.isEmpty() || data.size() > 512 * 1024) {
+        return ServiceResult::failure(QStringLiteral("INVALID_ARGUMENT"),
+                                      QStringLiteral("头像不能为空且不得超过 512 KiB"));
+    }
+    QSqlQuery query(database_.connection());
+    query.prepare(QStringLiteral(
+        "UPDATE users SET avatar_mime = ?, avatar_data = ?, updated_at = ? WHERE id = ?"));
+    query.addBindValue(mime);
+    query.addBindValue(data);
+    query.addBindValue(utcNow());
+    query.addBindValue(user->id);
+    if (!query.exec()) return databaseFailure(query);
+    return ServiceResult::success({{QStringLiteral("avatarBytes"), data.size()}});
+}
+
+ServiceResult BusinessService::rechargeWallet(const QJsonObject &payload,
+                                              const QString &token)
+{
+    ServiceResult failure;
+    const auto user = authenticate(token, &failure);
+    if (!user) return failure;
+    if (user->role != QStringLiteral("user")) {
+        return ServiceResult::failure(QStringLiteral("FORBIDDEN"),
+                                      QStringLiteral("仅普通用户可以充值"));
+    }
+    const qint64 amountCents = jsonInteger(payload.value(QStringLiteral("amountCents")));
+    if (amountCents < 1 || amountCents > 1000000) {
+        return ServiceResult::failure(QStringLiteral("INVALID_ARGUMENT"),
+                                      QStringLiteral("单次充值金额必须在 0.01 到 10000 元之间"));
+    }
+
+    QSqlDatabase database = database_.connection();
+    QString error;
+    if (!beginImmediate(database, &error)) {
+        return ServiceResult::failure(QStringLiteral("DATABASE_ERROR"), error);
+    }
+    QSqlQuery update(database);
+    update.prepare(QStringLiteral(
+        "UPDATE users SET balance_cents = balance_cents + ?, updated_at = ? WHERE id = ?"));
+    const QString now = utcNow();
+    update.addBindValue(amountCents);
+    update.addBindValue(now);
+    update.addBindValue(user->id);
+    if (!update.exec()) {
+        const ServiceResult result = databaseFailure(update);
+        database.rollback();
+        return result;
+    }
+    QSqlQuery balance(database);
+    balance.prepare(QStringLiteral("SELECT balance_cents FROM users WHERE id = ?"));
+    balance.addBindValue(user->id);
+    if (!balance.exec() || !balance.next()) {
+        const ServiceResult result = databaseFailure(balance);
+        database.rollback();
+        return result;
+    }
+    const qint64 balanceAfter = balance.value(0).toLongLong();
+    QSqlQuery record(database);
+    record.prepare(QStringLiteral(
+        "INSERT INTO recharge_records(user_id, amount_cents, balance_after_cents, channel, created_at) "
+        "VALUES(?, ?, ?, 'demo', ?)"));
+    record.addBindValue(user->id);
+    record.addBindValue(amountCents);
+    record.addBindValue(balanceAfter);
+    record.addBindValue(now);
+    if (!record.exec()) {
+        const ServiceResult result = databaseFailure(record);
+        database.rollback();
+        return result;
+    }
+    if (!database.commit()) {
+        return ServiceResult::failure(QStringLiteral("DATABASE_ERROR"), database.lastError().text());
+    }
+    return ServiceResult::success({
+        {QStringLiteral("rechargeId"), jsonId(record.lastInsertId().toLongLong())},
+        {QStringLiteral("amountCents"), jsonId(amountCents)},
+        {QStringLiteral("balanceCents"), jsonId(balanceAfter)},
+        {QStringLiteral("channel"), QStringLiteral("demo")}
     });
 }
 
@@ -341,6 +616,8 @@ ServiceResult BusinessService::listStations(const QJsonObject &payload, const QS
         "SELECT s.id, s.name, s.region, s.address, s.longitude, s.latitude, "
         "s.business_hours, s.status, COUNT(c.id) AS charger_count, "
         "COALESCE(SUM(CASE WHEN c.status = 'idle' THEN 1 ELSE 0 END), 0) AS idle_count, "
+        "COALESCE(SUM(CASE WHEN c.status NOT IN ('offline', 'disabled') THEN 1 ELSE 0 END), 0) "
+        "AS online_count, "
         "COALESCE(MIN(t.price_cents_per_kwh), 0) AS minimum_price "
         "FROM stations s "
         "LEFT JOIN chargers c ON c.station_id = s.id "
@@ -367,8 +644,33 @@ ServiceResult BusinessService::listStations(const QJsonObject &payload, const QS
     if (!region.isEmpty()) query.addBindValue(region);
     if (!query.exec()) return databaseFailure(query);
 
+    QList<QJsonObject> stationList;
+    const bool hasOrigin = payload.contains(QStringLiteral("longitude"))
+        && payload.contains(QStringLiteral("latitude"))
+        && payload.value(QStringLiteral("longitude")).isDouble()
+        && payload.value(QStringLiteral("latitude")).isDouble();
+    const double originLongitude = payload.value(QStringLiteral("longitude")).toDouble();
+    const double originLatitude = payload.value(QStringLiteral("latitude")).toDouble();
+    while (query.next()) {
+        QJsonObject station = stationFromQuery(query);
+        if (hasOrigin && originLongitude >= -180.0 && originLongitude <= 180.0
+            && originLatitude >= -90.0 && originLatitude <= 90.0) {
+            station.insert(QStringLiteral("distanceKm"),
+                           distanceKm(originLatitude, originLongitude,
+                                      station.value(QStringLiteral("latitude")).toDouble(),
+                                      station.value(QStringLiteral("longitude")).toDouble()));
+        }
+        stationList.append(station);
+    }
+    if (hasOrigin) {
+        std::sort(stationList.begin(), stationList.end(), [](const QJsonObject &left,
+                                                             const QJsonObject &right) {
+            return left.value(QStringLiteral("distanceKm")).toDouble()
+                < right.value(QStringLiteral("distanceKm")).toDouble();
+        });
+    }
     QJsonArray stations;
-    while (query.next()) stations.append(stationFromQuery(query));
+    for (const QJsonObject &station : stationList) stations.append(station);
     return ServiceResult::success({{QStringLiteral("stations"), stations}});
 }
 
@@ -388,6 +690,8 @@ ServiceResult BusinessService::getStation(const QJsonObject &payload, const QStr
         "SELECT s.id, s.name, s.region, s.address, s.longitude, s.latitude, "
         "s.business_hours, s.status, COUNT(c.id) AS charger_count, "
         "COALESCE(SUM(CASE WHEN c.status = 'idle' THEN 1 ELSE 0 END), 0) AS idle_count, "
+        "COALESCE(SUM(CASE WHEN c.status NOT IN ('offline', 'disabled') THEN 1 ELSE 0 END), 0) "
+        "AS online_count, "
         "COALESCE(MIN(t.price_cents_per_kwh), 0) AS minimum_price "
         "FROM stations s LEFT JOIN chargers c ON c.station_id = s.id "
         "LEFT JOIN tariffs t ON t.id = c.tariff_id WHERE s.id = ? GROUP BY s.id"));
@@ -1465,6 +1769,8 @@ ServiceResult BusinessService::adminListStations(const QString &token)
         "SELECT s.id, s.name, s.region, s.address, s.longitude, s.latitude, "
         "s.business_hours, s.status, COUNT(c.id) AS charger_count, "
         "COALESCE(SUM(CASE WHEN c.status = 'idle' THEN 1 ELSE 0 END), 0) AS idle_count, "
+        "COALESCE(SUM(CASE WHEN c.status NOT IN ('offline', 'disabled') THEN 1 ELSE 0 END), 0) "
+        "AS online_count, "
         "COALESCE(MIN(t.price_cents_per_kwh), 0) AS minimum_price "
         "FROM stations s LEFT JOIN chargers c ON c.station_id = s.id "
         "LEFT JOIN tariffs t ON t.id = c.tariff_id GROUP BY s.id ORDER BY s.id"));
@@ -1491,7 +1797,14 @@ ServiceResult BusinessService::adminSaveStation(const QJsonObject &payload,
                                       .toString(QStringLiteral("00:00-24:00")).trimmed();
     const QString status = payload.value(QStringLiteral("status"))
                                .toString(QStringLiteral("active"));
+    const int chargerCount = payload.value(QStringLiteral("chargerCount")).toInt(0);
+    const double defaultPowerKw = payload.value(QStringLiteral("defaultPowerKw")).toDouble(7.0);
+    const qint64 tariffId = static_cast<qint64>(
+        payload.value(QStringLiteral("tariffId")).toDouble(1));
     if (name.isEmpty() || address.isEmpty()
+        || longitude < -180.0 || longitude > 180.0
+        || latitude < -90.0 || latitude > 90.0
+        || chargerCount < 0 || chargerCount > 50 || defaultPowerKw <= 0 || tariffId <= 0
         || !QStringList{QStringLiteral("active"), QStringLiteral("disabled")}.contains(status)) {
         return ServiceResult::failure(QStringLiteral("INVALID_ARGUMENT"),
                                       QStringLiteral("站点名称、地址或状态无效"));
@@ -1520,21 +1833,55 @@ ServiceResult BusinessService::adminSaveStation(const QJsonObject &payload,
         return ServiceResult::success({{QStringLiteral("stationId"), jsonId(stationId)}});
     }
 
-    query.prepare(QStringLiteral(
+    QSqlDatabase database = database_.connection();
+    QString transactionError;
+    if (!beginImmediate(database, &transactionError)) {
+        return ServiceResult::failure(QStringLiteral("DATABASE_ERROR"), transactionError);
+    }
+    QSqlQuery insert(database);
+    insert.prepare(QStringLiteral(
         "INSERT INTO stations(name, region, address, longitude, latitude, business_hours, status, "
         "created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)"));
-    query.addBindValue(name);
-    query.addBindValue(region);
-    query.addBindValue(address);
-    query.addBindValue(longitude);
-    query.addBindValue(latitude);
-    query.addBindValue(businessHours);
-    query.addBindValue(status);
-    query.addBindValue(now);
-    query.addBindValue(now);
-    if (!query.exec()) return databaseFailure(query);
+    insert.addBindValue(name);
+    insert.addBindValue(region);
+    insert.addBindValue(address);
+    insert.addBindValue(longitude);
+    insert.addBindValue(latitude);
+    insert.addBindValue(businessHours);
+    insert.addBindValue(status);
+    insert.addBindValue(now);
+    insert.addBindValue(now);
+    if (!insert.exec()) {
+        const ServiceResult result = databaseFailure(insert);
+        database.rollback();
+        return result;
+    }
+    const qint64 createdStationId = insert.lastInsertId().toLongLong();
+    for (int index = 1; index <= chargerCount; ++index) {
+        QSqlQuery charger(database);
+        charger.prepare(QStringLiteral(
+            "INSERT INTO chargers(station_id, code, connector_type, rated_power_kw, status, "
+            "tariff_id, created_at, updated_at) VALUES(?, ?, 'GB/T', ?, 'idle', ?, ?, ?)"));
+        charger.addBindValue(createdStationId);
+        charger.addBindValue(QStringLiteral("ST%1-%2")
+                                 .arg(createdStationId, 4, 10, QLatin1Char('0'))
+                                 .arg(index, 3, 10, QLatin1Char('0')));
+        charger.addBindValue(defaultPowerKw);
+        charger.addBindValue(tariffId);
+        charger.addBindValue(now);
+        charger.addBindValue(now);
+        if (!charger.exec()) {
+            const ServiceResult result = databaseFailure(charger);
+            database.rollback();
+            return result;
+        }
+    }
+    if (!database.commit()) {
+        return ServiceResult::failure(QStringLiteral("DATABASE_ERROR"), database.lastError().text());
+    }
     return ServiceResult::success({
-        {QStringLiteral("stationId"), jsonId(query.lastInsertId().toLongLong())}
+        {QStringLiteral("stationId"), jsonId(createdStationId)},
+        {QStringLiteral("createdChargers"), chargerCount}
     });
 }
 
@@ -1547,7 +1894,11 @@ ServiceResult BusinessService::adminListChargers(const QJsonObject &payload,
 
     QString sql = QStringLiteral(
         "SELECT c.id, c.station_id, s.name, c.code, c.connector_type, c.rated_power_kw, c.status, "
-        "c.tariff_id, t.name, t.price_cents_per_kwh, c.updated_at FROM chargers c "
+        "c.tariff_id, t.name, t.price_cents_per_kwh, c.updated_at, "
+        "(SELECT COUNT(*) FROM charging_sessions cs WHERE cs.charger_id = c.id) AS session_count, "
+        "(SELECT COALESCE(SUM(CAST((julianday(cs.ended_at) - julianday(cs.started_at)) * 86400 "
+        "AS INTEGER)), 0) FROM charging_sessions cs WHERE cs.charger_id = c.id "
+        "AND cs.ended_at IS NOT NULL) AS total_duration_seconds FROM chargers c "
         "JOIN stations s ON s.id = c.station_id JOIN tariffs t ON t.id = c.tariff_id ");
     if (stationId > 0) sql += QStringLiteral("WHERE c.station_id = ? ");
     sql += QStringLiteral("ORDER BY c.id");
@@ -1569,7 +1920,9 @@ ServiceResult BusinessService::adminListChargers(const QJsonObject &payload,
             {QStringLiteral("tariffId"), jsonId(query.value(7).toLongLong())},
             {QStringLiteral("tariffName"), query.value(8).toString()},
             {QStringLiteral("priceCentsPerKwh"), query.value(9).toInt()},
-            {QStringLiteral("updatedAt"), query.value(10).toString()}
+            {QStringLiteral("updatedAt"), query.value(10).toString()},
+            {QStringLiteral("sessionCount"), jsonId(query.value(11).toLongLong())},
+            {QStringLiteral("totalDurationSeconds"), jsonId(query.value(12).toLongLong())}
         });
     }
     return ServiceResult::success({{QStringLiteral("chargers"), chargers}});
@@ -1680,14 +2033,143 @@ ServiceResult BusinessService::adminSetChargerStatus(const QJsonObject &payload,
     return ServiceResult::success({{QStringLiteral("chargerId"), jsonId(chargerId)}});
 }
 
-ServiceResult BusinessService::adminListUsers(const QString &token)
+ServiceResult BusinessService::adminRestartCharger(const QJsonObject &payload,
+                                                   const QString &token)
+{
+    ServiceResult failure;
+    const auto admin = authenticateAdmin(token, &failure);
+    if (!admin) return failure;
+    const qint64 chargerId = static_cast<qint64>(
+        payload.value(QStringLiteral("chargerId")).toDouble());
+    const bool simulateFailure = payload.value(QStringLiteral("simulateFailure")).toBool(false);
+    if (chargerId <= 0) {
+        return ServiceResult::failure(QStringLiteral("INVALID_ARGUMENT"),
+                                      QStringLiteral("充电桩编号无效"));
+    }
+
+    QSqlDatabase database = database_.connection();
+    QString error;
+    if (!beginImmediate(database, &error)) {
+        return ServiceResult::failure(QStringLiteral("DATABASE_ERROR"), error);
+    }
+    QSqlQuery current(database);
+    current.prepare(QStringLiteral("SELECT code, status FROM chargers WHERE id = ?"));
+    current.addBindValue(chargerId);
+    if (!current.exec() || !current.next()) {
+        database.rollback();
+        return ServiceResult::failure(QStringLiteral("NOT_FOUND"),
+                                      QStringLiteral("充电桩不存在"));
+    }
+    const QString code = current.value(0).toString();
+    const QString previousStatus = current.value(1).toString();
+    if (previousStatus != QStringLiteral("fault")) {
+        database.rollback();
+        return ServiceResult::failure(QStringLiteral("CONFLICT"),
+                                      QStringLiteral("仅故障状态的充电桩可以远程重启"));
+    }
+
+    const bool success = !simulateFailure;
+    const QString resultStatus = success ? QStringLiteral("idle") : previousStatus;
+    const QString message = success
+        ? QStringLiteral("模拟重启成功，设备恢复为空闲")
+        : QStringLiteral("模拟重启失败，设备保持故障状态");
+    if (success) {
+        QSqlQuery update(database);
+        update.prepare(QStringLiteral(
+            "UPDATE chargers SET status = 'idle', updated_at = ? WHERE id = ? AND status = 'fault'"));
+        update.addBindValue(utcNow());
+        update.addBindValue(chargerId);
+        if (!update.exec() || update.numRowsAffected() != 1) {
+            const ServiceResult result = databaseFailure(update);
+            database.rollback();
+            return result;
+        }
+    }
+
+    QSqlQuery log(database);
+    log.prepare(QStringLiteral(
+        "INSERT INTO charger_operation_logs(charger_id, operator_user_id, operation, "
+        "previous_status, result_status, success, message, created_at) "
+        "VALUES(?, ?, 'restart', ?, ?, ?, ?, ?)"));
+    log.addBindValue(chargerId);
+    log.addBindValue(admin->id);
+    log.addBindValue(previousStatus);
+    log.addBindValue(resultStatus);
+    log.addBindValue(success ? 1 : 0);
+    log.addBindValue(message);
+    log.addBindValue(utcNow());
+    if (!log.exec()) {
+        const ServiceResult result = databaseFailure(log);
+        database.rollback();
+        return result;
+    }
+    const qint64 operationId = log.lastInsertId().toLongLong();
+    if (!database.commit()) {
+        return ServiceResult::failure(QStringLiteral("DATABASE_ERROR"), database.lastError().text());
+    }
+    return ServiceResult::success({
+        {QStringLiteral("operationId"), jsonId(operationId)},
+        {QStringLiteral("chargerId"), jsonId(chargerId)},
+        {QStringLiteral("chargerCode"), code},
+        {QStringLiteral("success"), success},
+        {QStringLiteral("previousStatus"), previousStatus},
+        {QStringLiteral("resultStatus"), resultStatus},
+        {QStringLiteral("message"), message}
+    });
+}
+
+ServiceResult BusinessService::adminListChargerOperations(const QJsonObject &payload,
+                                                          const QString &token)
 {
     ServiceResult failure;
     if (!authenticateAdmin(token, &failure)) return failure;
+    const qint64 chargerId = static_cast<qint64>(
+        payload.value(QStringLiteral("chargerId")).toDouble());
+    QString sql = QStringLiteral(
+        "SELECT l.id, l.charger_id, c.code, u.username, l.operation, l.previous_status, "
+        "l.result_status, l.success, l.message, l.created_at FROM charger_operation_logs l "
+        "JOIN chargers c ON c.id = l.charger_id JOIN users u ON u.id = l.operator_user_id ");
+    if (chargerId > 0) sql += QStringLiteral("WHERE l.charger_id = ? ");
+    sql += QStringLiteral("ORDER BY l.id DESC LIMIT 200");
     QSqlQuery query(database_.connection());
-    query.prepare(QStringLiteral(
+    query.prepare(sql);
+    if (chargerId > 0) query.addBindValue(chargerId);
+    if (!query.exec()) return databaseFailure(query);
+    QJsonArray operations;
+    while (query.next()) {
+        operations.append(QJsonObject{
+            {QStringLiteral("id"), jsonId(query.value(0).toLongLong())},
+            {QStringLiteral("chargerId"), jsonId(query.value(1).toLongLong())},
+            {QStringLiteral("chargerCode"), query.value(2).toString()},
+            {QStringLiteral("operator"), query.value(3).toString()},
+            {QStringLiteral("operation"), query.value(4).toString()},
+            {QStringLiteral("previousStatus"), query.value(5).toString()},
+            {QStringLiteral("resultStatus"), query.value(6).toString()},
+            {QStringLiteral("success"), query.value(7).toBool()},
+            {QStringLiteral("message"), query.value(8).toString()},
+            {QStringLiteral("createdAt"), query.value(9).toString()}
+        });
+    }
+    return ServiceResult::success({{QStringLiteral("operations"), operations}});
+}
+
+ServiceResult BusinessService::adminListUsers(const QJsonObject &payload,
+                                              const QString &token)
+{
+    ServiceResult failure;
+    if (!authenticateAdmin(token, &failure)) return failure;
+    const QString phoneKeyword = payload.value(QStringLiteral("phoneKeyword"))
+                                     .toString().trimmed();
+    QString sql = QStringLiteral(
         "SELECT id, username, role, display_name, phone, balance_cents, status, created_at "
-        "FROM users ORDER BY id"));
+        "FROM users ");
+    if (!phoneKeyword.isEmpty()) sql += QStringLiteral("WHERE phone LIKE ? ");
+    sql += QStringLiteral("ORDER BY id");
+    QSqlQuery query(database_.connection());
+    query.prepare(sql);
+    if (!phoneKeyword.isEmpty()) {
+        query.addBindValue(QStringLiteral("%%1%").arg(phoneKeyword));
+    }
     if (!query.exec()) return databaseFailure(query);
     QJsonArray users;
     while (query.next()) {
@@ -1735,16 +2217,73 @@ ServiceResult BusinessService::adminSetUserStatus(const QJsonObject &payload,
     return ServiceResult::success({{QStringLiteral("userId"), jsonId(userId)}});
 }
 
-ServiceResult BusinessService::adminListOrders(const QString &token)
+ServiceResult BusinessService::adminListOrders(const QJsonObject &payload,
+                                               const QString &token)
 {
     ServiceResult failure;
     if (!authenticateAdmin(token, &failure)) return failure;
+    const QString orderNo = payload.value(QStringLiteral("orderNo")).toString().trimmed();
+    const QString phone = payload.value(QStringLiteral("phone")).toString().trimmed();
+    const QString stationKeyword = payload.value(QStringLiteral("stationKeyword"))
+                                       .toString().trimmed();
+    const QString chargerCode = payload.value(QStringLiteral("chargerCode"))
+                                    .toString().trimmed();
+    const QString status = payload.value(QStringLiteral("status")).toString().trimmed();
+    const QString startDate = payload.value(QStringLiteral("startDate")).toString().trimmed();
+    const QString endDate = payload.value(QStringLiteral("endDate")).toString().trimmed();
+    const QStringList allowedStatuses{QStringLiteral("pending"), QStringLiteral("paid"),
+                                      QStringLiteral("cancelled")};
+    if (!status.isEmpty() && !allowedStatuses.contains(status)) {
+        return ServiceResult::failure(QStringLiteral("INVALID_ARGUMENT"),
+                                      QStringLiteral("订单状态筛选值无效"));
+    }
+    const QDate start = QDate::fromString(startDate, Qt::ISODate);
+    const QDate end = QDate::fromString(endDate, Qt::ISODate);
+    if ((!startDate.isEmpty() && !start.isValid()) || (!endDate.isEmpty() && !end.isValid())
+        || (start.isValid() && end.isValid() && start > end)) {
+        return ServiceResult::failure(QStringLiteral("INVALID_ARGUMENT"),
+                                      QStringLiteral("订单日期范围无效"));
+    }
+
+    QString sql = QStringLiteral(
+        "SELECT o.id, o.order_no, u.username, u.phone, s.name, c.code, o.energy_wh, "
+        "o.amount_cents, o.status, o.created_at FROM orders o "
+        "JOIN users u ON u.id = o.user_id JOIN stations s ON s.id = o.station_id "
+        "JOIN chargers c ON c.id = o.charger_id WHERE 1 = 1 ");
+    QVariantList binds;
+    if (!orderNo.isEmpty()) {
+        sql += QStringLiteral("AND o.order_no LIKE ? ");
+        binds.append(QStringLiteral("%%1%").arg(orderNo));
+    }
+    if (!phone.isEmpty()) {
+        sql += QStringLiteral("AND u.phone LIKE ? ");
+        binds.append(QStringLiteral("%%1%").arg(phone));
+    }
+    if (!stationKeyword.isEmpty()) {
+        sql += QStringLiteral("AND (s.name LIKE ? OR s.address LIKE ?) ");
+        binds.append(QStringLiteral("%%1%").arg(stationKeyword));
+        binds.append(QStringLiteral("%%1%").arg(stationKeyword));
+    }
+    if (!chargerCode.isEmpty()) {
+        sql += QStringLiteral("AND c.code LIKE ? ");
+        binds.append(QStringLiteral("%%1%").arg(chargerCode));
+    }
+    if (!status.isEmpty()) {
+        sql += QStringLiteral("AND o.status = ? ");
+        binds.append(status);
+    }
+    if (start.isValid()) {
+        sql += QStringLiteral("AND o.created_at >= ? ");
+        binds.append(QDateTime(start, QTime(0, 0), Qt::UTC).toString(Qt::ISODateWithMs));
+    }
+    if (end.isValid()) {
+        sql += QStringLiteral("AND o.created_at < ? ");
+        binds.append(QDateTime(end.addDays(1), QTime(0, 0), Qt::UTC).toString(Qt::ISODateWithMs));
+    }
+    sql += QStringLiteral("ORDER BY o.id DESC LIMIT 500");
     QSqlQuery query(database_.connection());
-    query.prepare(QStringLiteral(
-        "SELECT o.id, o.order_no, u.username, s.name, c.code, o.energy_wh, o.amount_cents, "
-        "o.status, o.created_at FROM orders o JOIN users u ON u.id = o.user_id "
-        "JOIN stations s ON s.id = o.station_id JOIN chargers c ON c.id = o.charger_id "
-        "ORDER BY o.id DESC LIMIT 500"));
+    query.prepare(sql);
+    for (const QVariant &bind : binds) query.addBindValue(bind);
     if (!query.exec()) return databaseFailure(query);
     QJsonArray orders;
     while (query.next()) {
@@ -1752,12 +2291,13 @@ ServiceResult BusinessService::adminListOrders(const QString &token)
             {QStringLiteral("id"), jsonId(query.value(0).toLongLong())},
             {QStringLiteral("orderNo"), query.value(1).toString()},
             {QStringLiteral("username"), query.value(2).toString()},
-            {QStringLiteral("stationName"), query.value(3).toString()},
-            {QStringLiteral("chargerCode"), query.value(4).toString()},
-            {QStringLiteral("energyWh"), jsonId(query.value(5).toLongLong())},
-            {QStringLiteral("amountCents"), jsonId(query.value(6).toLongLong())},
-            {QStringLiteral("status"), query.value(7).toString()},
-            {QStringLiteral("createdAt"), query.value(8).toString()}
+            {QStringLiteral("phone"), query.value(3).toString()},
+            {QStringLiteral("stationName"), query.value(4).toString()},
+            {QStringLiteral("chargerCode"), query.value(5).toString()},
+            {QStringLiteral("energyWh"), jsonId(query.value(6).toLongLong())},
+            {QStringLiteral("amountCents"), jsonId(query.value(7).toLongLong())},
+            {QStringLiteral("status"), query.value(8).toString()},
+            {QStringLiteral("createdAt"), query.value(9).toString()}
         });
     }
     return ServiceResult::success({{QStringLiteral("orders"), orders}});

@@ -1,24 +1,38 @@
 #include "mainwindow.h"
 
+#include <QBuffer>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QDateTime>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QFileDialog>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QImage>
+#include <QInputDialog>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QPixmap>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QTableWidget>
 #include <QTabWidget>
+#include <QUrlQuery>
 #include <QVBoxLayout>
+#include <QtMath>
+
+#include <QtWebEngineWidgets/QWebEngineView>
 
 namespace evcs::userclient {
 
@@ -54,13 +68,27 @@ QString localTimeText(const QString &isoText)
     return time.isValid() ? time.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")) : isoText;
 }
 
+double straightLineDistanceKm(double latitude1, double longitude1,
+                              double latitude2, double longitude2)
+{
+    constexpr double earthRadiusKm = 6371.0088;
+    const double lat1 = qDegreesToRadians(latitude1);
+    const double lat2 = qDegreesToRadians(latitude2);
+    const double deltaLat = qDegreesToRadians(latitude2 - latitude1);
+    const double deltaLon = qDegreesToRadians(longitude2 - longitude1);
+    const double a = qSin(deltaLat / 2.0) * qSin(deltaLat / 2.0)
+        + qCos(lat1) * qCos(lat2) * qSin(deltaLon / 2.0) * qSin(deltaLon / 2.0);
+    return earthRadiusKm * 2.0 * qAtan2(qSqrt(a), qSqrt(1.0 - a));
+}
+
 } // namespace
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
     setWindowTitle(QStringLiteral("电动汽车充电用户端"));
-    resize(760, 780);
+    resize(1120, 820);
+    mapNetwork_ = new QNetworkAccessManager(this);
 
     stack_ = new QStackedWidget;
     stack_->setObjectName(QStringLiteral("userStack"));
@@ -110,6 +138,9 @@ QWidget *MainWindow::createLoginPage()
 
     auto *loginBox = new QGroupBox(QStringLiteral("用户登录"));
     auto *loginForm = new QFormLayout(loginBox);
+    loginModeCombo_ = new QComboBox;
+    loginModeCombo_->addItem(QStringLiteral("账号密码登录"), QStringLiteral("password"));
+    loginModeCombo_->addItem(QStringLiteral("手机号快捷登录（教学模拟）"), QStringLiteral("phone"));
     usernameEdit_ = new QLineEdit(QStringLiteral("demo"));
     passwordEdit_ = new QLineEdit(QStringLiteral("Demo123!"));
     passwordEdit_->setEchoMode(QLineEdit::Password);
@@ -119,7 +150,8 @@ QWidget *MainWindow::createLoginPage()
     auto *buttons = new QHBoxLayout;
     buttons->addWidget(loginButton_);
     buttons->addWidget(registerButton);
-    loginForm->addRow(QStringLiteral("用户名"), usernameEdit_);
+    loginForm->addRow(QStringLiteral("登录方式"), loginModeCombo_);
+    loginForm->addRow(QStringLiteral("账号 / 手机号"), usernameEdit_);
     loginForm->addRow(QStringLiteral("密码"), passwordEdit_);
     loginForm->addRow(buttons);
     layout->addWidget(loginBox);
@@ -127,6 +159,8 @@ QWidget *MainWindow::createLoginPage()
 
     connect(connectButton_, &QPushButton::clicked, this, &MainWindow::connectServer);
     connect(loginButton_, &QPushButton::clicked, this, &MainWindow::login);
+    connect(loginModeCombo_, &QComboBox::currentIndexChanged,
+            this, &MainWindow::updateLoginMode);
     connect(registerButton, &QPushButton::clicked, this, &MainWindow::registerUser);
     connect(passwordEdit_, &QLineEdit::returnPressed, this, &MainWindow::login);
     return page;
@@ -150,11 +184,26 @@ QWidget *MainWindow::createStationPage()
     search->addWidget(refresh);
     layout->addLayout(search);
 
+    auto *locationBar = new QHBoxLayout;
+    locationEdit_ = new QLineEdit;
+    locationEdit_->setPlaceholderText(QStringLiteral("当前位置/地址，例如：北京市海淀区中关村"));
+    auto *geocode = new QPushButton(QStringLiteral("解析当前位置"));
+    auto *drive = new QPushButton(QStringLiteral("驾车导航"));
+    auto *walk = new QPushButton(QStringLiteral("步行导航"));
+    locationStatusLabel_ = new QLabel(QStringLiteral("尚未设置当前位置"));
+    locationBar->addWidget(locationEdit_, 2);
+    locationBar->addWidget(geocode);
+    locationBar->addWidget(drive);
+    locationBar->addWidget(walk);
+    locationBar->addWidget(locationStatusLabel_, 2);
+    layout->addLayout(locationBar);
+
     stationTable_ = new QTableWidget;
     stationTable_->setObjectName(QStringLiteral("stationTable"));
     configureTable(stationTable_, {QStringLiteral("编号"), QStringLiteral("名称"),
                                    QStringLiteral("区域"), QStringLiteral("地址"),
-                                   QStringLiteral("空闲/全部"), QStringLiteral("最低价格")});
+                                   QStringLiteral("空闲/全部"), QStringLiteral("在线率"),
+                                   QStringLiteral("距离"), QStringLiteral("最低价格")});
     layout->addWidget(stationTable_, 3);
     auto *loadStation = new QPushButton(QStringLiteral("查看所选站点的充电桩"));
     layout->addWidget(loadStation);
@@ -172,6 +221,11 @@ QWidget *MainWindow::createStationPage()
     layout->addLayout(chargerButtons);
 
     connect(refresh, &QPushButton::clicked, this, &MainWindow::refreshStations);
+    connect(geocode, &QPushButton::clicked, this, &MainWindow::geocodeLocation);
+    connect(drive, &QPushButton::clicked, this,
+            [this] { navigateSelectedStation(QStringLiteral("drive")); });
+    connect(walk, &QPushButton::clicked, this,
+            [this] { navigateSelectedStation(QStringLiteral("walk")); });
     connect(loadStation, &QPushButton::clicked, this, &MainWindow::loadSelectedStation);
     connect(stationTable_, &QTableWidget::cellDoubleClicked, this,
             [this](int, int) { loadSelectedStation(); });
@@ -261,6 +315,12 @@ QWidget *MainWindow::createProfilePage()
     auto *page = new QWidget;
     auto *layout = new QVBoxLayout(page);
     layout->setContentsMargins(100, 80, 100, 80);
+    profileAvatarLabel_ = new QLabel(QStringLiteral("暂无头像"));
+    profileAvatarLabel_->setFixedSize(128, 128);
+    profileAvatarLabel_->setAlignment(Qt::AlignCenter);
+    profileAvatarLabel_->setStyleSheet(QStringLiteral(
+        "border: 1px solid #aab7c4; border-radius: 64px; background: #eef3f7;"));
+    layout->addWidget(profileAvatarLabel_, 0, Qt::AlignHCenter);
     auto *box = new QGroupBox(QStringLiteral("个人信息"));
     auto *form = new QFormLayout(box);
     profileUsernameLabel_ = new QLabel(QStringLiteral("--"));
@@ -276,13 +336,22 @@ QWidget *MainWindow::createProfilePage()
     layout->addWidget(box);
     auto *buttons = new QHBoxLayout;
     auto *refresh = new QPushButton(QStringLiteral("刷新个人信息"));
+    auto *avatar = new QPushButton(QStringLiteral("更换头像"));
+    auto *rename = new QPushButton(QStringLiteral("修改昵称"));
+    auto *recharge = new QPushButton(QStringLiteral("钱包充值"));
     auto *logoutButton = new QPushButton(QStringLiteral("退出登录"));
     buttons->addWidget(refresh);
+    buttons->addWidget(avatar);
+    buttons->addWidget(rename);
+    buttons->addWidget(recharge);
     buttons->addStretch();
     buttons->addWidget(logoutButton);
     layout->addLayout(buttons);
     layout->addStretch();
     connect(refresh, &QPushButton::clicked, this, &MainWindow::refreshProfile);
+    connect(avatar, &QPushButton::clicked, this, &MainWindow::chooseAvatar);
+    connect(rename, &QPushButton::clicked, this, &MainWindow::editDisplayName);
+    connect(recharge, &QPushButton::clicked, this, &MainWindow::rechargeWallet);
     connect(logoutButton, &QPushButton::clicked, this, &MainWindow::logout);
     return page;
 }
@@ -319,10 +388,30 @@ void MainWindow::login()
         QMessageBox::warning(this, QStringLiteral("未连接"), QStringLiteral("请先连接服务端"));
         return;
     }
-    apiClient_.sendRequest(QStringLiteral("auth.login"), {
-        {QStringLiteral("username"), usernameEdit_->text().trimmed()},
-        {QStringLiteral("password"), passwordEdit_->text()}
-    });
+    if (loginModeCombo_->currentData().toString() == QStringLiteral("phone")) {
+        apiClient_.sendRequest(QStringLiteral("auth.phoneLogin"), {
+            {QStringLiteral("phone"), usernameEdit_->text().trimmed()}
+        });
+    } else {
+        apiClient_.sendRequest(QStringLiteral("auth.login"), {
+            {QStringLiteral("username"), usernameEdit_->text().trimmed()},
+            {QStringLiteral("password"), passwordEdit_->text()}
+        });
+    }
+}
+
+void MainWindow::updateLoginMode()
+{
+    const bool phoneMode = loginModeCombo_->currentData().toString() == QStringLiteral("phone");
+    passwordEdit_->setVisible(!phoneMode);
+    usernameEdit_->setPlaceholderText(phoneMode
+        ? QStringLiteral("11 位手机号，例如 13800138000")
+        : QStringLiteral("用户名"));
+    if (phoneMode && usernameEdit_->text() == QStringLiteral("demo")) {
+        usernameEdit_->clear();
+    } else if (!phoneMode && usernameEdit_->text().isEmpty()) {
+        usernameEdit_->setText(QStringLiteral("demo"));
+    }
 }
 
 void MainWindow::registerUser()
@@ -354,11 +443,179 @@ void MainWindow::registerUser()
 
 void MainWindow::refreshStations()
 {
-    apiClient_.sendRequest(QStringLiteral("station.list"), {
+    QJsonObject payload{
         {QStringLiteral("keyword"), stationKeywordEdit_->text().trimmed()},
         {QStringLiteral("region"), stationRegionEdit_->text().trimmed()},
         {QStringLiteral("onlyAvailable"), onlyAvailableCheck_->isChecked()}
+    };
+    if (hasCurrentLocation_) {
+        payload.insert(QStringLiteral("latitude"), currentLatitude_);
+        payload.insert(QStringLiteral("longitude"), currentLongitude_);
+    }
+    apiClient_.sendRequest(QStringLiteral("station.list"), payload);
+}
+
+void MainWindow::geocodeLocation()
+{
+    const QString address = locationEdit_->text().trimmed();
+    if (address.isEmpty()) {
+        QMessageBox::information(this, QStringLiteral("请输入地址"),
+                                 QStringLiteral("请先输入当前位置或地址"));
+        return;
+    }
+
+    struct OfflineLocation {
+        const char *keyword;
+        double latitude;
+        double longitude;
+        const char *description;
+    };
+    const OfflineLocation offlineLocations[] = {
+        {"中关村", 39.9573, 116.3269, "北京市海淀区中关村"},
+        {"海淀", 39.9573, 116.3269, "北京市海淀区（教学模拟位置）"},
+        {"亦庄", 39.7942, 116.5068, "北京市大兴区亦庄"},
+        {"大兴", 39.7942, 116.5068, "北京市大兴区（教学模拟位置）"},
+        {"望京", 39.9979, 116.4878, "北京市朝阳区望京"},
+        {"朝阳", 39.9979, 116.4878, "北京市朝阳区（教学模拟位置）"}
+    };
+
+    const QString mapKey = qEnvironmentVariable("EVCS_TENCENT_MAP_KEY").trimmed();
+    if (mapKey.isEmpty()) {
+        for (const OfflineLocation &candidate : offlineLocations) {
+            if (address.contains(QString::fromUtf8(candidate.keyword), Qt::CaseInsensitive)) {
+                setCurrentLocation(candidate.latitude, candidate.longitude,
+                                   QString::fromUtf8(candidate.description),
+                                   QStringLiteral("离线教学坐标"));
+                return;
+            }
+        }
+        QMessageBox::warning(
+            this, QStringLiteral("无法解析地址"),
+            QStringLiteral("当前未配置腾讯位置服务 Key。可输入中关村、海淀、亦庄、大兴、望京或朝阳使用离线教学坐标；联网解析请设置环境变量 EVCS_TENCENT_MAP_KEY。"));
+        return;
+    }
+
+    QUrl url(QStringLiteral("https://apis.map.qq.com/ws/geocoder/v1/"));
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("address"), address);
+    query.addQueryItem(QStringLiteral("key"), mapKey);
+    query.addQueryItem(QStringLiteral("output"), QStringLiteral("json"));
+    url.setQuery(query);
+    QNetworkRequest request{url};
+    request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("EVCS-Teaching-Platform/1.1"));
+    QNetworkReply *reply = mapNetwork_->get(request);
+    locationStatusLabel_->setText(QStringLiteral("正在调用腾讯地图解析…"));
+    QTimer::singleShot(8000, reply, [reply] {
+        if (reply->isRunning()) reply->abort();
     });
+    connect(reply, &QNetworkReply::finished, this, [this, reply, address] {
+        const QByteArray body = reply->readAll();
+        const auto networkError = reply->error();
+        const QString networkMessage = reply->errorString();
+        reply->deleteLater();
+        if (networkError != QNetworkReply::NoError) {
+            locationStatusLabel_->setText(QStringLiteral("腾讯地图解析失败"));
+            QMessageBox::warning(this, QStringLiteral("地址解析失败"), networkMessage);
+            return;
+        }
+        QJsonParseError parseError;
+        const QJsonDocument document = QJsonDocument::fromJson(body, &parseError);
+        const QJsonObject root = document.object();
+        if (parseError.error != QJsonParseError::NoError
+            || root.value(QStringLiteral("status")).toInt(-1) != 0) {
+            const QString message = root.value(QStringLiteral("message")).toString(
+                parseError.errorString());
+            locationStatusLabel_->setText(QStringLiteral("腾讯地图解析失败"));
+            QMessageBox::warning(this, QStringLiteral("地址解析失败"), message);
+            return;
+        }
+        const QJsonObject result = root.value(QStringLiteral("result")).toObject();
+        const QJsonObject location = result.value(QStringLiteral("location")).toObject();
+        const double latitude = location.value(QStringLiteral("lat")).toDouble(999.0);
+        const double longitude = location.value(QStringLiteral("lng")).toDouble(999.0);
+        if (latitude < -90.0 || latitude > 90.0 || longitude < -180.0 || longitude > 180.0) {
+            QMessageBox::warning(this, QStringLiteral("地址解析失败"),
+                                 QStringLiteral("腾讯地图未返回有效坐标"));
+            return;
+        }
+        const QString title = result.value(QStringLiteral("title")).toString(address);
+        setCurrentLocation(latitude, longitude, title, QStringLiteral("腾讯地图 WebService"));
+    });
+}
+
+void MainWindow::setCurrentLocation(double latitude, double longitude,
+                                    const QString &description, const QString &source)
+{
+    hasCurrentLocation_ = true;
+    currentLatitude_ = latitude;
+    currentLongitude_ = longitude;
+    locationStatusLabel_->setText(QStringLiteral("%1：%2, %3（%4）")
+        .arg(description)
+        .arg(latitude, 0, 'f', 6)
+        .arg(longitude, 0, 'f', 6)
+        .arg(source));
+    refreshStations();
+}
+
+void MainWindow::navigateSelectedStation(const QString &travelMode)
+{
+    if (!hasCurrentLocation_) {
+        QMessageBox::information(this, QStringLiteral("缺少当前位置"),
+                                 QStringLiteral("请先输入地址并解析当前位置"));
+        return;
+    }
+    const int row = stationTable_->currentRow();
+    if (row < 0 || !stationTable_->item(row, 0)) {
+        QMessageBox::information(this, QStringLiteral("请选择站点"),
+                                 QStringLiteral("请先选择一个充电站"));
+        return;
+    }
+    const QTableWidgetItem *idItem = stationTable_->item(row, 0);
+    const double stationLatitude = idItem->data(Qt::UserRole + 1).toDouble();
+    const double stationLongitude = idItem->data(Qt::UserRole + 2).toDouble();
+    const QString stationName = stationTable_->item(row, 1)->text();
+    const QString modeName = travelMode == QStringLiteral("walk")
+        ? QStringLiteral("步行") : QStringLiteral("驾车");
+    const QString mapKey = qEnvironmentVariable("EVCS_TENCENT_MAP_KEY").trimmed();
+    const QString mapReferer = qEnvironmentVariable(
+        "EVCS_TENCENT_MAP_REFERER", QStringLiteral("EVCS-DEMO")).trimmed();
+
+    QUrl url(QStringLiteral("https://apis.map.qq.com/uri/v1/routeplan"));
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("type"), travelMode);
+    query.addQueryItem(QStringLiteral("from"), QStringLiteral("当前位置"));
+    query.addQueryItem(QStringLiteral("fromcoord"), QStringLiteral("%1,%2")
+        .arg(currentLatitude_, 0, 'f', 6).arg(currentLongitude_, 0, 'f', 6));
+    query.addQueryItem(QStringLiteral("to"), stationName);
+    query.addQueryItem(QStringLiteral("tocoord"), QStringLiteral("%1,%2")
+        .arg(stationLatitude, 0, 'f', 6).arg(stationLongitude, 0, 'f', 6));
+    query.addQueryItem(QStringLiteral("policy"), QStringLiteral("0"));
+    query.addQueryItem(QStringLiteral("referer"), mapReferer.isEmpty()
+        ? QStringLiteral("EVCS-DEMO") : mapReferer);
+    url.setQuery(query);
+
+    QDialog dialog(this);
+    dialog.setWindowTitle(QStringLiteral("腾讯地图%1导航 · %2").arg(modeName, stationName));
+    dialog.resize(980, 720);
+    auto *layout = new QVBoxLayout(&dialog);
+    auto *view = new QWebEngineView(&dialog);
+    layout->addWidget(view);
+    if (mapKey.isEmpty()) {
+        const double distance = straightLineDistanceKm(
+            currentLatitude_, currentLongitude_, stationLatitude, stationLongitude);
+        view->setHtml(QStringLiteral(
+            "<html><meta charset='utf-8'><body style='font-family:sans-serif;padding:30px'>"
+            "<h2>离线导航预览</h2><p>方式：%1</p><p>目的地：%2</p>"
+            "<p>直线距离：%3 km</p><p style='color:#a55'>未配置腾讯位置服务 Key，"
+            "因此不请求在线路线；设置 EVCS_TENCENT_MAP_KEY 后可在本窗口加载腾讯地图路线。</p>"
+            "<p><a href='%4'>尝试打开腾讯地图 URI</a></p></body></html>")
+            .arg(modeName, stationName.toHtmlEscaped())
+            .arg(distance, 0, 'f', 2)
+            .arg(url.toString(QUrl::FullyEncoded)));
+    } else {
+        view->load(url);
+    }
+    dialog.exec();
 }
 
 void MainWindow::loadSelectedStation()
@@ -440,6 +697,55 @@ void MainWindow::refreshProfile()
     apiClient_.sendRequest(QStringLiteral("user.profile"));
 }
 
+void MainWindow::editDisplayName()
+{
+    bool accepted = false;
+    const QString value = QInputDialog::getText(
+        this, QStringLiteral("修改昵称"), QStringLiteral("新昵称（1-32 个字符）"),
+        QLineEdit::Normal, profileDisplayNameLabel_->text(), &accepted).trimmed();
+    if (!accepted) return;
+    apiClient_.sendRequest(QStringLiteral("user.profile.update"), {
+        {QStringLiteral("displayName"), value}
+    });
+}
+
+void MainWindow::chooseAvatar()
+{
+    const QString path = QFileDialog::getOpenFileName(
+        this, QStringLiteral("选择头像"), {}, QStringLiteral("图片 (*.png *.jpg *.jpeg)"));
+    if (path.isEmpty()) return;
+    QImage image(path);
+    if (image.isNull()) {
+        QMessageBox::warning(this, QStringLiteral("头像读取失败"),
+                             QStringLiteral("无法读取所选图片"));
+        return;
+    }
+    image = image.scaled(256, 256, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    QByteArray encodedImage;
+    QBuffer buffer(&encodedImage);
+    if (!buffer.open(QIODevice::WriteOnly) || !image.save(&buffer, "PNG")) {
+        QMessageBox::warning(this, QStringLiteral("头像处理失败"),
+                             QStringLiteral("无法转换所选图片"));
+        return;
+    }
+    apiClient_.sendRequest(QStringLiteral("user.avatar.update"), {
+        {QStringLiteral("mimeType"), QStringLiteral("image/png")},
+        {QStringLiteral("dataBase64"), QString::fromLatin1(encodedImage.toBase64())}
+    });
+}
+
+void MainWindow::rechargeWallet()
+{
+    bool accepted = false;
+    const double amount = QInputDialog::getDouble(
+        this, QStringLiteral("钱包充值"), QStringLiteral("充值金额（教学模拟，不连接真实支付）"),
+        100.0, 0.01, 10000.0, 2, &accepted);
+    if (!accepted) return;
+    apiClient_.sendRequest(QStringLiteral("wallet.recharge"), {
+        {QStringLiteral("amountCents"), qRound64(amount * 100.0)}
+    });
+}
+
 void MainWindow::logout()
 {
     chargingTimer_.stop();
@@ -473,7 +779,8 @@ void MainWindow::handleResponse(const QString &action,
         return;
     }
 
-    if (action == QStringLiteral("auth.login")) {
+    if (action == QStringLiteral("auth.login")
+        || action == QStringLiteral("auth.phoneLogin")) {
         apiClient_.setToken(data.value(QStringLiteral("token")).toString());
         const QJsonObject user = data.value(QStringLiteral("user")).toObject();
         if (user.value(QStringLiteral("role")).toString() != QStringLiteral("user")) {
@@ -491,6 +798,10 @@ void MainWindow::handleResponse(const QString &action,
         refreshOrders();
         refreshProfile();
         refreshChargingStatus();
+        if (data.value(QStringLiteral("autoRegistered")).toBool(false)) {
+            QMessageBox::information(this, QStringLiteral("自动注册成功"),
+                                     QStringLiteral("该手机号首次登录，已自动创建用户"));
+        }
     } else if (action == QStringLiteral("auth.register")) {
         QMessageBox::information(this, QStringLiteral("注册成功"),
                                  QStringLiteral("用户已创建，可以登录"));
@@ -550,6 +861,20 @@ void MainWindow::handleResponse(const QString &action,
                 .arg(order.value(QStringLiteral("status")).toString()));
     } else if (action == QStringLiteral("user.profile")) {
         populateProfile(data);
+    } else if (action == QStringLiteral("user.profile.update")) {
+        QMessageBox::information(this, QStringLiteral("修改成功"),
+                                 QStringLiteral("昵称已保存"));
+        refreshProfile();
+    } else if (action == QStringLiteral("user.avatar.update")) {
+        QMessageBox::information(this, QStringLiteral("上传成功"),
+                                 QStringLiteral("头像已保存"));
+        refreshProfile();
+    } else if (action == QStringLiteral("wallet.recharge")) {
+        QMessageBox::information(this, QStringLiteral("充值成功"),
+            QStringLiteral("模拟充值完成，当前余额 %1")
+                .arg(moneyText(static_cast<qint64>(
+                    data.value(QStringLiteral("balanceCents")).toDouble()))));
+        refreshProfile();
     } else if (action == QStringLiteral("auth.logout")) {
         apiClient_.clearToken();
         activeSessionId_ = 0;
@@ -566,14 +891,24 @@ void MainWindow::populateStations(const QJsonObject &data)
     for (int row = 0; row < stations.size(); ++row) {
         const QJsonObject station = stations.at(row).toObject();
         const qint64 id = static_cast<qint64>(station.value(QStringLiteral("id")).toDouble());
-        stationTable_->setItem(row, 0, makeIdItem(id));
+        auto *idItem = makeIdItem(id);
+        idItem->setData(Qt::UserRole + 1, station.value(QStringLiteral("latitude")).toDouble());
+        idItem->setData(Qt::UserRole + 2, station.value(QStringLiteral("longitude")).toDouble());
+        stationTable_->setItem(row, 0, idItem);
         stationTable_->setItem(row, 1, new QTableWidgetItem(station.value(QStringLiteral("name")).toString()));
         stationTable_->setItem(row, 2, new QTableWidgetItem(station.value(QStringLiteral("region")).toString()));
         stationTable_->setItem(row, 3, new QTableWidgetItem(station.value(QStringLiteral("address")).toString()));
         stationTable_->setItem(row, 4, new QTableWidgetItem(QStringLiteral("%1/%2")
             .arg(station.value(QStringLiteral("idleCount")).toInt())
             .arg(station.value(QStringLiteral("chargerCount")).toInt())));
-        stationTable_->setItem(row, 5, new QTableWidgetItem(
+        stationTable_->setItem(row, 5, new QTableWidgetItem(QStringLiteral("%1%")
+            .arg(station.value(QStringLiteral("onlineRate")).toDouble() * 100.0, 0, 'f', 1)));
+        stationTable_->setItem(row, 6, new QTableWidgetItem(
+            station.contains(QStringLiteral("distanceKm"))
+                ? QStringLiteral("%1 km").arg(
+                    station.value(QStringLiteral("distanceKm")).toDouble(), 0, 'f', 2)
+                : QStringLiteral("--")));
+        stationTable_->setItem(row, 7, new QTableWidgetItem(
             moneyText(station.value(QStringLiteral("minimumPriceCentsPerKwh")).toInt())
             + QStringLiteral("/kWh")));
     }
@@ -657,6 +992,18 @@ void MainWindow::populateOrders(const QJsonObject &data)
 void MainWindow::populateProfile(const QJsonObject &data)
 {
     const QJsonObject user = data.value(QStringLiteral("user")).toObject();
+    const QByteArray avatarData = QByteArray::fromBase64(
+        user.value(QStringLiteral("avatarBase64")).toString().toLatin1());
+    QImage avatar;
+    if (!avatarData.isEmpty()) avatar.loadFromData(avatarData);
+    if (avatar.isNull()) {
+        profileAvatarLabel_->setPixmap({});
+        profileAvatarLabel_->setText(QStringLiteral("暂无头像"));
+    } else {
+        profileAvatarLabel_->setText({});
+        profileAvatarLabel_->setPixmap(QPixmap::fromImage(avatar).scaled(
+            profileAvatarLabel_->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    }
     profileUsernameLabel_->setText(user.value(QStringLiteral("username")).toString());
     profileDisplayNameLabel_->setText(user.value(QStringLiteral("displayName")).toString());
     profilePhoneLabel_->setText(user.value(QStringLiteral("phone")).toString());

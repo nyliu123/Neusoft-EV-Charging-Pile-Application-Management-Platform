@@ -1,8 +1,13 @@
 #include "chargingserver.h"
 
+#include "businessservice.h"
+
+#include <QtConcurrent>
 #include <QDateTime>
 #include <QHostAddress>
 #include <QJsonObject>
+#include <QPointer>
+#include <QThread>
 #include <QTcpSocket>
 
 #include <exception>
@@ -10,8 +15,10 @@
 namespace evcs::server {
 
 ChargingServer::ChargingServer(QObject *parent)
-    : QObject(parent), businessService_(database_)
+    : QObject(parent)
 {
+    workerPool_.setMaxThreadCount(qBound(2, QThread::idealThreadCount(), 8));
+    workerPool_.setExpiryTimeout(30000);
     connect(&server_, &QTcpServer::newConnection,
             this, &ChargingServer::acceptPendingConnections);
 }
@@ -25,13 +32,18 @@ ChargingServer::~ChargingServer()
         socket->disconnectFromHost();
     }
     decoders_.clear();
+    workerPool_.waitForDone();
 }
 
 bool ChargingServer::initialize(const QString &databasePath,
                                 const QString &schemaPath,
                                 QString *errorMessage)
 {
-    return database_.initialize(databasePath, schemaPath, errorMessage);
+    if (!database_.initialize(databasePath, schemaPath, errorMessage)) return false;
+    databasePath_ = databasePath;
+    qInfo().noquote() << QStringLiteral("worker_pool_ready threads=%1 database=%2")
+                            .arg(workerPool_.maxThreadCount()).arg(databasePath_);
+    return true;
 }
 
 bool ChargingServer::listen(const QHostAddress &address,
@@ -81,7 +93,7 @@ void ChargingServer::readClient(QTcpSocket *socket)
     }
 
     for (const QJsonObject &message : messages) {
-        sendMessage(socket, handleMessage(message));
+        dispatchMessage(socket, message);
     }
 }
 
@@ -99,21 +111,51 @@ void ChargingServer::sendMessage(QTcpSocket *socket, const QJsonObject &message)
     socket->write(protocol::encodeFrame(message));
 }
 
-QJsonObject ChargingServer::handleMessage(const QJsonObject &message)
+void ChargingServer::dispatchMessage(QTcpSocket *socket, const QJsonObject &message)
 {
     const QString requestId = message.value(QStringLiteral("requestId")).toString();
     const QString action = message.value(QStringLiteral("action")).toString();
     if (message.value(QStringLiteral("type")).toString() != QStringLiteral("request")
         || requestId.isEmpty() || action.isEmpty()) {
-        return protocol::makeErrorResponse(requestId,
-                                           QStringLiteral("INVALID_MESSAGE"),
-                                           QStringLiteral("请求缺少 type、requestId 或 action"));
+        sendMessage(socket, protocol::makeErrorResponse(requestId,
+                    QStringLiteral("INVALID_MESSAGE"),
+                    QStringLiteral("请求缺少 type、requestId 或 action")));
+        return;
+    }
+    const QJsonValue payloadValue = message.value(QStringLiteral("payload"));
+    if (!payloadValue.isUndefined() && !payloadValue.isObject()) {
+        sendMessage(socket, protocol::makeErrorResponse(requestId,
+                    QStringLiteral("INVALID_ARGUMENT"),
+                    QStringLiteral("payload 必须是 JSON 对象")));
+        return;
     }
 
+    QPointer<QTcpSocket> socketGuard(socket);
+    [[maybe_unused]] const auto worker = QtConcurrent::run(
+        &workerPool_, [this, socketGuard, message, requestId, action] {
+        qInfo().noquote() << QStringLiteral("request_started requestId=%1 action=%2 thread=%3")
+                                .arg(requestId, action)
+                                .arg(reinterpret_cast<quintptr>(QThread::currentThreadId()));
+        const QJsonObject response = handleMessage(message);
+        QMetaObject::invokeMethod(this, [this, socketGuard, response, requestId, action] {
+            if (socketGuard && socketGuard->state() == QAbstractSocket::ConnectedState
+                && decoders_.contains(socketGuard.data())) {
+                sendMessage(socketGuard.data(), response);
+            }
+            qInfo().noquote() << QStringLiteral("request_finished requestId=%1 action=%2")
+                                    .arg(requestId, action);
+        }, Qt::QueuedConnection);
+        });
+}
+
+QJsonObject ChargingServer::handleMessage(const QJsonObject &message) const
+{
+    const QString requestId = message.value(QStringLiteral("requestId")).toString();
+    const QString action = message.value(QStringLiteral("action")).toString();
     if (action == QStringLiteral("system.ping")) {
         return protocol::makeSuccessResponse(requestId, {
             {QStringLiteral("service"), QStringLiteral("evcs_server")},
-            {QStringLiteral("version"), QStringLiteral("1.0.0")},
+            {QStringLiteral("version"), QStringLiteral("1.1.0")},
             {QStringLiteral("serverTime"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)}
         });
     }
@@ -141,14 +183,14 @@ QJsonObject ChargingServer::handleMessage(const QJsonObject &message)
     }
 
     const QJsonValue payloadValue = message.value(QStringLiteral("payload"));
-    if (!payloadValue.isUndefined() && !payloadValue.isObject()) {
-        return protocol::makeErrorResponse(requestId,
-                                           QStringLiteral("INVALID_ARGUMENT"),
-                                           QStringLiteral("payload 必须是 JSON 对象"));
-    }
-    qInfo().noquote() << QStringLiteral("request requestId=%1 action=%2").arg(requestId, action);
     try {
-        const ServiceResult result = businessService_.handle(
+        Database workerDatabase;
+        QString databaseError;
+        if (!workerDatabase.openExisting(databasePath_, &databaseError)) {
+            return protocol::makeErrorResponse(requestId, QStringLiteral("DATABASE_ERROR"), databaseError);
+        }
+        BusinessService businessService(workerDatabase);
+        const ServiceResult result = businessService.handle(
             action,
             payloadValue.isObject() ? payloadValue.toObject() : QJsonObject{},
             message.value(QStringLiteral("token")).toString());

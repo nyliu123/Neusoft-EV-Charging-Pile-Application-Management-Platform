@@ -6,6 +6,10 @@
 #include <QMainWindow>
 
 class QLabel;
+class QChartView;
+class QCheckBox;
+class QComboBox;
+class QDateEdit;
 class QLineEdit;
 class QPushButton;
 class QSpinBox;
@@ -46,9 +50,14 @@ private:
     void refreshSessions();
     void refreshTariffs();
     void refreshFaults();
+    void updateTrendDisplay();
+    void showSelectedStationDevices();
+    void showAllChargers();
     void editStation(bool createNew);
     void editCharger(bool createNew);
     void setChargerStatus();
+    void restartCharger();
+    void showChargerOperations();
     void setUserStatus();
     void editTariff(bool createNew);
     void editFault(bool createNew);
@@ -87,9 +96,23 @@ private:
     QLabel *todayLabel_ = nullptr;
     QLabel *revenueLabel_ = nullptr;
     QTableWidget *trendTable_ = nullptr;
+    QComboBox *trendRangeCombo_ = nullptr;
+    QChartView *trendChart_ = nullptr;
+    QJsonObject dashboardData_;
     QTableWidget *stationTable_ = nullptr;
+    qint64 chargerStationFilterId_ = 0;
+    QLabel *chargerFilterLabel_ = nullptr;
     QTableWidget *chargerTable_ = nullptr;
+    QLineEdit *userPhoneFilterEdit_ = nullptr;
     QTableWidget *userTable_ = nullptr;
+    QLineEdit *orderNoFilterEdit_ = nullptr;
+    QLineEdit *orderPhoneFilterEdit_ = nullptr;
+    QLineEdit *orderStationFilterEdit_ = nullptr;
+    QLineEdit *orderChargerFilterEdit_ = nullptr;
+    QComboBox *orderStatusFilterCombo_ = nullptr;
+    QCheckBox *orderDateFilterCheck_ = nullptr;
+    QDateEdit *orderStartDateEdit_ = nullptr;
+    QDateEdit *orderEndDateEdit_ = nullptr;
     QTableWidget *orderTable_ = nullptr;
     QTableWidget *reservationTable_ = nullptr;
     QTableWidget *sessionTable_ = nullptr;

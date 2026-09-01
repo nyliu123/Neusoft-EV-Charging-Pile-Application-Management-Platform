@@ -25,6 +25,7 @@ add_executable(evcs_server
 
 target_link_libraries(evcs_server PRIVATE
     evcs_server_core
+    Qt6::Concurrent
     Qt6::Core
     Qt6::Network
 )

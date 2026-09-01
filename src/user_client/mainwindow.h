@@ -7,8 +7,10 @@
 #include <QTimer>
 
 class QCheckBox;
+class QComboBox;
 class QLabel;
 class QLineEdit;
+class QNetworkAccessManager;
 class QPushButton;
 class QSpinBox;
 class QStackedWidget;
@@ -35,7 +37,12 @@ private:
     void connectServer();
     void login();
     void registerUser();
+    void updateLoginMode();
     void refreshStations();
+    void geocodeLocation();
+    void setCurrentLocation(double latitude, double longitude,
+                            const QString &description, const QString &source);
+    void navigateSelectedStation(const QString &travelMode);
     void loadSelectedStation();
     void reserveSelectedCharger();
     void startSelectedCharger();
@@ -47,6 +54,9 @@ private:
     void refreshOrders();
     void showSelectedOrder();
     void refreshProfile();
+    void editDisplayName();
+    void chooseAvatar();
+    void rechargeWallet();
     void logout();
     qint64 selectedId(QTableWidget *table) const;
     void handleResponse(const QString &action,
@@ -64,6 +74,10 @@ private:
     ApiClient apiClient_;
     QTimer chargingTimer_;
     qint64 activeSessionId_ = 0;
+    bool hasCurrentLocation_ = false;
+    double currentLatitude_ = 0.0;
+    double currentLongitude_ = 0.0;
+    QNetworkAccessManager *mapNetwork_ = nullptr;
 
     QStackedWidget *stack_ = nullptr;
     QWidget *loginPage_ = nullptr;
@@ -72,11 +86,14 @@ private:
     QLineEdit *hostEdit_ = nullptr;
     QSpinBox *portSpin_ = nullptr;
     QPushButton *connectButton_ = nullptr;
+    QComboBox *loginModeCombo_ = nullptr;
     QLineEdit *usernameEdit_ = nullptr;
     QLineEdit *passwordEdit_ = nullptr;
     QPushButton *loginButton_ = nullptr;
     QLineEdit *stationKeywordEdit_ = nullptr;
     QLineEdit *stationRegionEdit_ = nullptr;
+    QLineEdit *locationEdit_ = nullptr;
+    QLabel *locationStatusLabel_ = nullptr;
     QCheckBox *onlyAvailableCheck_ = nullptr;
     QTableWidget *stationTable_ = nullptr;
     QTableWidget *chargerTable_ = nullptr;
@@ -88,6 +105,7 @@ private:
     QLabel *chargingAmountLabel_ = nullptr;
     QPushButton *stopChargingButton_ = nullptr;
     QTableWidget *orderTable_ = nullptr;
+    QLabel *profileAvatarLabel_ = nullptr;
     QLabel *profileUsernameLabel_ = nullptr;
     QLabel *profileDisplayNameLabel_ = nullptr;
     QLabel *profilePhoneLabel_ = nullptr;

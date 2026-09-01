@@ -53,8 +53,9 @@
 
 - `system.ping`
 - `system.features`
-- `auth.register`、`auth.login`、`auth.logout`
-- `user.profile`
+- `auth.register`、`auth.login`、`auth.phoneLogin`、`auth.logout`
+- `user.profile`、`user.profile.update`、`user.avatar.update`
+- `wallet.recharge`
 - `station.list`、`station.get`
 - `reservation.create`、`reservation.cancel`、`reservation.list`
 - `charging.start`、`charging.status`、`charging.stop`
@@ -64,6 +65,7 @@
 - `admin.demo.generateHistory`（必须传入 `confirmed: true`）
 - `admin.station.list`、`admin.station.save`
 - `admin.charger.list`、`admin.charger.save`、`admin.charger.setStatus`
+- `admin.charger.restart`、`admin.charger.operation.list`
 - `admin.user.list`、`admin.user.setStatus`
 - `admin.reservation.list`、`admin.session.list`、`admin.order.list`
 - `admin.tariff.list`、`admin.tariff.save`

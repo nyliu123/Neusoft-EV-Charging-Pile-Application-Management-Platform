@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS users (
     role TEXT NOT NULL CHECK (role IN ('user', 'admin')),
     display_name TEXT NOT NULL DEFAULT '',
     phone TEXT NOT NULL DEFAULT '',
+    avatar_mime TEXT NOT NULL DEFAULT '',
+    avatar_data BLOB,
     balance_cents INTEGER NOT NULL DEFAULT 0 CHECK (balance_cents >= 0),
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
     created_at TEXT NOT NULL,
@@ -108,6 +110,27 @@ CREATE TABLE IF NOT EXISTS fault_reports (
     resolved_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS recharge_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+    balance_after_cents INTEGER NOT NULL CHECK (balance_after_cents >= 0),
+    channel TEXT NOT NULL DEFAULT 'demo',
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS charger_operation_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    charger_id INTEGER NOT NULL REFERENCES chargers(id),
+    operator_user_id INTEGER NOT NULL REFERENCES users(id),
+    operation TEXT NOT NULL,
+    previous_status TEXT NOT NULL,
+    result_status TEXT NOT NULL,
+    success INTEGER NOT NULL CHECK (success IN (0, 1)),
+    message TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS audit_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     actor_user_id INTEGER REFERENCES users(id),
@@ -124,3 +147,6 @@ CREATE INDEX IF NOT EXISTS idx_reservations_expiry ON reservations(status, expir
 CREATE INDEX IF NOT EXISTS idx_sessions_user_status ON charging_sessions(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_orders_user_created ON orders(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_faults_charger_status ON fault_reports(charger_id, status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_phone_unique ON users(phone) WHERE phone <> '';
+CREATE INDEX IF NOT EXISTS idx_recharges_user_created ON recharge_records(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_charger_operations_created ON charger_operation_logs(charger_id, created_at DESC);

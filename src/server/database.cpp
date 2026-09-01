@@ -51,6 +51,18 @@ bool Database::initialize(const QString &databasePath,
                           const QString &schemaPath,
                           QString *errorMessage)
 {
+    if (!openExisting(databasePath, errorMessage)) {
+        return false;
+    }
+
+    return executeSchema(schemaPath, errorMessage)
+        && migrateSchema(errorMessage)
+        && seedDefaults(errorMessage);
+}
+
+bool Database::openExisting(const QString &databasePath,
+                            QString *errorMessage)
+{
     const QFileInfo databaseInfo(databasePath);
     if (!QDir().mkpath(databaseInfo.absolutePath())) {
         if (errorMessage) {
@@ -77,7 +89,7 @@ bool Database::initialize(const QString &databasePath,
         return false;
     }
 
-    return executeSchema(schemaPath, errorMessage) && seedDefaults(errorMessage);
+    return true;
 }
 
 QSqlDatabase Database::connection() const
@@ -117,6 +129,47 @@ bool Database::executeSchema(const QString &schemaPath, QString *errorMessage)
         if (errorMessage) {
             *errorMessage = versionQuery.lastError().text();
         }
+        return false;
+    }
+    return true;
+}
+
+bool Database::migrateSchema(QString *errorMessage)
+{
+    auto ensureColumn = [this, errorMessage](const QString &table,
+                                              const QString &column,
+                                              const QString &definition) {
+        QSqlQuery columns(database_);
+        if (!columns.exec(QStringLiteral("PRAGMA table_info(%1)").arg(table))) {
+            if (errorMessage) *errorMessage = columns.lastError().text();
+            return false;
+        }
+        while (columns.next()) {
+            if (columns.value(1).toString() == column) return true;
+        }
+        QSqlQuery alter(database_);
+        const QString sql = QStringLiteral("ALTER TABLE %1 ADD COLUMN %2 %3")
+                                .arg(table, column, definition);
+        if (!alter.exec(sql)) {
+            if (errorMessage) *errorMessage = alter.lastError().text() + QStringLiteral(" | SQL: ") + sql;
+            return false;
+        }
+        return true;
+    };
+
+    if (!ensureColumn(QStringLiteral("users"), QStringLiteral("avatar_mime"),
+                      QStringLiteral("TEXT NOT NULL DEFAULT ''"))
+        || !ensureColumn(QStringLiteral("users"), QStringLiteral("avatar_data"),
+                         QStringLiteral("BLOB"))) {
+        return false;
+    }
+
+    QSqlQuery versionQuery(database_);
+    versionQuery.prepare(QStringLiteral(
+        "INSERT OR IGNORE INTO schema_version(version, applied_at) VALUES(2, ?)"));
+    versionQuery.addBindValue(utcNow());
+    if (!versionQuery.exec()) {
+        if (errorMessage) *errorMessage = versionQuery.lastError().text();
         return false;
     }
     return true;

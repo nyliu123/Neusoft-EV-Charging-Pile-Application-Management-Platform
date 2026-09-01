@@ -1,12 +1,12 @@
 #pragma once
 
-#include "businessservice.h"
 #include "database.h"
 #include "protocol.h"
 
 #include <QHash>
 #include <QObject>
 #include <QTcpServer>
+#include <QThreadPool>
 
 class QTcpSocket;
 
@@ -31,11 +31,13 @@ private:
     void readClient(QTcpSocket *socket);
     void removeClient(QTcpSocket *socket);
     void sendMessage(QTcpSocket *socket, const QJsonObject &message);
-    QJsonObject handleMessage(const QJsonObject &message);
+    void dispatchMessage(QTcpSocket *socket, const QJsonObject &message);
+    QJsonObject handleMessage(const QJsonObject &message) const;
 
     Database database_;
-    BusinessService businessService_;
+    QString databasePath_;
     QTcpServer server_;
+    QThreadPool workerPool_;
     QHash<QTcpSocket *, protocol::FrameDecoder> decoders_;
 };
 

@@ -1,3 +1,5 @@
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
 add_executable(protocol_test protocol_test.cpp)
 target_link_libraries(protocol_test PRIVATE evcs_common Qt6::Core Qt6::Test)
 add_test(NAME protocol_test COMMAND protocol_test)
@@ -21,6 +23,7 @@ add_executable(socket_integration_test
 )
 target_link_libraries(socket_integration_test PRIVATE
     evcs_server_core
+    Qt6::Concurrent
     Qt6::Core
     Qt6::Network
     Qt6::Test
@@ -41,10 +44,13 @@ add_executable(ui_acceptance_test
 )
 target_link_libraries(ui_acceptance_test PRIVATE
     evcs_server_core
+    Qt6::Concurrent
     Qt6::Core
     Qt6::Network
     Qt6::Test
     Qt6::Widgets
+    Qt6::Charts
+    Qt6::WebEngineWidgets
 )
 target_compile_definitions(ui_acceptance_test PRIVATE
     EVCS_TEST_SCHEMA_PATH="${PROJECT_SOURCE_DIR}/database/schema.sql"
@@ -52,4 +58,9 @@ target_compile_definitions(ui_acceptance_test PRIVATE
 add_test(NAME ui_acceptance_test COMMAND ui_acceptance_test)
 set_tests_properties(ui_acceptance_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;EVCS_TEST_ARTIFACT_DIR=${CMAKE_BINARY_DIR}/test-artifacts"
+)
+
+add_test(NAME preprocessing_test
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/preprocessing_test.py
+            ${PROJECT_SOURCE_DIR}/tools/preprocess_analytics.py
 )

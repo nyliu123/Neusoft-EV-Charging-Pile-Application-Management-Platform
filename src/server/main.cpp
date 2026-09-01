@@ -47,7 +47,7 @@ int main(int argc, char *argv[])
 {
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("evcs_server"));
-    QCoreApplication::setApplicationVersion(QStringLiteral("1.0.0"));
+    QCoreApplication::setApplicationVersion(QStringLiteral("1.1.0"));
 
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("电动汽车充电桩应用管理平台服务端"));
