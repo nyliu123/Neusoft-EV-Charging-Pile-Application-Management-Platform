@@ -1,53 +1,45 @@
 # 东软电动汽车充电桩应用管理平台
 
-面向 Ubuntu 22.04 的 Qt 6/C++ 教学项目，实现充电用户端、运营管理端和中心服务端。核心业务数据由服务端统一写入 SQLite，两个客户端通过 TCP Socket 与服务端通信。当前版本为 1.1.0。
+面向 Ubuntu 22.04 的 Qt 6/C++ 教学项目，包含充电用户端、运营管理端、中心服务端和 ECharts 数据大屏。当前版本为 **1.2.0**。
 
-## 当前范围
+## 重构后的工程约定
 
-- 第一优先级：账号或手机号登录、个人资料/充值、地图找桩、预约、模拟充电、计费结算、订单查询。
-- 第二优先级：站点—设备联动、充电桩、用户、订单、价格、故障、远程重启和 Qt Charts 经营统计管理。
-- 第三优先级：ECharts 运营数据大屏。
-- 数据准备：提供可重复的数据清洗/导出流水线和质量报告。
-- 暂缓：依赖真实历史数据的机器学习模型；当前只保留接口和数据字段，不伪造训练结果。
+- 工程目录完全平铺，不创建源代码子目录。
+- 三个应用分别使用 `evcs_user_client.pro`、`evcs_admin_client.pro`、`evcs_server.pro`。
+- `user_main.cpp`、`admin_main.cpp`、`server_main.cpp` 只负责程序装配。
+- 主窗口按“页面创建、用户操作、响应处理、公共装配”拆分，避免在单个 MainWindow 文件堆积代码。
+- 所有界面文字使用中文；协议中的英文状态码只在内部传输，界面统一转换为中文。
+- 每个页面具有独立 `.qss`，并通过前缀为 `/qss` 的 `.qrc` 加载。
+- 构建、运行数据、验收截图和发布包默认放在项目目录的同级目录，不破坏平铺结构。
 
-## 构建
+## 功能范围
 
-```bash
-chmod +x scripts/*.sh
-./scripts/build_and_test.sh
-```
+- 用户端：手机号快速登录、资料与头像、模拟充值、地图找桩、距离排序、预约、模拟充电、结算和订单。
+- 管理端：经营统计、站点—设备联动、设备状态/远程重启、用户与订单筛选、价格和故障管理。
+- 服务端：长度前缀 JSON 协议、线程池并发、SQLite 事务、鉴权和结构化日志。
+- 大屏与数据：30 天教学数据、ECharts 运营大屏、分析数据清洗和质量报告。
+- 暂缓：依赖真实历史数据的负荷预测和智能推荐，不伪造机器学习结果。
 
-生成的程序位于 `build/bin`：
-
-- `evcs_server`：中心服务端；
-- `evcs_user_client`：充电用户端；
-- `evcs_admin_client`：运营管理端。
-
-## 文档
-
-- `docs/requirements-baseline.md`：已冻结的第一阶段需求与验收边界；
-- `docs/architecture.md`：总体架构、模块和数据流；
-- `docs/socket-protocol.md`：TCP/JSON 通信协议；
-- `database/schema.sql`：SQLite 数据库结构。
-
-## 运行演示
-
-从项目根目录打开三个终端：
+## 一键构建与测试
 
 ```bash
-./scripts/run_server.sh
-./scripts/run_user_client.sh
-./scripts/run_admin_client.sh
-./scripts/run_dashboard.sh
+chmod +x ./*.sh
+./build_and_test.sh
 ```
 
-大屏地址为 `http://127.0.0.1:8080`，可点击“生成 30 天演示数据”。页面使用随项目离线交付的 Apache ECharts 6.1.0，不依赖演示现场网络，并明确标注数据为教学模拟。
+默认构建到项目同级的 `evcs-qmake-build`，随后执行协议、业务、Socket、界面和预处理测试。
 
-演示账号仅用于本地教学环境：
+## 启动顺序
 
-- 普通用户：`demo` / `Demo123!`
-- 管理员：`admin` / `Admin123!`
+在四个终端中依次执行：
 
-服务端默认读取 `config/server.json`，数据保存到 `data/evcharging.db`，结构化日志写入 `logs/evcs-server.jsonl`。命令行的 `--listen`、`--port`、`--database`、`--schema` 和 `--log` 可覆盖配置文件。
+```bash
+./run_server.sh
+./run_user_client.sh
+./run_admin_client.sh
+./run_dashboard.sh
+```
 
-无腾讯地图 Key 时仍可用内置北京教学坐标完成距离排序和离线导航预览；在线地址解析与路线展示的配置方法见 `docs/installation.md`。
+浏览器访问 `http://127.0.0.1:8080`。教学账号：普通用户 `demo / Demo123!`，管理员 `admin / Admin123!`。
+
+详细环境、Qt Creator 打开方法和验收步骤见 `installation.md`、`acceptance-checklist.md` 和 `demo-script.md`。

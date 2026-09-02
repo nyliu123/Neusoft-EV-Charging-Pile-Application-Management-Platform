@@ -1,0 +1,13 @@
+QWidget#userLoginPage { background: #edf5ff; }
+QWidget#userLoginPage QGroupBox {
+    margin-top: 12px;
+    padding: 18px;
+    border: 1px solid #a8c6e8;
+    border-radius: 8px;
+    background: #ffffff;
+}
+QWidget#userLoginPage QPushButton#loginButton {
+    color: white;
+    border-color: #2468b0;
+    background: #2f76c7;
+}

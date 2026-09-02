@@ -1,0 +1,2 @@
+QWidget#adminSessionPage { background: #eef9f6; }
+QWidget#adminSessionPage QTableWidget { alternate-background-color: #e3f4ef; }

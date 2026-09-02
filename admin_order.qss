@@ -1,0 +1,2 @@
+QWidget#adminOrderPage { background: #f8f7ff; }
+QWidget#adminOrderPage QPushButton { color: #5a4aa3; border-color: #aaa0d1; }

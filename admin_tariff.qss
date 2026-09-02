@@ -1,0 +1,2 @@
+QWidget#adminTariffPage { background: #fffdf0; }
+QWidget#adminTariffPage QPushButton { color: #7c6812; border-color: #c8b85c; }

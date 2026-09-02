@@ -1,0 +1,2 @@
+QWidget#adminReservationPage { background: #fff8ee; }
+QWidget#adminReservationPage QTableWidget { alternate-background-color: #fff3df; }

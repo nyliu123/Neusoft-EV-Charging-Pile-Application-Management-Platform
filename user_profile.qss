@@ -1,0 +1,3 @@
+QWidget#userProfilePage { background: #f7f3ff; }
+QWidget#userProfilePage QLabel { min-height: 25px; }
+QWidget#userProfilePage QPushButton { border-color: #9c7ac7; color: #654398; }

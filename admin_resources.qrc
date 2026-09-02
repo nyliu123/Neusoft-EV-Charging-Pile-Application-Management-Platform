@@ -1,0 +1,15 @@
+<RCC>
+  <qresource prefix="/qss">
+    <file>admin_common.qss</file>
+    <file>admin_login.qss</file>
+    <file>admin_dashboard.qss</file>
+    <file>admin_station.qss</file>
+    <file>admin_charger.qss</file>
+    <file>admin_user.qss</file>
+    <file>admin_order.qss</file>
+    <file>admin_reservation.qss</file>
+    <file>admin_session.qss</file>
+    <file>admin_tariff.qss</file>
+    <file>admin_fault.qss</file>
+  </qresource>
+</RCC>

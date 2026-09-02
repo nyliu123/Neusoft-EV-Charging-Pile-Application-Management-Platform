@@ -1,0 +1,11 @@
+{
+  "listenAddress": "0.0.0.0",
+  "port": 45454,
+  "databasePath": "evcharging.db",
+  "schemaPath": "schema.sql",
+  "logPath": "evcs-server.jsonl",
+  "reservationTtlMinutes": 15,
+  "chargingSimulationIntervalSeconds": 1,
+  "defaultChargingPowerKw": 7.0,
+  "logLevel": "info"
+}

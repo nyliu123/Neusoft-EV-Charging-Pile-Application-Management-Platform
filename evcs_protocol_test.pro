@@ -1,0 +1,11 @@
+QT += core network testlib
+QT -= gui
+CONFIG += console testcase c++17 warn_on
+CONFIG -= app_bundle
+TEMPLATE = app
+TARGET = protocol_test
+INCLUDEPATH += $$PWD
+SOURCES += protocol_test.cpp protocol.cpp domain.cpp
+HEADERS += protocol.h domain.h
+OBJECTS_DIR = $$OUT_PWD/obj
+MOC_DIR = $$OUT_PWD/moc

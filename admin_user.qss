@@ -1,0 +1,2 @@
+QWidget#adminUserPage { background: #fffaf2; }
+QWidget#adminUserPage QPushButton { color: #8a5a18; border-color: #d3ad72; }

@@ -1,0 +1,3 @@
+QWidget#userReservationPage { background: #fffaf1; }
+QWidget#userReservationPage QTableWidget { alternate-background-color: #fff7e8; }
+QWidget#userReservationPage QPushButton { border-color: #d6a14c; }

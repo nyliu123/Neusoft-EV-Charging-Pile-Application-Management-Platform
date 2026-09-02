@@ -1,0 +1,6 @@
+QWidget#adminDashboardPage { background: #f4f8fc; }
+QWidget#adminDashboardPage QGroupBox {
+    border: 1px solid #c8d8e8;
+    border-radius: 6px;
+    background: #ffffff;
+}

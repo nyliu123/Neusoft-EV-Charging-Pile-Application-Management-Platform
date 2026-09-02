@@ -1,0 +1,8 @@
+QWidget#userStationPage { background: #f7fbff; }
+QWidget#userStationPage QGroupBox {
+    margin-top: 8px;
+    padding-top: 12px;
+    border: 1px solid #c7d7e8;
+    border-radius: 6px;
+}
+QWidget#userStationPage QPushButton { color: #165a9f; }

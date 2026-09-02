@@ -1,0 +1,11 @@
+<RCC>
+  <qresource prefix="/qss">
+    <file>user_common.qss</file>
+    <file>user_login.qss</file>
+    <file>user_station.qss</file>
+    <file>user_reservation.qss</file>
+    <file>user_charging.qss</file>
+    <file>user_order.qss</file>
+    <file>user_profile.qss</file>
+  </qresource>
+</RCC>

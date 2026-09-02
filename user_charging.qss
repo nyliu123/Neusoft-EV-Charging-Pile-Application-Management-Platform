@@ -1,0 +1,10 @@
+QWidget#userChargingPage { background: #effaf5; }
+QWidget#userChargingPage QLabel {
+    min-height: 26px;
+    color: #176b4d;
+}
+QWidget#userChargingPage QPushButton {
+    color: white;
+    border-color: #16845d;
+    background: #1e9b70;
+}

@@ -1,0 +1,2 @@
+QWidget#adminChargerPage { background: #f2fbf7; }
+QWidget#adminChargerPage QPushButton { color: #176a4a; border-color: #8ebda9; }
