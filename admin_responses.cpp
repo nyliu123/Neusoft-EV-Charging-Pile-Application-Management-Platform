@@ -1,4 +1,5 @@
 #include "admin_mainwindow.h"
+#include "admin_session.h"
 #include "ui_text.h"
 
 #include <QAbstractItemView>
@@ -21,6 +22,7 @@
 #include <QMessageBox>
 #include <QPainter>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStackedWidget>
 #include <QStatusBar>
@@ -32,6 +34,8 @@
 
 #include <QtCharts/QChart>
 #include <QtCharts/QChartView>
+#include <QtCharts/QLegend>
+#include <QtCharts/QPieSeries>
 #include <QtCharts/QDateTimeAxis>
 #include <QtCharts/QLineSeries>
 #include <QtCharts/QValueAxis>
@@ -88,15 +92,25 @@ void MainWindow::handleResponse(const QString &action, bool ok, const QJsonObjec
             return;
         }
         apiClient_.setToken(data.value(QStringLiteral("token")).toString());
+        AdminSession::instance().setAuthenticated(apiClient_.token(), user);
         stack_->setCurrentWidget(tabs_);
         statusBar()->showMessage(QStringLiteral("管理员 %1 已登录").arg(user.value(QStringLiteral("displayName")).toString()), 5000);
         refreshAll();
     } else if (action == QStringLiteral("auth.logout")) {
         apiClient_.clearToken();
+        AdminSession::instance().clear();
         stack_->setCurrentWidget(loginPage_);
         statusBar()->showMessage(QStringLiteral("已退出登录"), 5000);
     } else if (action == QStringLiteral("admin.dashboard")) populateDashboard(data);
     else if (action == QStringLiteral("admin.station.list")) populateStations(data);
+    else if (action == QStringLiteral("map.geocode")) {
+        if (pendingLongitude_ && pendingLatitude_) {
+            pendingLongitude_->setValue(data.value(QStringLiteral("longitude")).toDouble());
+            pendingLatitude_->setValue(data.value(QStringLiteral("latitude")).toDouble());
+            statusBar()->showMessage(QStringLiteral("地址解析成功：%1")
+                .arg(data.value(QStringLiteral("title")).toString()), 5000);
+        }
+    }
     else if (action == QStringLiteral("admin.charger.list")) populateChargers(data);
     else if (action == QStringLiteral("admin.user.list")) populateUsers(data);
     else if (action == QStringLiteral("admin.order.list")) populateOrders(data);
@@ -152,18 +166,31 @@ void MainWindow::populateDashboard(const QJsonObject &data)
 {
     dashboardData_ = data;
     userCountLabel_->setText(QString::number(jsonInteger(data.value(QStringLiteral("userCount")))));
-    stationCountLabel_->setText(QString::number(jsonInteger(data.value(QStringLiteral("stationCount")))));
-    chargerCountLabel_->setText(QString::number(jsonInteger(data.value(QStringLiteral("chargerCount")))));
-    chargerStateLabel_->setText(QStringLiteral("空闲 %1 / 充电 %2 / 故障 %3")
+    stationCountLabel_->setText(QStringLiteral("%1 kWh").arg(
+        jsonInteger(data.value(QStringLiteral("totalEnergyWh"))) / 1000.0, 0, 'f', 3));
+    chargerCountLabel_->setText(QString::number(jsonInteger(data.value(QStringLiteral("totalOrderCount")))));
+    chargerStateLabel_->setText(QStringLiteral("空闲 %1 / 预约 %2 / 充电 %3 / 故障 %4")
         .arg(jsonInteger(data.value(QStringLiteral("idleChargerCount"))))
+        .arg(jsonInteger(data.value(QStringLiteral("reservedChargerCount"))))
         .arg(jsonInteger(data.value(QStringLiteral("chargingChargerCount"))))
         .arg(jsonInteger(data.value(QStringLiteral("faultChargerCount")))));
     todayLabel_->setText(QStringLiteral("%1 单 / ¥%2")
         .arg(jsonInteger(data.value(QStringLiteral("todayOrderCount"))))
         .arg(money(jsonInteger(data.value(QStringLiteral("todayRevenueCents"))))));
-    revenueLabel_->setText(QStringLiteral("本月 ¥%1 / 累计 ¥%2")
-        .arg(money(jsonInteger(data.value(QStringLiteral("monthRevenueCents")))))
+    revenueLabel_->setText(QStringLiteral("¥%1")
         .arg(money(jsonInteger(data.value(QStringLiteral("totalRevenueCents"))))));
+    auto *pie = new QPieSeries;
+    pie->append(QStringLiteral("空闲"), jsonInteger(data.value(QStringLiteral("idleChargerCount"))));
+    pie->append(QStringLiteral("已预约"), jsonInteger(data.value(QStringLiteral("reservedChargerCount"))));
+    pie->append(QStringLiteral("充电中"), jsonInteger(data.value(QStringLiteral("chargingChargerCount"))));
+    pie->append(QStringLiteral("故障"), jsonInteger(data.value(QStringLiteral("faultChargerCount"))));
+    auto *statusChart = new QChart;
+    statusChart->setTitle(QStringLiteral("全量充电桩状态统计"));
+    statusChart->addSeries(pie);
+    statusChart->legend()->setVisible(true);
+    QChart *oldStatusChart = statusChart_->chart();
+    statusChart_->setChart(statusChart);
+    delete oldStatusChart;
     updateTrendDisplay();
 }
 
@@ -232,8 +259,26 @@ void MainWindow::updateTrendDisplay()
 void MainWindow::populateStations(const QJsonObject &data)
 {
     const QJsonArray items = data.value(QStringLiteral("stations")).toArray(); stationTable_->setRowCount(items.size());
+    const qint64 selectedChargerStation = chargerStationFilterCombo_
+        ? chargerStationFilterCombo_->currentData().toLongLong() : 0;
+    const qint64 selectedOrderStation = orderStationFilterCombo_
+        ? orderStationFilterCombo_->currentData().toLongLong() : 0;
+    const QSignalBlocker chargerBlocker(chargerStationFilterCombo_);
+    const QSignalBlocker orderBlocker(orderStationFilterCombo_);
+    if (chargerStationFilterCombo_) {
+        chargerStationFilterCombo_->clear();
+        chargerStationFilterCombo_->addItem(QStringLiteral("全部站点"), 0);
+    }
+    if (orderStationFilterCombo_) {
+        orderStationFilterCombo_->clear();
+        orderStationFilterCombo_->addItem(QStringLiteral("全部站点"), 0);
+    }
     for (int row = 0; row < items.size(); ++row) {
         const QJsonObject x = items.at(row).toObject();
+        const qint64 stationId = jsonInteger(x.value("id"));
+        const QString stationName = x.value("name").toString();
+        if (chargerStationFilterCombo_) chargerStationFilterCombo_->addItem(stationName, stationId);
+        if (orderStationFilterCombo_) orderStationFilterCombo_->addItem(stationName, stationId);
         const QStringList values{QString::number(jsonInteger(x.value("id"))), x.value("name").toString(), x.value("region").toString(),
             x.value("address").toString(), QString::number(x.value("longitude").toDouble(), 'f', 6), QString::number(x.value("latitude").toDouble(), 'f', 6),
             x.value("businessHours").toString(), statusText(x.value("status").toString()), QString::number(jsonInteger(x.value("chargerCount"))),
@@ -241,6 +286,14 @@ void MainWindow::populateStations(const QJsonObject &data)
             QStringLiteral("%1%").arg(x.value("onlineRate").toDouble() * 100.0, 0, 'f', 1),
             money(jsonInteger(x.value("minimumPriceCentsPerKwh")))};
         for (int column = 0; column < values.size(); ++column) setCell(stationTable_, row, column, values.at(column));
+    }
+    if (chargerStationFilterCombo_) {
+        const int index = chargerStationFilterCombo_->findData(selectedChargerStation);
+        chargerStationFilterCombo_->setCurrentIndex(index < 0 ? 0 : index);
+    }
+    if (orderStationFilterCombo_) {
+        const int index = orderStationFilterCombo_->findData(selectedOrderStation);
+        orderStationFilterCombo_->setCurrentIndex(index < 0 ? 0 : index);
     }
     stationTable_->resizeColumnsToContents();
 }

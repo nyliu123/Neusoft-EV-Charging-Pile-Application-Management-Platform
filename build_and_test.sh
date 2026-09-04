@@ -30,8 +30,11 @@ mkdir -p "$artifact_dir"
 QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-offscreen}" \
   EVCS_TEST_ARTIFACT_DIR="$artifact_dir" "$build_dir/ui-test/ui_acceptance_test"
 PYTHONPYCACHEPREFIX="$build_dir/pycache" python3 -m py_compile \
-  "$project_dir/dashboard_bridge.py" "$project_dir/preprocess_analytics.py"
+  "$project_dir/dashboard_bridge.py" "$project_dir/preprocess_analytics.py" \
+  "$project_dir/data_pipeline.py" "$project_dir/data_pipeline_test.py"
 python3 "$project_dir/preprocessing_test.py" "$project_dir/preprocess_analytics.py"
+(cd "$project_dir" && PYTHONPYCACHEPREFIX="$build_dir/pycache" \
+  python3 -m unittest data_pipeline_test.py)
 python3 "$project_dir/structure_test.py"
 
 echo "构建与测试完成：$build_dir"

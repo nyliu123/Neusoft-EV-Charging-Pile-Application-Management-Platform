@@ -10,11 +10,12 @@ SOURCES += \
     socket_integration_test.cpp \
     apiclient.cpp \
     chargingserver.cpp \
+    mapapiadapter.cpp \
     businessservice.cpp \
     database.cpp \
     security.cpp \
     protocol.cpp \
     domain.cpp
-HEADERS += apiclient.h chargingserver.h businessservice.h database.h security.h protocol.h domain.h
+HEADERS += apiclient.h chargingserver.h mapapiadapter.h businessservice.h database.h security.h protocol.h domain.h
 OBJECTS_DIR = $$OUT_PWD/obj
 MOC_DIR = $$OUT_PWD/moc

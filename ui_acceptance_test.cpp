@@ -5,6 +5,7 @@
 #include <QDir>
 #include <QHostAddress>
 #include <QLabel>
+#include <QLineEdit>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QStackedWidget>
@@ -68,10 +69,12 @@ void UiAcceptanceTest::clientsLoginLoadDataAndRender()
         auto *port = window.findChild<QSpinBox *>(QStringLiteral("serverPort"));
         auto *connectButton = window.findChild<QPushButton *>(QStringLiteral("connectButton"));
         auto *loginButton = window.findChild<QPushButton *>(QStringLiteral("loginButton"));
+        auto *password = window.findChild<QLineEdit *>(QStringLiteral("adminPassword"));
         auto *stack = window.findChild<QStackedWidget *>(QStringLiteral("adminStack"));
         auto *userCount = window.findChild<QLabel *>(QStringLiteral("dashboardUserCount"));
-        QVERIFY(port && connectButton && loginButton && stack && userCount);
+        QVERIFY(port && connectButton && loginButton && password && stack && userCount);
         port->setValue(server.serverPort());
+        password->setText(QStringLiteral("123456"));
         QTest::mouseClick(connectButton, Qt::LeftButton);
         QTRY_VERIFY_WITH_TIMEOUT(loginButton->isEnabled(), 3000);
         QTest::mouseClick(loginButton, Qt::LeftButton);

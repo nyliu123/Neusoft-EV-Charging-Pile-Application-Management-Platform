@@ -34,12 +34,13 @@ void ProtocolTest::roundTripHandlesSplitFrame()
 
 void ProtocolTest::rejectsOversizedFrame()
 {
-    QByteArray frame(4, '\0');
+    QByteArray frame(8, '\0');
+    frame[3] = static_cast<char>(static_cast<quint32>(evcs::protocol::MessageType::Request));
     const quint32 length = evcs::protocol::MaximumPayloadBytes + 1;
-    frame[0] = static_cast<char>((length >> 24) & 0xff);
-    frame[1] = static_cast<char>((length >> 16) & 0xff);
-    frame[2] = static_cast<char>((length >> 8) & 0xff);
-    frame[3] = static_cast<char>(length & 0xff);
+    frame[4] = static_cast<char>((length >> 24) & 0xff);
+    frame[5] = static_cast<char>((length >> 16) & 0xff);
+    frame[6] = static_cast<char>((length >> 8) & 0xff);
+    frame[7] = static_cast<char>(length & 0xff);
 
     evcs::protocol::FrameDecoder decoder;
     QString error;

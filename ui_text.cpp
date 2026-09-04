@@ -17,8 +17,10 @@ QString statusText(const QString &value)
         {QStringLiteral("expired"), QStringLiteral("已过期")},
         {QStringLiteral("finished"), QStringLiteral("已完成")},
         {QStringLiteral("interrupted"), QStringLiteral("已中断")},
-        {QStringLiteral("paid"), QStringLiteral("已支付")},
-        {QStringLiteral("pending"), QStringLiteral("待支付")},
+        {QStringLiteral("paid"), QStringLiteral("已结算")},
+        {QStringLiteral("pending"), QStringLiteral("待结算")},
+        {QStringLiteral("settled"), QStringLiteral("已结算")},
+        {QStringLiteral("pending_settlement"), QStringLiteral("待结算")},
         {QStringLiteral("open"), QStringLiteral("待处理")},
         {QStringLiteral("processing"), QStringLiteral("处理中")},
         {QStringLiteral("resolved"), QStringLiteral("已解决")}

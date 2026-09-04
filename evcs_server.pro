@@ -10,6 +10,7 @@ SOURCES += \
     server_main.cpp \
     server_settings.cpp \
     chargingserver.cpp \
+    mapapiadapter.cpp \
     businessservice.cpp \
     database.cpp \
     security.cpp \
@@ -20,6 +21,7 @@ SOURCES += \
 HEADERS += \
     server_settings.h \
     chargingserver.h \
+    mapapiadapter.h \
     businessservice.h \
     database.h \
     security.h \

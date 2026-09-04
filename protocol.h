@@ -9,6 +9,12 @@ namespace evcs::protocol {
 
 inline constexpr quint32 MaximumPayloadBytes = 1024U * 1024U;
 
+enum class MessageType : quint32 {
+    Request = 1,
+    Response = 2,
+    Event = 3
+};
+
 QByteArray encodeFrame(const QJsonObject &message);
 
 QJsonObject makeRequest(const QString &action,

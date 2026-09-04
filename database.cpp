@@ -164,13 +164,95 @@ bool Database::migrateSchema(QString *errorMessage)
     if (!ensureColumn(QStringLiteral("users"), QStringLiteral("avatar_mime"),
                       QStringLiteral("TEXT NOT NULL DEFAULT ''"))
         || !ensureColumn(QStringLiteral("users"), QStringLiteral("avatar_data"),
-                         QStringLiteral("BLOB"))) {
+                         QStringLiteral("BLOB"))
+        || !ensureColumn(QStringLiteral("users"), QStringLiteral("avatar_path"),
+                         QStringLiteral("TEXT NOT NULL DEFAULT ''"))
+        || !ensureColumn(QStringLiteral("chargers"), QStringLiteral("total_charge_count"),
+                         QStringLiteral("INTEGER NOT NULL DEFAULT 0"))
+        || !ensureColumn(QStringLiteral("chargers"), QStringLiteral("total_duration_seconds"),
+                         QStringLiteral("INTEGER NOT NULL DEFAULT 0"))) {
+        return false;
+    }
+
+    bool hasLifecycleOrders = false;
+    QSqlQuery orderColumns(database_);
+    if (!orderColumns.exec(QStringLiteral("PRAGMA table_info(orders)"))) {
+        if (errorMessage) *errorMessage = orderColumns.lastError().text();
+        return false;
+    }
+    while (orderColumns.next()) {
+        if (orderColumns.value(1).toString() == QStringLiteral("price_cents_per_kwh")) {
+            hasLifecycleOrders = true;
+            break;
+        }
+    }
+    if (!hasLifecycleOrders) {
+        QSqlQuery migrate(database_);
+        const QStringList statements{
+            QStringLiteral("ALTER TABLE orders RENAME TO orders_legacy_v2"),
+            QStringLiteral(
+                "CREATE TABLE orders ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, order_no TEXT NOT NULL UNIQUE, "
+                "charging_session_id INTEGER UNIQUE REFERENCES charging_sessions(id), "
+                "reservation_id INTEGER UNIQUE REFERENCES reservations(id), "
+                "user_id INTEGER NOT NULL REFERENCES users(id), station_id INTEGER NOT NULL REFERENCES stations(id), "
+                "charger_id INTEGER NOT NULL REFERENCES chargers(id), energy_wh INTEGER NOT NULL DEFAULT 0 CHECK(energy_wh >= 0), "
+                "price_cents_per_kwh INTEGER NOT NULL CHECK(price_cents_per_kwh >= 0), "
+                "amount_cents INTEGER NOT NULL DEFAULT 0 CHECK(amount_cents >= 0), "
+                "status TEXT NOT NULL DEFAULT 'reserved' CHECK(status IN "
+                "('reserved','charging','pending_settlement','settled','cancelled')), "
+                "reserved_at TEXT NOT NULL, started_at TEXT, ended_at TEXT, settled_at TEXT, "
+                "created_at TEXT NOT NULL, updated_at TEXT NOT NULL)"),
+            QStringLiteral(
+                "INSERT INTO orders(id, order_no, charging_session_id, user_id, station_id, charger_id, "
+                "energy_wh, price_cents_per_kwh, amount_cents, status, reserved_at, started_at, ended_at, "
+                "settled_at, created_at, updated_at) "
+                "SELECT o.id, o.order_no, o.charging_session_id, o.user_id, o.station_id, o.charger_id, "
+                "o.energy_wh, cs.price_cents_per_kwh, o.amount_cents, "
+                "CASE o.status WHEN 'paid' THEN 'settled' WHEN 'pending' THEN 'pending_settlement' ELSE 'cancelled' END, "
+                "o.created_at, cs.started_at, cs.ended_at, o.paid_at, o.created_at, o.created_at "
+                "FROM orders_legacy_v2 o JOIN charging_sessions cs ON cs.id = o.charging_session_id"),
+            QStringLiteral("DROP TABLE orders_legacy_v2"),
+            QStringLiteral("CREATE INDEX IF NOT EXISTS idx_orders_user_created ON orders(user_id, created_at DESC)"),
+            QStringLiteral("CREATE INDEX IF NOT EXISTS idx_orders_user_status ON orders(user_id, status)")
+        };
+        for (const QString &statement : statements) {
+            if (!migrate.exec(statement)) {
+                if (errorMessage) *errorMessage = migrate.lastError().text() + QStringLiteral(" | SQL: ") + statement;
+                return false;
+            }
+        }
+    }
+
+    QSqlQuery rebuildCounters(database_);
+    if (!rebuildCounters.exec(QStringLiteral(
+            "UPDATE chargers SET "
+            "total_charge_count = (SELECT COUNT(*) FROM charging_sessions cs "
+            "WHERE cs.charger_id = chargers.id AND cs.status = 'finished'), "
+            "total_duration_seconds = COALESCE((SELECT SUM(MAX(0, CAST((julianday(cs.ended_at) - "
+            "julianday(cs.started_at)) * 86400 AS INTEGER))) FROM charging_sessions cs "
+            "WHERE cs.charger_id = chargers.id AND cs.status = 'finished'), 0)"))) {
+        if (errorMessage) *errorMessage = rebuildCounters.lastError().text();
         return false;
     }
 
     QSqlQuery versionQuery(database_);
     versionQuery.prepare(QStringLiteral(
         "INSERT OR IGNORE INTO schema_version(version, applied_at) VALUES(2, ?)"));
+    versionQuery.addBindValue(utcNow());
+    if (!versionQuery.exec()) {
+        if (errorMessage) *errorMessage = versionQuery.lastError().text();
+        return false;
+    }
+    versionQuery.prepare(QStringLiteral(
+        "INSERT OR IGNORE INTO schema_version(version, applied_at) VALUES(3, ?)"));
+    versionQuery.addBindValue(utcNow());
+    if (!versionQuery.exec()) {
+        if (errorMessage) *errorMessage = versionQuery.lastError().text();
+        return false;
+    }
+    versionQuery.prepare(QStringLiteral(
+        "INSERT OR IGNORE INTO schema_version(version, applied_at) VALUES(4, ?)"));
     versionQuery.addBindValue(utcNow());
     if (!versionQuery.exec()) {
         if (errorMessage) *errorMessage = versionQuery.lastError().text();
@@ -280,17 +362,33 @@ bool Database::seedDefaults(QString *errorMessage)
         }
     }
 
-    if (!seedUser(QStringLiteral("admin"), QStringLiteral("Admin123!"),
+    if (!seedUser(QStringLiteral("admin"), QStringLiteral("123456"),
                   QStringLiteral("admin"), QStringLiteral("运营管理员"), 0,
                   errorMessage)) {
         database_.rollback();
         return false;
+    }
+    query.prepare(QStringLiteral(
+        "INSERT OR IGNORE INTO admins(user_id, username, password_hash, password_salt, display_name, "
+        "status, created_at, updated_at) "
+        "SELECT id, username, password_hash, password_salt, display_name, status, created_at, updated_at "
+        "FROM users WHERE username = 'admin' AND role = 'admin'"));
+    if (!query.exec()) {
+        return rollbackWithError(query.lastError().text());
     }
     if (!seedUser(QStringLiteral("demo"), QStringLiteral("Demo123!"),
                   QStringLiteral("user"), QStringLiteral("演示用户"), 20000,
                   errorMessage)) {
         database_.rollback();
         return false;
+    }
+    query.prepare(QStringLiteral(
+        "UPDATE users SET phone = '13800138000', updated_at = ? "
+        "WHERE username = 'demo' AND phone = '' "
+        "AND NOT EXISTS (SELECT 1 FROM users u2 WHERE u2.phone = '13800138000')"));
+    query.addBindValue(now);
+    if (!query.exec()) {
+        return rollbackWithError(query.lastError().text());
     }
 
     if (!database_.commit()) {

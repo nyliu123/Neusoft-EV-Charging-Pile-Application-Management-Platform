@@ -31,6 +31,7 @@
 
 #include <QtCharts/QChart>
 #include <QtCharts/QChartView>
+#include <QtCharts/QPieSeries>
 #include <QtCharts/QDateTimeAxis>
 #include <QtCharts/QLineSeries>
 #include <QtCharts/QValueAxis>
@@ -76,7 +77,7 @@ QWidget *MainWindow::createLoginPage()
     portSpin_ = new QSpinBox;
     portSpin_->setObjectName(QStringLiteral("serverPort"));
     portSpin_->setRange(1, 65535);
-    portSpin_->setValue(45454);
+    portSpin_->setValue(8888);
     connectButton_ = new QPushButton(QStringLiteral("连接服务端"));
     connectButton_->setObjectName(QStringLiteral("connectButton"));
     auto *endpoint = new QWidget;
@@ -85,8 +86,10 @@ QWidget *MainWindow::createLoginPage()
     endpointLayout->addWidget(portSpin_, 1);
     endpointLayout->addWidget(connectButton_);
     usernameEdit_ = new QLineEdit(QStringLiteral("admin"));
-    passwordEdit_ = new QLineEdit(QStringLiteral("Admin123!"));
+    passwordEdit_ = new QLineEdit;
+    passwordEdit_->setObjectName(QStringLiteral("adminPassword"));
     passwordEdit_->setEchoMode(QLineEdit::Password);
+    passwordEdit_->setPlaceholderText(QStringLiteral("请输入管理员密码"));
     loginButton_ = new QPushButton(QStringLiteral("登录管理平台"));
     loginButton_->setObjectName(QStringLiteral("loginButton"));
     loginButton_->setDefault(true);
@@ -126,12 +129,12 @@ QWidget *MainWindow::createDashboardPage()
     todayLabel_ = new QLabel;
     revenueLabel_ = new QLabel;
     const QList<QPair<QString, QLabel *>> entries{
-        {QStringLiteral("用户数"), userCountLabel_},
-        {QStringLiteral("运营站点"), stationCountLabel_},
-        {QStringLiteral("充电桩总数"), chargerCountLabel_},
+        {QStringLiteral("注册用户数"), userCountLabel_},
+        {QStringLiteral("累计充电量"), stationCountLabel_},
+        {QStringLiteral("累计充电次数"), chargerCountLabel_},
         {QStringLiteral("设备状态"), chargerStateLabel_},
         {QStringLiteral("今日经营"), todayLabel_},
-        {QStringLiteral("营收汇总"), revenueLabel_}
+        {QStringLiteral("累计营收"), revenueLabel_}
     };
     for (int i = 0; i < entries.size(); ++i) {
         auto *box = new QGroupBox(entries.at(i).first);
@@ -148,6 +151,11 @@ QWidget *MainWindow::createDashboardPage()
     trendChart_->setMinimumHeight(250);
     trendChart_->setRenderHint(QPainter::Antialiasing);
     layout->addWidget(trendChart_);
+    layout->addWidget(new QLabel(QStringLiteral("充电桩状态分布（Qt Charts）")));
+    statusChart_ = new QChartView;
+    statusChart_->setMinimumHeight(220);
+    statusChart_->setRenderHint(QPainter::Antialiasing);
+    layout->addWidget(statusChart_);
     trendTable_ = makeTable({QStringLiteral("日期"), QStringLiteral("订单数"), QStringLiteral("营收/元")});
     trendTable_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     trendTable_->setMaximumHeight(190);
@@ -198,7 +206,17 @@ QWidget *MainWindow::createChargerPage()
     auto *restart = new QPushButton(QStringLiteral("远程重启"));
     auto *operations = new QPushButton(QStringLiteral("操作日志"));
     auto *showAll = new QPushButton(QStringLiteral("显示全部"));
+    chargerStationFilterCombo_ = new QComboBox;
+    chargerStationFilterCombo_->addItem(QStringLiteral("全部站点"), 0);
+    chargerStatusFilterCombo_ = new QComboBox;
+    chargerStatusFilterCombo_->addItem(QStringLiteral("全部状态"), QString{});
+    chargerStatusFilterCombo_->addItem(QStringLiteral("空闲"), QStringLiteral("idle"));
+    chargerStatusFilterCombo_->addItem(QStringLiteral("已预约"), QStringLiteral("reserved"));
+    chargerStatusFilterCombo_->addItem(QStringLiteral("充电中"), QStringLiteral("charging"));
+    chargerStatusFilterCombo_->addItem(QStringLiteral("故障"), QStringLiteral("fault"));
     for (auto *button : {refresh, add, edit, status, restart, operations, showAll}) bar->addWidget(button);
+    bar->addWidget(chargerStationFilterCombo_);
+    bar->addWidget(chargerStatusFilterCombo_);
     bar->addStretch();
     connect(refresh, &QPushButton::clicked, this, &MainWindow::refreshChargers);
     connect(add, &QPushButton::clicked, this, [this] { editCharger(true); });
@@ -207,6 +225,8 @@ QWidget *MainWindow::createChargerPage()
     connect(restart, &QPushButton::clicked, this, &MainWindow::restartCharger);
     connect(operations, &QPushButton::clicked, this, &MainWindow::showChargerOperations);
     connect(showAll, &QPushButton::clicked, this, &MainWindow::showAllChargers);
+    connect(chargerStationFilterCombo_, &QComboBox::currentIndexChanged, this, &MainWindow::refreshChargers);
+    connect(chargerStatusFilterCombo_, &QComboBox::currentIndexChanged, this, &MainWindow::refreshChargers);
     chargerFilterLabel_ = new QLabel(QStringLiteral("当前：全部站点"));
     bar->addWidget(chargerFilterLabel_);
     layout->addLayout(bar);
@@ -236,6 +256,11 @@ QWidget *MainWindow::createUserPage()
     connect(refresh, &QPushButton::clicked, this, &MainWindow::refreshUsers);
     connect(toggle, &QPushButton::clicked, this, &MainWindow::setUserStatus);
     connect(userPhoneFilterEdit_, &QLineEdit::returnPressed, this, &MainWindow::refreshUsers);
+    userSearchDebounce_.setSingleShot(true);
+    userSearchDebounce_.setInterval(300);
+    connect(userPhoneFilterEdit_, &QLineEdit::textChanged, &userSearchDebounce_,
+            qOverload<>(&QTimer::start));
+    connect(&userSearchDebounce_, &QTimer::timeout, this, &MainWindow::refreshUsers);
     layout->addLayout(bar);
     userTable_ = makeTable({QStringLiteral("ID"), QStringLiteral("用户名"), QStringLiteral("角色"),
                             QStringLiteral("姓名"), QStringLiteral("手机号"), QStringLiteral("余额/元"),
@@ -253,21 +278,32 @@ QWidget *MainWindow::createOrderPage()
     orderNoFilterEdit_ = new QLineEdit; orderNoFilterEdit_->setPlaceholderText(QStringLiteral("订单号"));
     orderPhoneFilterEdit_ = new QLineEdit; orderPhoneFilterEdit_->setPlaceholderText(QStringLiteral("手机号"));
     orderStationFilterEdit_ = new QLineEdit; orderStationFilterEdit_->setPlaceholderText(QStringLiteral("站点名称"));
+    orderStationFilterCombo_ = new QComboBox;
+    orderStationFilterCombo_->addItem(QStringLiteral("全部站点"), 0);
     orderChargerFilterEdit_ = new QLineEdit; orderChargerFilterEdit_->setPlaceholderText(QStringLiteral("充电桩编号"));
     orderStatusFilterCombo_ = new QComboBox;
     orderStatusFilterCombo_->addItem(QStringLiteral("全部状态"), QString{});
-    orderStatusFilterCombo_->addItem(QStringLiteral("已支付"), QStringLiteral("paid"));
-    orderStatusFilterCombo_->addItem(QStringLiteral("待支付"), QStringLiteral("pending"));
+    orderStatusFilterCombo_->addItem(QStringLiteral("预约中"), QStringLiteral("reserved"));
+    orderStatusFilterCombo_->addItem(QStringLiteral("充电中"), QStringLiteral("charging"));
+    orderStatusFilterCombo_->addItem(QStringLiteral("待结算"), QStringLiteral("pending_settlement"));
+    orderStatusFilterCombo_->addItem(QStringLiteral("已结算"), QStringLiteral("settled"));
     orderStatusFilterCombo_->addItem(QStringLiteral("已取消"), QStringLiteral("cancelled"));
     orderDateFilterCheck_ = new QCheckBox(QStringLiteral("按日期"));
+    orderTimeRangeCombo_ = new QComboBox;
+    orderTimeRangeCombo_->addItem(QStringLiteral("全部时间"), QStringLiteral("all"));
+    orderTimeRangeCombo_->addItem(QStringLiteral("今日"), QStringLiteral("today"));
+    orderTimeRangeCombo_->addItem(QStringLiteral("近 7 日"), QStringLiteral("7"));
+    orderTimeRangeCombo_->addItem(QStringLiteral("近 30 日"), QStringLiteral("30"));
+    orderTimeRangeCombo_->addItem(QStringLiteral("自定义"), QStringLiteral("custom"));
     orderStartDateEdit_ = new QDateEdit(QDate::currentDate().addDays(-30));
     orderEndDateEdit_ = new QDateEdit(QDate::currentDate());
     orderStartDateEdit_->setCalendarPopup(true); orderEndDateEdit_->setCalendarPopup(true);
     auto *refresh = new QPushButton(QStringLiteral("刷新订单"));
     connect(refresh, &QPushButton::clicked, this, &MainWindow::refreshOrders);
+    orderDateFilterCheck_->setVisible(false);
     filters->addWidget(orderNoFilterEdit_, 0, 0); filters->addWidget(orderPhoneFilterEdit_, 0, 1);
-    filters->addWidget(orderStationFilterEdit_, 0, 2); filters->addWidget(orderChargerFilterEdit_, 0, 3);
-    filters->addWidget(orderStatusFilterCombo_, 1, 0); filters->addWidget(orderDateFilterCheck_, 1, 1);
+    filters->addWidget(orderStationFilterCombo_, 0, 2); filters->addWidget(orderChargerFilterEdit_, 0, 3);
+    filters->addWidget(orderStatusFilterCombo_, 1, 0); filters->addWidget(orderTimeRangeCombo_, 1, 1);
     filters->addWidget(orderStartDateEdit_, 1, 2); filters->addWidget(orderEndDateEdit_, 1, 3);
     filters->addWidget(refresh, 1, 4);
     layout->addLayout(filters);

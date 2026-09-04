@@ -14,6 +14,7 @@ from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 
 MAX_FRAME_SIZE = 1024 * 1024
@@ -60,8 +61,10 @@ class EvcsClient:
         encoded = json.dumps(request, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         if len(encoded) > MAX_FRAME_SIZE:
             raise EvcsApiError("请求超过协议大小限制")
-        self.connection.sendall(struct.pack(">I", len(encoded)) + encoded)
-        response_size = struct.unpack(">I", receive_exact(self.connection, 4))[0]
+        self.connection.sendall(struct.pack(">II", 1, len(encoded)) + encoded)
+        message_type, response_size = struct.unpack(">II", receive_exact(self.connection, 8))
+        if message_type != 2:
+            raise EvcsApiError(f"服务端返回了非响应消息类型：{message_type}")
         if response_size > MAX_FRAME_SIZE:
             raise EvcsApiError("服务端响应超过协议大小限制")
         response = json.loads(receive_exact(self.connection, response_size))
@@ -109,17 +112,48 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         self.wfile.write(encoded)
 
     def do_GET(self) -> None:  # noqa: N802 - inherited API
+        parsed = urlparse(self.path)
+        path = parsed.path
         # 根地址直接展示大屏，避免平铺工程暴露文件列表。
-        if self.path == "/":
+        if path == "/":
             self.path = "/dashboard.html"
-        if self.path == "/api/dashboard":
+        if path == "/api/dashboard":
             try:
                 self.send_json(HTTPStatus.OK, {"ok": True, "data": self.state.call("admin.analytics")})
             except (OSError, ValueError, EvcsApiError) as error:
                 self.send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "message": str(error)})
             return
-        if self.path == "/api/health":
+        if path == "/api/health":
             self.send_json(HTTPStatus.OK, {"ok": True, "service": "evcs-dashboard"})
+            return
+        if path == "/api/bigscreen/config":
+            self.send_json(HTTPStatus.OK, {"ok": True, "data": {"refreshIntervalSeconds": 30}})
+            return
+        if path.startswith("/api/bigscreen/"):
+            resource = path.removeprefix("/api/bigscreen/")
+            try:
+                if resource == "overview":
+                    data = self.state.call("admin.dashboard")
+                elif resource in {"revenue-trend", "pile-status", "station-ranking"}:
+                    analytics = self.state.call("admin.analytics")
+                    key = {"revenue-trend": "dailyTrend", "pile-status": "chargerStatuses",
+                           "station-ranking": "stationRanking"}[resource]
+                    data = {key: analytics.get(key, []), "generatedAt": analytics.get("generatedAt")}
+                    if resource == "revenue-trend":
+                        days = max(1, min(30, int(parse_qs(parsed.query).get("days", ["7"])[0])))
+                        data[key] = data[key][-days:]
+                elif resource in {"forecast", "recommendations", "alerts"}:
+                    self.send_json(HTTPStatus.SERVICE_UNAVAILABLE, {
+                        "ok": False, "code": "FEATURE_NOT_READY",
+                        "message": "机器学习功能因缺少经验证的真实数据暂未启用"
+                    })
+                    return
+                else:
+                    self.send_json(HTTPStatus.NOT_FOUND, {"ok": False, "message": "接口不存在"})
+                    return
+                self.send_json(HTTPStatus.OK, {"ok": True, "data": data})
+            except (OSError, ValueError, EvcsApiError) as error:
+                self.send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "message": str(error)})
             return
         super().do_GET()
 
@@ -141,11 +175,11 @@ def parse_args() -> argparse.Namespace:
     project_root = Path(__file__).resolve().parent
     parser = argparse.ArgumentParser(description="充电桩 ECharts 运营大屏本地桥接服务")
     parser.add_argument("--server-host", default="127.0.0.1")
-    parser.add_argument("--server-port", type=int, default=45454)
+    parser.add_argument("--server-port", type=int, default=8888)
     parser.add_argument("--http-host", default="127.0.0.1")
     parser.add_argument("--http-port", type=int, default=8080)
     parser.add_argument("--username", default=os.environ.get("EVCS_ADMIN_USERNAME", "admin"))
-    parser.add_argument("--password", default=os.environ.get("EVCS_ADMIN_PASSWORD", "Admin123!"))
+    parser.add_argument("--password", default=os.environ.get("EVCS_ADMIN_PASSWORD", "123456"))
     parser.add_argument("--dashboard-dir", type=Path, default=project_root)
     return parser.parse_args()
 

@@ -11,6 +11,8 @@ SOURCES += \
     user_pages.cpp \
     user_actions.cpp \
     user_responses.cpp \
+    user_session.cpp \
+    station_card.cpp \
     user_style.cpp \
     style_loader.cpp \
     ui_text.cpp \
@@ -20,6 +22,8 @@ SOURCES += \
 
 HEADERS += \
     user_mainwindow.h \
+    user_session.h \
+    station_card.h \
     user_style.h \
     style_loader.h \
     ui_text.h \

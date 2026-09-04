@@ -161,6 +161,12 @@
       });
     }
 
+    let consecutiveFailures = 0;
+    let refreshTimer = null;
+    function scheduleRefresh() {
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(refresh, consecutiveFailures >= 3 ? 60000 : 30000);
+    }
     async function refresh() {
       const button = document.getElementById('refresh');
       button.disabled = true; showError();
@@ -169,8 +175,11 @@
         const body = await response.json();
         if (!response.ok || !body.ok) throw new Error(body.message || `HTTP ${response.status}`);
         render(body.data);
-      } catch (error) { showError(`无法读取运营数据：${error.message}`); }
-      finally { button.disabled = false; }
+        consecutiveFailures = 0;
+      } catch (error) {
+        consecutiveFailures += 1;
+        showError(`${consecutiveFailures >= 3 ? '数据服务异常；60 秒后重试' : '无法读取运营数据'}：${error.message}`);
+      } finally { button.disabled = false; scheduleRefresh(); }
     }
 
     document.getElementById('refresh').addEventListener('click', refresh);
@@ -190,7 +199,6 @@
     function updateClock() { document.getElementById('clock').textContent = new Date().toLocaleString('zh-CN', { hour12: false }); }
     updateClock();
     setInterval(updateClock, 1000);
-    setInterval(refresh, 30000);
     refresh();
   </script>
 </body>

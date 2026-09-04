@@ -11,6 +11,7 @@ SOURCES += \
     admin_pages.cpp \
     admin_actions.cpp \
     admin_responses.cpp \
+    admin_session.cpp \
     admin_style.cpp \
     style_loader.cpp \
     ui_text.cpp \
@@ -20,6 +21,7 @@ SOURCES += \
 
 HEADERS += \
     admin_mainwindow.h \
+    admin_session.h \
     admin_style.h \
     style_loader.h \
     ui_text.h \

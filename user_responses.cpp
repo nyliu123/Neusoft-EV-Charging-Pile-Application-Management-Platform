@@ -1,4 +1,6 @@
 #include "user_mainwindow.h"
+#include "station_card.h"
+#include "user_session.h"
 #include "ui_text.h"
 
 #include <QBuffer>
@@ -18,6 +20,7 @@
 #include <QJsonDocument>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QMessageBox>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
@@ -68,6 +71,14 @@ void MainWindow::handleResponse(const QString &action,
                                 const QString &errorMessage)
 {
     if (!ok) {
+        if (action == QStringLiteral("auth.phoneLogin")
+            && errorCode == QStringLiteral("USER_NOT_FOUND")) {
+            apiClient_.sendRequest(QStringLiteral("auth.phoneRegister"), {
+                {QStringLiteral("phone"), usernameEdit_->text().trimmed()},
+                {QStringLiteral("isAutoRegister"), true}
+            });
+            return;
+        }
         if (action == QStringLiteral("charging.status") && errorCode == QStringLiteral("NOT_FOUND")) {
             chargingTimer_.stop();
             return;
@@ -77,7 +88,8 @@ void MainWindow::handleResponse(const QString &action,
     }
 
     if (action == QStringLiteral("auth.login")
-        || action == QStringLiteral("auth.phoneLogin")) {
+        || action == QStringLiteral("auth.phoneLogin")
+        || action == QStringLiteral("auth.phoneRegister")) {
         apiClient_.setToken(data.value(QStringLiteral("token")).toString());
         const QJsonObject user = data.value(QStringLiteral("user")).toObject();
         if (user.value(QStringLiteral("role")).toString() != QStringLiteral("user")) {
@@ -86,6 +98,7 @@ void MainWindow::handleResponse(const QString &action,
                                  QStringLiteral("请使用普通用户账号登录用户端"));
             return;
         }
+        UserSession::instance().setAuthenticated(apiClient_.token(), user);
         statusBar()->showMessage(QStringLiteral("当前用户：%1，余额 %2")
             .arg(user.value(QStringLiteral("displayName")).toString(),
                  moneyText(static_cast<qint64>(user.value(QStringLiteral("balanceCents")).toDouble()))));
@@ -93,6 +106,7 @@ void MainWindow::handleResponse(const QString &action,
         refreshStations();
         refreshReservations();
         refreshOrders();
+        populateProfile({{QStringLiteral("user"), UserSession::instance().user()}});
         refreshProfile();
         refreshChargingStatus();
         if (data.value(QStringLiteral("autoRegistered")).toBool(false)) {
@@ -104,6 +118,13 @@ void MainWindow::handleResponse(const QString &action,
                                  QStringLiteral("用户已创建，可以登录"));
     } else if (action == QStringLiteral("station.list")) {
         populateStations(data);
+    } else if (action == QStringLiteral("map.geocode")) {
+        mapKey_ = data.value(QStringLiteral("mapKey")).toString();
+        mapReferer_ = data.value(QStringLiteral("mapReferer")).toString(QStringLiteral("EVCS-DEMO"));
+        setCurrentLocation(data.value(QStringLiteral("latitude")).toDouble(),
+                           data.value(QStringLiteral("longitude")).toDouble(),
+                           data.value(QStringLiteral("title")).toString(),
+                           data.value(QStringLiteral("source")).toString());
     } else if (action == QStringLiteral("station.get")) {
         populateChargers(data);
     } else if (action == QStringLiteral("reservation.create")) {
@@ -126,21 +147,42 @@ void MainWindow::handleResponse(const QString &action,
     } else if (action == QStringLiteral("charging.status")) {
         populateCharging(data);
     } else if (action == QStringLiteral("charging.stop")) {
-        chargingTimer_.stop();
-        activeSessionId_ = 0;
-        stopChargingButton_->setEnabled(false);
         const QJsonObject order = data.value(QStringLiteral("order")).toObject();
-        QMessageBox::information(this, QStringLiteral("结算完成"),
+        const bool pendingSettlement = order.value(QStringLiteral("status")).toString()
+            == QStringLiteral("pending_settlement");
+        chargingTimer_.stop();
+        if (!pendingSettlement) activeSessionId_ = 0;
+        stopChargingButton_->setEnabled(pendingSettlement);
+        stopChargingButton_->setText(pendingSettlement
+            ? QStringLiteral("充值后重试结算") : QStringLiteral("结束充电并结算"));
+        QMessageBox::information(this,
+            pendingSettlement ? QStringLiteral("余额不足") : QStringLiteral("结算完成"),
             QStringLiteral("订单 %1\n电量 %2 kWh\n金额 %3\n状态 %4")
                 .arg(order.value(QStringLiteral("orderNo")).toString())
                 .arg(order.value(QStringLiteral("energyWh")).toDouble() / 1000.0, 0, 'f', 3)
                 .arg(moneyText(static_cast<qint64>(order.value(QStringLiteral("amountCents")).toDouble())))
                 .arg(statusText(order.value(QStringLiteral("status")).toString())));
-        tabs_->setCurrentIndex(3);
+        tabs_->setCurrentIndex(pendingSettlement ? 2 : 3);
         refreshOrders();
         refreshStations();
     } else if (action == QStringLiteral("order.list")) {
         populateOrders(data);
+    } else if (action == QStringLiteral("order.pending")) {
+        if (!data.value(QStringLiteral("hasPending")).toBool(false)) return;
+        const QJsonObject order = data.value(QStringLiteral("order")).toObject();
+        const QString status = order.value(QStringLiteral("status")).toString();
+        activeSessionId_ = static_cast<qint64>(order.value(QStringLiteral("sessionId")).toDouble());
+        if (status == QStringLiteral("reserved")) {
+            QMessageBox::information(this, QStringLiteral("存在未完成订单"),
+                                     QStringLiteral("您有预约中的订单，请先在“我的预约”中开始或取消。"));
+            tabs_->setCurrentIndex(1);
+        } else {
+            if (status == QStringLiteral("pending_settlement")) {
+                QMessageBox::information(this, QStringLiteral("请先结算"),
+                                         QStringLiteral("您有待结算订单，请充值后完成结算。"));
+            }
+            refreshChargingStatus();
+        }
     } else if (action == QStringLiteral("order.get")) {
         const QJsonObject order = data.value(QStringLiteral("order")).toObject();
         QMessageBox::information(this, QStringLiteral("订单明细"),
@@ -157,6 +199,7 @@ void MainWindow::handleResponse(const QString &action,
                 .arg(moneyText(static_cast<qint64>(order.value(QStringLiteral("amountCents")).toDouble())))
                 .arg(statusText(order.value(QStringLiteral("status")).toString())));
     } else if (action == QStringLiteral("user.profile")) {
+        UserSession::instance().updateUser(data.value(QStringLiteral("user")).toObject());
         populateProfile(data);
     } else if (action == QStringLiteral("user.profile.update")) {
         QMessageBox::information(this, QStringLiteral("修改成功"),
@@ -171,9 +214,14 @@ void MainWindow::handleResponse(const QString &action,
             QStringLiteral("模拟充值完成，当前余额 %1")
                 .arg(moneyText(static_cast<qint64>(
                     data.value(QStringLiteral("balanceCents")).toDouble()))));
+        UserSession::instance().updateUser({
+            {QStringLiteral("balanceCents"), data.value(QStringLiteral("balanceCents"))}
+        });
+        populateProfile({{QStringLiteral("user"), UserSession::instance().user()}});
         refreshProfile();
     } else if (action == QStringLiteral("auth.logout")) {
         apiClient_.clearToken();
+        UserSession::instance().clear();
         activeSessionId_ = 0;
         stopChargingButton_->setEnabled(false);
         stack_->setCurrentWidget(loginPage_);
@@ -184,6 +232,7 @@ void MainWindow::handleResponse(const QString &action,
 void MainWindow::populateStations(const QJsonObject &data)
 {
     const QJsonArray stations = data.value(QStringLiteral("stations")).toArray();
+    stationCardList_->clear();
     stationTable_->setRowCount(stations.size());
     for (int row = 0; row < stations.size(); ++row) {
         const QJsonObject station = stations.at(row).toObject();
@@ -208,29 +257,63 @@ void MainWindow::populateStations(const QJsonObject &data)
         stationTable_->setItem(row, 7, new QTableWidgetItem(
             moneyText(station.value(QStringLiteral("minimumPriceCentsPerKwh")).toInt())
             + QStringLiteral("/kWh")));
+        auto *item = new QListWidgetItem(stationCardList_);
+        auto *card = new StationCard(station, stationCardList_);
+        item->setSizeHint(QSize(0, 112));
+        stationCardList_->setItemWidget(item, card);
+        auto selectStation = [this, id] {
+            for (int candidate = 0; candidate < stationTable_->rowCount(); ++candidate) {
+                if (stationTable_->item(candidate, 0)
+                    && stationTable_->item(candidate, 0)->text().toLongLong() == id) {
+                    stationTable_->selectRow(candidate);
+                    return;
+                }
+            }
+        };
+        connect(card, &StationCard::stationSelected, this, [this, selectStation](qint64) {
+            selectStation();
+            loadSelectedStation();
+        });
+        connect(card, &StationCard::navigationRequested, this, [this, selectStation](qint64) {
+            selectStation();
+            navigateSelectedStation(QStringLiteral("drive"));
+        });
     }
     if (!stations.isEmpty()) stationTable_->selectRow(0);
 }
 
 void MainWindow::populateChargers(const QJsonObject &data)
 {
-    const QJsonArray chargers = data.value(QStringLiteral("station")).toObject()
-                                    .value(QStringLiteral("chargers")).toArray();
+    const QJsonObject station = data.value(QStringLiteral("station")).toObject();
+    const QJsonArray chargers = station.value(QStringLiteral("chargers")).toArray();
+    stationDetailTitle_->setText(QStringLiteral("<h2>%1</h2>")
+        .arg(station.value(QStringLiteral("name")).toString().toHtmlEscaped()));
+    stationDetailAddress_->setText(QStringLiteral("地址：%1（%2，%3）")
+        .arg(station.value(QStringLiteral("address")).toString())
+        .arg(station.value(QStringLiteral("longitude")).toDouble(), 0, 'f', 6)
+        .arg(station.value(QStringLiteral("latitude")).toDouble(), 0, 'f', 6));
+    stationDetailSummary_->setText(QStringLiteral("最低价格：%1/kWh　在线率：%2%　空闲：%3/%4")
+        .arg(moneyText(station.value(QStringLiteral("minimumPriceCentsPerKwh")).toInt()))
+        .arg(station.value(QStringLiteral("onlineRate")).toDouble() * 100.0, 0, 'f', 1)
+        .arg(station.value(QStringLiteral("idleCount")).toInt())
+        .arg(station.value(QStringLiteral("chargerCount")).toInt()));
     chargerTable_->setRowCount(chargers.size());
     for (int row = 0; row < chargers.size(); ++row) {
         const QJsonObject charger = chargers.at(row).toObject();
         const qint64 id = static_cast<qint64>(charger.value(QStringLiteral("id")).toDouble());
         chargerTable_->setItem(row, 0, makeIdItem(id));
         chargerTable_->setItem(row, 1, new QTableWidgetItem(charger.value(QStringLiteral("code")).toString()));
-        chargerTable_->setItem(row, 2, new QTableWidgetItem(QStringLiteral("%1 kW").arg(
+        chargerTable_->setItem(row, 2, new QTableWidgetItem(charger.value(QStringLiteral("connectorType")).toString()));
+        chargerTable_->setItem(row, 3, new QTableWidgetItem(QStringLiteral("%1 kW").arg(
             charger.value(QStringLiteral("ratedPowerKw")).toDouble(), 0, 'f', 1)));
-        chargerTable_->setItem(row, 3, new QTableWidgetItem(
-            statusText(charger.value(QStringLiteral("status")).toString())));
         chargerTable_->setItem(row, 4, new QTableWidgetItem(
+            statusText(charger.value(QStringLiteral("status")).toString())));
+        chargerTable_->setItem(row, 5, new QTableWidgetItem(
             moneyText(charger.value(QStringLiteral("priceCentsPerKwh")).toInt())
             + QStringLiteral("/kWh")));
     }
     if (!chargers.isEmpty()) chargerTable_->selectRow(0);
+    stationViewStack_->setCurrentWidget(stationDetailView_);
 }
 
 void MainWindow::populateReservations(const QJsonObject &data)
@@ -240,7 +323,10 @@ void MainWindow::populateReservations(const QJsonObject &data)
     for (int row = 0; row < reservations.size(); ++row) {
         const QJsonObject reservation = reservations.at(row).toObject();
         const qint64 id = static_cast<qint64>(reservation.value(QStringLiteral("id")).toDouble());
-        reservationTable_->setItem(row, 0, makeIdItem(id));
+        QTableWidgetItem *idItem = makeIdItem(id);
+        idItem->setData(Qt::UserRole + 1,
+                        static_cast<qint64>(reservation.value(QStringLiteral("orderId")).toDouble()));
+        reservationTable_->setItem(row, 0, idItem);
         reservationTable_->setItem(row, 1, new QTableWidgetItem(reservation.value(QStringLiteral("stationName")).toString()));
         reservationTable_->setItem(row, 2, new QTableWidgetItem(reservation.value(QStringLiteral("chargerCode")).toString()));
         reservationTable_->setItem(row, 3, new QTableWidgetItem(
@@ -263,8 +349,12 @@ void MainWindow::populateCharging(const QJsonObject &data)
         session.value(QStringLiteral("energyWh")).toDouble() / 1000.0, 0, 'f', 3));
     chargingAmountLabel_->setText(moneyText(
         static_cast<qint64>(session.value(QStringLiteral("amountCents")).toDouble())));
-    const bool charging = session.value(QStringLiteral("status")).toString() == QStringLiteral("charging");
-    stopChargingButton_->setEnabled(charging);
+    const QString status = session.value(QStringLiteral("status")).toString();
+    const bool charging = status == QStringLiteral("charging");
+    const bool pendingSettlement = status == QStringLiteral("pending_settlement");
+    stopChargingButton_->setEnabled(charging || pendingSettlement);
+    stopChargingButton_->setText(pendingSettlement
+        ? QStringLiteral("充值后重试结算") : QStringLiteral("结束充电并结算"));
     if (charging && !chargingTimer_.isActive()) chargingTimer_.start();
 }
 

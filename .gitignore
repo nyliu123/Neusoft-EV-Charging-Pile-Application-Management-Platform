@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+
+# 构建、运行和数据流水线产物必须放在源码目录之外。
+evcs-runtime/
+evcs-data/
+build-*/
+*.user

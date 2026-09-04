@@ -6,6 +6,7 @@
 #include <QEvent>
 #include <QHostAddress>
 #include <QJsonObject>
+#include <QTcpSocket>
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QtTest>
@@ -54,6 +55,7 @@ class SocketIntegrationTest final : public QObject
 
 private slots:
     void rejectsConcurrentReservationForSameCharger();
+    void replaysCompletedDuplicateRequestWithoutRepeatingMutation();
 };
 
 void SocketIntegrationTest::rejectsConcurrentReservationForSameCharger()
@@ -128,6 +130,55 @@ void SocketIntegrationTest::rejectsConcurrentReservationForSameCharger()
     second.disconnectFromServer();
     QTRY_VERIFY_WITH_TIMEOUT(!first.isConnected() && !second.isConnected(), 3000);
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+}
+
+void SocketIntegrationTest::replaysCompletedDuplicateRequestWithoutRepeatingMutation()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    evcs::server::ChargingServer server;
+    QString error;
+    QVERIFY2(server.initialize(temporaryDirectory.filePath(QStringLiteral("idempotency.db")),
+                               QStringLiteral(EVCS_TEST_SCHEMA_PATH), &error), qPrintable(error));
+    QVERIFY2(server.listen(QHostAddress::LocalHost, 0, &error), qPrintable(error));
+
+    QTcpSocket socket;
+    socket.connectToHost(QHostAddress::LocalHost, server.serverPort());
+    QTRY_COMPARE_WITH_TIMEOUT(socket.state(), QAbstractSocket::ConnectedState, 3000);
+    evcs::protocol::FrameDecoder decoder;
+    QString exchangeError;
+    auto exchange = [&](const QJsonObject &requestMessage) {
+        socket.write(evcs::protocol::encodeFrame(requestMessage));
+        socket.flush();
+        QEventLoop loop;
+        QTimer timer;
+        timer.setSingleShot(true);
+        timer.setInterval(3000);
+        connect(&socket, &QTcpSocket::readyRead, &loop, &QEventLoop::quit);
+        connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
+        timer.start();
+        if (socket.bytesAvailable() == 0) loop.exec();
+        QString decodeError;
+        const QList<QJsonObject> messages = decoder.append(socket.readAll(), &decodeError);
+        if (!decodeError.isEmpty() || messages.size() != 1) {
+            exchangeError = !decodeError.isEmpty()
+                ? decodeError : QStringLiteral("响应帧数量不是 1：%1").arg(messages.size());
+            return QJsonObject{};
+        }
+        return messages.first();
+    };
+
+    QJsonObject registration = evcs::protocol::makeRequest(
+        QStringLiteral("auth.phoneRegister"),
+        {{QStringLiteral("phone"), QStringLiteral("13700001111")}});
+    registration.insert(QStringLiteral("requestId"), QStringLiteral("duplicate-registration-1"));
+    const QJsonObject firstResponse = exchange(registration);
+    const QJsonObject secondResponse = exchange(registration);
+    QVERIFY2(exchangeError.isEmpty(), qPrintable(exchangeError));
+    QVERIFY(firstResponse.value(QStringLiteral("ok")).toBool());
+    QCOMPARE(secondResponse, firstResponse);
+    QVERIFY(!firstResponse.value(QStringLiteral("data")).toObject()
+                 .value(QStringLiteral("token")).toString().isEmpty());
 }
 
 QTEST_MAIN(SocketIntegrationTest)

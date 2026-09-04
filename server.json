@@ -1,9 +1,11 @@
 {
   "listenAddress": "0.0.0.0",
-  "port": 45454,
+  "port": 8888,
   "databasePath": "evcharging.db",
   "schemaPath": "schema.sql",
   "logPath": "evcs-server.jsonl",
+  "tencentMapKey": "",
+  "tencentMapReferer": "EVCS-DEMO",
   "reservationTtlMinutes": 15,
   "chargingSimulationIntervalSeconds": 1,
   "defaultChargingPowerKw": 7.0,

@@ -55,6 +55,7 @@ private:
     ServiceResult chargingStatus(const QJsonObject &payload, const QString &token);
     ServiceResult stopCharging(const QJsonObject &payload, const QString &token);
     ServiceResult listOrders(const QString &token);
+    ServiceResult pendingOrder(const QString &token);
     ServiceResult getOrder(const QJsonObject &payload, const QString &token);
     ServiceResult adminDashboard(const QString &token);
     ServiceResult adminAnalytics(const QString &token);

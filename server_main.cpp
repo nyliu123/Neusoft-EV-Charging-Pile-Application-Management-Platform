@@ -20,6 +20,7 @@ int main(int argc, char *argv[])
     }
 
     evcs::server::ChargingServer server;
+    server.configureMap(settings.tencentMapKey, settings.tencentMapReferer);
     if (!server.initialize(settings.databasePath, settings.schemaPath, &errorMessage)
         || !server.listen(settings.listenAddress, settings.port, &errorMessage)) {
         qCritical().noquote() << QStringLiteral("服务端启动失败：%1").arg(errorMessage);

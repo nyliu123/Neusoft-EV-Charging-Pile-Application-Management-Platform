@@ -17,6 +17,7 @@
 #include <QJsonDocument>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QMessageBox>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
@@ -69,7 +70,7 @@ QWidget *MainWindow::createLoginPage()
     portSpin_ = new QSpinBox;
     portSpin_->setObjectName(QStringLiteral("serverPort"));
     portSpin_->setRange(1, 65535);
-    portSpin_->setValue(45454);
+    portSpin_->setValue(8888);
     connectButton_ = new QPushButton(QStringLiteral("重新连接"));
     connectButton_->setObjectName(QStringLiteral("connectButton"));
     connectionLabel_ = new QLabel(QStringLiteral("未连接"));
@@ -81,20 +82,17 @@ QWidget *MainWindow::createLoginPage()
     auto *loginBox = new QGroupBox(QStringLiteral("用户登录"));
     auto *loginForm = new QFormLayout(loginBox);
     loginModeCombo_ = new QComboBox;
-    loginModeCombo_->addItem(QStringLiteral("账号密码登录"), QStringLiteral("password"));
-    loginModeCombo_->addItem(QStringLiteral("手机号快捷登录（教学模拟）"), QStringLiteral("phone"));
-    usernameEdit_ = new QLineEdit(QStringLiteral("demo"));
-    passwordEdit_ = new QLineEdit(QStringLiteral("Demo123!"));
+    loginModeCombo_->addItem(QStringLiteral("手机号快捷登录（首次登录自动注册）"), QStringLiteral("phone"));
+    usernameEdit_ = new QLineEdit(QStringLiteral("13800138000"));
+    passwordEdit_ = new QLineEdit;
     passwordEdit_->setEchoMode(QLineEdit::Password);
+    passwordEdit_->setVisible(false);
     loginButton_ = new QPushButton(QStringLiteral("登录"));
     loginButton_->setObjectName(QStringLiteral("loginButton"));
-    auto *registerButton = new QPushButton(QStringLiteral("注册新用户"));
     auto *buttons = new QHBoxLayout;
     buttons->addWidget(loginButton_);
-    buttons->addWidget(registerButton);
     loginForm->addRow(QStringLiteral("登录方式"), loginModeCombo_);
-    loginForm->addRow(QStringLiteral("账号 / 手机号"), usernameEdit_);
-    loginForm->addRow(QStringLiteral("密码"), passwordEdit_);
+    loginForm->addRow(QStringLiteral("手机号"), usernameEdit_);
     loginForm->addRow(buttons);
     layout->addWidget(loginBox);
     layout->addStretch();
@@ -103,8 +101,8 @@ QWidget *MainWindow::createLoginPage()
     connect(loginButton_, &QPushButton::clicked, this, &MainWindow::login);
     connect(loginModeCombo_, &QComboBox::currentIndexChanged,
             this, &MainWindow::updateLoginMode);
-    connect(registerButton, &QPushButton::clicked, this, &MainWindow::registerUser);
     connect(passwordEdit_, &QLineEdit::returnPressed, this, &MainWindow::login);
+    updateLoginMode();
     return page;
 }
 
@@ -113,6 +111,11 @@ QWidget *MainWindow::createStationPage()
     auto *page = new QWidget;
     page->setObjectName(QStringLiteral("userStationPage"));
     auto *layout = new QVBoxLayout(page);
+    stationViewStack_ = new QStackedWidget;
+    layout->addWidget(stationViewStack_);
+
+    stationListView_ = new QWidget;
+    auto *listLayout = new QVBoxLayout(stationListView_);
     auto *search = new QHBoxLayout;
     stationKeywordEdit_ = new QLineEdit;
     stationKeywordEdit_->setPlaceholderText(QStringLiteral("站点名称或地址"));
@@ -125,21 +128,32 @@ QWidget *MainWindow::createStationPage()
     search->addWidget(stationRegionEdit_);
     search->addWidget(onlyAvailableCheck_);
     search->addWidget(refresh);
-    layout->addLayout(search);
+    listLayout->addLayout(search);
 
     auto *locationBar = new QHBoxLayout;
+    locationPresetCombo_ = new QComboBox;
+    locationPresetCombo_->addItems({QStringLiteral("选择预设区域"), QStringLiteral("北京市海淀区中关村"),
+                                    QStringLiteral("北京市朝阳区望京"), QStringLiteral("北京市东城区"),
+                                    QStringLiteral("北京市大兴区亦庄")});
     locationEdit_ = new QLineEdit;
     locationEdit_->setPlaceholderText(QStringLiteral("当前位置/地址，例如：北京市海淀区中关村"));
     auto *geocode = new QPushButton(QStringLiteral("解析当前位置"));
     auto *drive = new QPushButton(QStringLiteral("驾车导航"));
     auto *walk = new QPushButton(QStringLiteral("步行导航"));
     locationStatusLabel_ = new QLabel(QStringLiteral("尚未设置当前位置"));
+    locationBar->addWidget(locationPresetCombo_);
     locationBar->addWidget(locationEdit_, 2);
     locationBar->addWidget(geocode);
     locationBar->addWidget(drive);
     locationBar->addWidget(walk);
     locationBar->addWidget(locationStatusLabel_, 2);
-    layout->addLayout(locationBar);
+    listLayout->addLayout(locationBar);
+
+    stationCardList_ = new QListWidget;
+    stationCardList_->setObjectName(QStringLiteral("stationCardList"));
+    stationCardList_->setSpacing(8);
+    stationCardList_->setSelectionMode(QAbstractItemView::NoSelection);
+    listLayout->addWidget(stationCardList_);
 
     stationTable_ = new QTableWidget;
     stationTable_->setObjectName(QStringLiteral("stationTable"));
@@ -147,33 +161,51 @@ QWidget *MainWindow::createStationPage()
                                    QStringLiteral("区域"), QStringLiteral("地址"),
                                    QStringLiteral("空闲/全部"), QStringLiteral("在线率"),
                                    QStringLiteral("距离"), QStringLiteral("最低价格")});
-    layout->addWidget(stationTable_, 3);
-    auto *loadStation = new QPushButton(QStringLiteral("查看所选站点的充电桩"));
-    layout->addWidget(loadStation);
+    stationTable_->setVisible(false);
+    listLayout->addWidget(stationTable_);
+    stationViewStack_->addWidget(stationListView_);
+
+    stationDetailView_ = new QWidget;
+    auto *detailLayout = new QVBoxLayout(stationDetailView_);
+    auto *detailTop = new QHBoxLayout;
+    auto *back = new QPushButton(QStringLiteral("← 返回站点列表"));
+    stationDetailTitle_ = new QLabel(QStringLiteral("<h2>充电站详情</h2>"));
+    detailTop->addWidget(back);
+    detailTop->addWidget(stationDetailTitle_);
+    detailTop->addStretch();
+    detailLayout->addLayout(detailTop);
+    stationDetailAddress_ = new QLabel(QStringLiteral("地址：--"));
+    stationDetailSummary_ = new QLabel(QStringLiteral("价格、在线率：--"));
+    detailLayout->addWidget(stationDetailAddress_);
+    detailLayout->addWidget(stationDetailSummary_);
 
     chargerTable_ = new QTableWidget;
     configureTable(chargerTable_, {QStringLiteral("编号"), QStringLiteral("桩编号"),
-                                   QStringLiteral("功率"), QStringLiteral("状态"),
+                                   QStringLiteral("类型/接口"), QStringLiteral("功率"), QStringLiteral("状态"),
                                    QStringLiteral("价格")});
-    layout->addWidget(chargerTable_, 2);
+    detailLayout->addWidget(chargerTable_, 2);
     auto *chargerButtons = new QHBoxLayout;
     auto *reserve = new QPushButton(QStringLiteral("预约所选充电桩"));
-    auto *start = new QPushButton(QStringLiteral("直接开始充电"));
     chargerButtons->addWidget(reserve);
-    chargerButtons->addWidget(start);
-    layout->addLayout(chargerButtons);
+    chargerButtons->addStretch();
+    detailLayout->addLayout(chargerButtons);
+    stationViewStack_->addWidget(stationDetailView_);
 
     connect(refresh, &QPushButton::clicked, this, &MainWindow::refreshStations);
+    connect(locationPresetCombo_, &QComboBox::currentTextChanged, this, [this](const QString &text) {
+        if (locationPresetCombo_->currentIndex() > 0) locationEdit_->setText(text);
+    });
     connect(geocode, &QPushButton::clicked, this, &MainWindow::geocodeLocation);
     connect(drive, &QPushButton::clicked, this,
             [this] { navigateSelectedStation(QStringLiteral("drive")); });
     connect(walk, &QPushButton::clicked, this,
             [this] { navigateSelectedStation(QStringLiteral("walk")); });
-    connect(loadStation, &QPushButton::clicked, this, &MainWindow::loadSelectedStation);
     connect(stationTable_, &QTableWidget::cellDoubleClicked, this,
             [this](int, int) { loadSelectedStation(); });
+    connect(back, &QPushButton::clicked, this, [this] {
+        stationViewStack_->setCurrentWidget(stationListView_);
+    });
     connect(reserve, &QPushButton::clicked, this, &MainWindow::reserveSelectedCharger);
-    connect(start, &QPushButton::clicked, this, &MainWindow::startSelectedCharger);
     return page;
 }
 

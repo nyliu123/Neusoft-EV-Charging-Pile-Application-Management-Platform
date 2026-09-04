@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
     role TEXT NOT NULL CHECK (role IN ('user', 'admin')),
     display_name TEXT NOT NULL DEFAULT '',
     phone TEXT NOT NULL DEFAULT '',
+    avatar_path TEXT NOT NULL DEFAULT '',
     avatar_mime TEXT NOT NULL DEFAULT '',
     avatar_data BLOB,
     balance_cents INTEGER NOT NULL DEFAULT 0 CHECK (balance_cents >= 0),
@@ -27,6 +28,18 @@ CREATE TABLE IF NOT EXISTS sessions (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     expires_at TEXT NOT NULL,
     created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS admins (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    password_salt TEXT NOT NULL,
+    display_name TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS stations (
@@ -59,6 +72,8 @@ CREATE TABLE IF NOT EXISTS chargers (
     rated_power_kw REAL NOT NULL DEFAULT 7.0 CHECK (rated_power_kw > 0),
     status TEXT NOT NULL DEFAULT 'idle' CHECK (status IN ('idle', 'reserved', 'charging', 'fault', 'offline', 'disabled')),
     tariff_id INTEGER NOT NULL REFERENCES tariffs(id),
+    total_charge_count INTEGER NOT NULL DEFAULT 0 CHECK (total_charge_count >= 0),
+    total_duration_seconds INTEGER NOT NULL DEFAULT 0 CHECK (total_duration_seconds >= 0),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -89,15 +104,22 @@ CREATE TABLE IF NOT EXISTS charging_sessions (
 CREATE TABLE IF NOT EXISTS orders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     order_no TEXT NOT NULL UNIQUE,
-    charging_session_id INTEGER NOT NULL UNIQUE REFERENCES charging_sessions(id),
+    charging_session_id INTEGER UNIQUE REFERENCES charging_sessions(id),
+    reservation_id INTEGER UNIQUE REFERENCES reservations(id),
     user_id INTEGER NOT NULL REFERENCES users(id),
     station_id INTEGER NOT NULL REFERENCES stations(id),
     charger_id INTEGER NOT NULL REFERENCES chargers(id),
-    energy_wh INTEGER NOT NULL CHECK (energy_wh >= 0),
-    amount_cents INTEGER NOT NULL CHECK (amount_cents >= 0),
-    status TEXT NOT NULL DEFAULT 'paid' CHECK (status IN ('pending', 'paid', 'cancelled')),
+    energy_wh INTEGER NOT NULL DEFAULT 0 CHECK (energy_wh >= 0),
+    price_cents_per_kwh INTEGER NOT NULL CHECK (price_cents_per_kwh >= 0),
+    amount_cents INTEGER NOT NULL DEFAULT 0 CHECK (amount_cents >= 0),
+    status TEXT NOT NULL DEFAULT 'reserved' CHECK (
+        status IN ('reserved', 'charging', 'pending_settlement', 'settled', 'cancelled')),
+    reserved_at TEXT NOT NULL,
+    started_at TEXT,
+    ended_at TEXT,
+    settled_at TEXT,
     created_at TEXT NOT NULL,
-    paid_at TEXT
+    updated_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS fault_reports (
@@ -142,10 +164,12 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_chargers_station_status ON chargers(station_id, status);
+CREATE INDEX IF NOT EXISTS idx_admins_username_status ON admins(username, status);
 CREATE INDEX IF NOT EXISTS idx_reservations_user_status ON reservations(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_reservations_expiry ON reservations(status, expires_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_user_status ON charging_sessions(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_orders_user_created ON orders(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_orders_user_status ON orders(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_faults_charger_status ON fault_reports(charger_id, status);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_phone_unique ON users(phone) WHERE phone <> '';
 CREATE INDEX IF NOT EXISTS idx_recharges_user_created ON recharge_records(user_id, created_at DESC);

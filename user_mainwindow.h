@@ -10,7 +10,7 @@ class QCheckBox;
 class QComboBox;
 class QLabel;
 class QLineEdit;
-class QNetworkAccessManager;
+class QListWidget;
 class QPushButton;
 class QSpinBox;
 class QStackedWidget;
@@ -45,7 +45,6 @@ private:
     void navigateSelectedStation(const QString &travelMode);
     void loadSelectedStation();
     void reserveSelectedCharger();
-    void startSelectedCharger();
     void refreshReservations();
     void cancelSelectedReservation();
     void startSelectedReservation();
@@ -77,7 +76,8 @@ private:
     bool hasCurrentLocation_ = false;
     double currentLatitude_ = 0.0;
     double currentLongitude_ = 0.0;
-    QNetworkAccessManager *mapNetwork_ = nullptr;
+    QString mapKey_;
+    QString mapReferer_ = QStringLiteral("EVCS-DEMO");
 
     QStackedWidget *stack_ = nullptr;
     QWidget *loginPage_ = nullptr;
@@ -93,9 +93,17 @@ private:
     QLineEdit *stationKeywordEdit_ = nullptr;
     QLineEdit *stationRegionEdit_ = nullptr;
     QLineEdit *locationEdit_ = nullptr;
+    QComboBox *locationPresetCombo_ = nullptr;
     QLabel *locationStatusLabel_ = nullptr;
     QCheckBox *onlyAvailableCheck_ = nullptr;
     QTableWidget *stationTable_ = nullptr;
+    QListWidget *stationCardList_ = nullptr;
+    QStackedWidget *stationViewStack_ = nullptr;
+    QWidget *stationListView_ = nullptr;
+    QWidget *stationDetailView_ = nullptr;
+    QLabel *stationDetailTitle_ = nullptr;
+    QLabel *stationDetailAddress_ = nullptr;
+    QLabel *stationDetailSummary_ = nullptr;
     QTableWidget *chargerTable_ = nullptr;
     QTableWidget *reservationTable_ = nullptr;
     QLabel *chargingStationLabel_ = nullptr;

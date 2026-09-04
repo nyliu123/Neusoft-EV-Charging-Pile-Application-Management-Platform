@@ -9,6 +9,14 @@ namespace evcs {
 ApiClient::ApiClient(QObject *parent)
     : QObject(parent)
 {
+    reconnectTimer_.setSingleShot(true);
+    reconnectTimer_.setInterval(2000);
+    connect(&reconnectTimer_, &QTimer::timeout, this, [this] {
+        if (reconnectEnabled_ && socket_.state() == QAbstractSocket::UnconnectedState) {
+            emit connectionChanged(false, QStringLiteral("正在自动重连 %1:%2…").arg(host_).arg(port_));
+            socket_.connectToHost(host_, port_);
+        }
+    });
     requestTimer_.setInterval(1000);
     requestTimer_.start();
     connect(&requestTimer_, &QTimer::timeout, this, [this] {
@@ -24,6 +32,7 @@ ApiClient::ApiClient(QObject *parent)
         }
     });
     connect(&socket_, &QTcpSocket::connected, this, [this] {
+        reconnectTimer_.stop();
         emit connectionChanged(true, QStringLiteral("已连接服务端"));
     });
     connect(&socket_, &QTcpSocket::disconnected, this, [this] {
@@ -31,22 +40,29 @@ ApiClient::ApiClient(QObject *parent)
         pendingActions_.clear();
         requestDeadlines_.clear();
         emit connectionChanged(false, QStringLiteral("服务端连接已断开"));
+        scheduleReconnect();
     });
     connect(&socket_, &QTcpSocket::readyRead, this, &ApiClient::readResponses);
     connect(&socket_, &QTcpSocket::errorOccurred, this,
             [this](QAbstractSocket::SocketError) {
         emit connectionChanged(false, socket_.errorString());
+        scheduleReconnect();
     });
 }
 
 ApiClient::~ApiClient()
 {
+    reconnectEnabled_ = false;
+    reconnectTimer_.stop();
     QObject::disconnect(&socket_, nullptr, this, nullptr);
     socket_.abort();
 }
 
 void ApiClient::connectToServer(const QString &host, quint16 port)
 {
+    host_ = host;
+    port_ = port;
+    reconnectEnabled_ = true;
     if (socket_.state() != QAbstractSocket::UnconnectedState) {
         socket_.abort();
     }
@@ -56,7 +72,16 @@ void ApiClient::connectToServer(const QString &host, quint16 port)
 
 void ApiClient::disconnectFromServer()
 {
+    reconnectEnabled_ = false;
+    reconnectTimer_.stop();
     socket_.disconnectFromHost();
+}
+
+void ApiClient::scheduleReconnect()
+{
+    if (reconnectEnabled_ && !host_.isEmpty() && port_ > 0 && !reconnectTimer_.isActive()) {
+        reconnectTimer_.start();
+    }
 }
 
 bool ApiClient::isConnected() const
@@ -103,6 +128,11 @@ void ApiClient::readResponses()
     }
 
     for (const QJsonObject &message : messages) {
+        if (message.value(QStringLiteral("type")).toString() == QStringLiteral("event")) {
+            emit eventReceived(message.value(QStringLiteral("action")).toString(),
+                               message.value(QStringLiteral("data")).toObject());
+            continue;
+        }
         const QString requestId = message.value(QStringLiteral("requestId")).toString();
         const QString action = pendingActions_.take(requestId);
         requestDeadlines_.remove(requestId);

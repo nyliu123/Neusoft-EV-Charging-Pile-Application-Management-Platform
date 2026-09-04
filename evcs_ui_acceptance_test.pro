@@ -8,6 +8,7 @@ DEFINES += EVCS_TEST_SCHEMA_PATH=\\\"$$PWD/schema.sql\\\"
 SOURCES += \
     ui_acceptance_test.cpp \
     chargingserver.cpp \
+    mapapiadapter.cpp \
     businessservice.cpp \
     database.cpp \
     security.cpp \
@@ -21,14 +22,17 @@ SOURCES += \
     user_pages.cpp \
     user_actions.cpp \
     user_responses.cpp \
+    user_session.cpp \
+    station_card.cpp \
     admin_style.cpp \
     admin_mainwindow.cpp \
     admin_pages.cpp \
     admin_actions.cpp \
-    admin_responses.cpp
+    admin_responses.cpp \
+    admin_session.cpp
 HEADERS += \
-    chargingserver.h businessservice.h database.h security.h protocol.h domain.h apiclient.h \
-    style_loader.h ui_text.h user_style.h user_mainwindow.h admin_style.h admin_mainwindow.h
+    chargingserver.h mapapiadapter.h businessservice.h database.h security.h protocol.h domain.h apiclient.h \
+    style_loader.h ui_text.h user_style.h user_mainwindow.h user_session.h station_card.h admin_style.h admin_mainwindow.h admin_session.h
 RESOURCES += user_resources.qrc admin_resources.qrc
 OBJECTS_DIR = $$OUT_PWD/obj
 MOC_DIR = $$OUT_PWD/moc

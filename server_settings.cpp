@@ -12,10 +12,12 @@ namespace {
 
 struct RawSettings {
     QString listenAddress = QStringLiteral("0.0.0.0");
-    int port = 45454;
+    int port = 8888;
     QString databasePath = QStringLiteral("evcharging.db");
     QString schemaPath = QStringLiteral("schema.sql");
     QString logPath = QStringLiteral("evcs-server.jsonl");
+    QString tencentMapKey;
+    QString tencentMapReferer = QStringLiteral("EVCS-DEMO");
 };
 
 // 配置文件只负责提供默认值，命令行参数具有更高优先级。
@@ -50,6 +52,10 @@ bool loadJsonSettings(const QString &path, RawSettings *settings, QString *error
                                .toString(settings->schemaPath);
     settings->logPath = object.value(QStringLiteral("logPath"))
                             .toString(settings->logPath);
+    settings->tencentMapKey = object.value(QStringLiteral("tencentMapKey"))
+                                  .toString(settings->tencentMapKey);
+    settings->tencentMapReferer = object.value(QStringLiteral("tencentMapReferer"))
+                                      .toString(settings->tencentMapReferer);
     return true;
 }
 
@@ -111,6 +117,9 @@ bool parseServerSettings(QCoreApplication &app,
     settings->databasePath = raw.databasePath;
     settings->schemaPath = raw.schemaPath;
     settings->logPath = raw.logPath;
+    settings->tencentMapKey = qEnvironmentVariable("EVCS_TENCENT_MAP_KEY", raw.tencentMapKey);
+    settings->tencentMapReferer = qEnvironmentVariable(
+        "EVCS_TENCENT_MAP_REFERER", raw.tencentMapReferer);
     return true;
 }
 

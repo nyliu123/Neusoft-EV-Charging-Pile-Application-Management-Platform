@@ -64,6 +64,15 @@ void BusinessFlowTest::completesReservationChargingAndOrderFlow()
         {{QStringLiteral("chargerId"), chargerId}}, token);
     QVERIFY2(reservation.ok, qPrintable(reservation.errorMessage));
     const double reservationId = reservation.data.value(QStringLiteral("reservationId")).toDouble();
+    QVERIFY(reservationId > 0);
+    const double lifecycleOrderId = reservation.data.value(QStringLiteral("orderId")).toDouble();
+    QVERIFY(lifecycleOrderId > 0);
+    const auto reservedOrders = service.handle(QStringLiteral("order.list"), {}, token);
+    QVERIFY2(reservedOrders.ok, qPrintable(reservedOrders.errorMessage));
+    const QJsonObject reservedOrder = reservedOrders.data.value(QStringLiteral("orders"))
+                                          .toArray().first().toObject();
+    QCOMPARE(reservedOrder.value(QStringLiteral("id")).toDouble(), lifecycleOrderId);
+    QCOMPARE(reservedOrder.value(QStringLiteral("status")).toString(), QStringLiteral("reserved"));
 
     const auto duplicateReservation = service.handle(
         QStringLiteral("reservation.create"),
@@ -73,9 +82,17 @@ void BusinessFlowTest::completesReservationChargingAndOrderFlow()
 
     const auto session = service.handle(
         QStringLiteral("charging.start"),
-        {{QStringLiteral("reservationId"), reservationId}}, token);
+        {{QStringLiteral("orderId"), lifecycleOrderId}}, token);
     QVERIFY2(session.ok, qPrintable(session.errorMessage));
     const double sessionId = session.data.value(QStringLiteral("sessionId")).toDouble();
+    const auto chargingOrders = service.handle(QStringLiteral("order.list"), {}, token);
+    QVERIFY2(chargingOrders.ok, qPrintable(chargingOrders.errorMessage));
+    const QJsonObject chargingOrder = chargingOrders.data.value(QStringLiteral("orders"))
+                                          .toArray().first().toObject();
+    QCOMPARE(chargingOrder.value(QStringLiteral("id")).toDouble(), lifecycleOrderId);
+    QCOMPARE(chargingOrder.value(QStringLiteral("status")).toString(), QStringLiteral("charging"));
+    QCOMPARE(chargingOrder.value(QStringLiteral("orderNo")).toString(),
+             reservedOrder.value(QStringLiteral("orderNo")).toString());
 
     const auto status = service.handle(
         QStringLiteral("charging.status"),
@@ -91,6 +108,8 @@ void BusinessFlowTest::completesReservationChargingAndOrderFlow()
     QVERIFY2(stopped.ok, qPrintable(stopped.errorMessage));
     const QJsonObject order = stopped.data.value(QStringLiteral("order")).toObject();
     QVERIFY(!order.value(QStringLiteral("orderNo")).toString().isEmpty());
+    QCOMPARE(order.value(QStringLiteral("id")).toDouble(), lifecycleOrderId);
+    QCOMPARE(order.value(QStringLiteral("status")).toString(), QStringLiteral("settled"));
 
     const auto orders = service.handle(QStringLiteral("order.list"), {}, token);
     QVERIFY2(orders.ok, qPrintable(orders.errorMessage));
@@ -119,7 +138,7 @@ void BusinessFlowTest::administratorCanManageCoreRecords()
     const auto login = service.handle(
         QStringLiteral("auth.login"),
         {{QStringLiteral("username"), QStringLiteral("admin")},
-         {QStringLiteral("password"), QStringLiteral("Admin123!")}}, {});
+         {QStringLiteral("password"), QStringLiteral("123456")}}, {});
     QVERIFY2(login.ok, qPrintable(login.errorMessage));
     const QString token = login.data.value(QStringLiteral("token")).toString();
 
@@ -183,7 +202,7 @@ void BusinessFlowTest::administratorCanManageCoreRecords()
 
     const auto users = service.handle(QStringLiteral("admin.user.list"), {}, token);
     QVERIFY2(users.ok, qPrintable(users.errorMessage));
-    QVERIFY(users.data.value(QStringLiteral("users")).toArray().size() >= 2);
+    QVERIFY(users.data.value(QStringLiteral("users")).toArray().size() >= 1);
 
     const auto faults = service.handle(QStringLiteral("admin.fault.list"), {}, token);
     QVERIFY2(faults.ok, qPrintable(faults.errorMessage));
@@ -236,9 +255,13 @@ void BusinessFlowTest::addedMatrixRequirementsWorkEndToEnd()
     const QString phone = QStringLiteral("13912345678");
     const auto firstPhoneLogin = service.handle(
         QStringLiteral("auth.phoneLogin"), {{QStringLiteral("phone"), phone}}, {});
-    QVERIFY2(firstPhoneLogin.ok, qPrintable(firstPhoneLogin.errorMessage));
-    QVERIFY(firstPhoneLogin.data.value(QStringLiteral("autoRegistered")).toBool());
-    const QString userToken = firstPhoneLogin.data.value(QStringLiteral("token")).toString();
+    QVERIFY(!firstPhoneLogin.ok);
+    QCOMPARE(firstPhoneLogin.errorCode, QStringLiteral("USER_NOT_FOUND"));
+    const auto autoRegistered = service.handle(
+        QStringLiteral("auth.phoneRegister"), {{QStringLiteral("phone"), phone}}, {});
+    QVERIFY2(autoRegistered.ok, qPrintable(autoRegistered.errorMessage));
+    QVERIFY(autoRegistered.data.value(QStringLiteral("autoRegistered")).toBool());
+    const QString userToken = autoRegistered.data.value(QStringLiteral("token")).toString();
     QVERIFY(!userToken.isEmpty());
     const auto secondPhoneLogin = service.handle(
         QStringLiteral("auth.phoneLogin"), {{QStringLiteral("phone"), phone}}, {});
@@ -258,7 +281,7 @@ void BusinessFlowTest::addedMatrixRequirementsWorkEndToEnd()
         QStringLiteral("wallet.recharge"),
         {{QStringLiteral("amountCents"), 1234}}, userToken);
     QVERIFY2(recharge.ok, qPrintable(recharge.errorMessage));
-    QCOMPARE(recharge.data.value(QStringLiteral("balanceCents")).toInt(), 11234);
+    QCOMPARE(recharge.data.value(QStringLiteral("balanceCents")).toInt(), 1234);
     const auto profile = service.handle(QStringLiteral("user.profile"), {}, userToken);
     QVERIFY2(profile.ok, qPrintable(profile.errorMessage));
     const QJsonObject user = profile.data.value(QStringLiteral("user")).toObject();
@@ -284,7 +307,7 @@ void BusinessFlowTest::addedMatrixRequirementsWorkEndToEnd()
     const auto adminLogin = service.handle(
         QStringLiteral("auth.login"),
         {{QStringLiteral("username"), QStringLiteral("admin")},
-         {QStringLiteral("password"), QStringLiteral("Admin123!")}}, {});
+         {QStringLiteral("password"), QStringLiteral("123456")}}, {});
     QVERIFY2(adminLogin.ok, qPrintable(adminLogin.errorMessage));
     const QString adminToken = adminLogin.data.value(QStringLiteral("token")).toString();
 
@@ -305,7 +328,7 @@ void BusinessFlowTest::addedMatrixRequirementsWorkEndToEnd()
          {QStringLiteral("latitude"), 39.9},
          {QStringLiteral("chargerCount"), 2},
          {QStringLiteral("defaultPowerKw"), 120.0},
-         {QStringLiteral("tariffId"), 1},
+         {QStringLiteral("priceCentsPerKwh"), 95},
          {QStringLiteral("status"), QStringLiteral("active")}}, adminToken);
     QVERIFY2(station.ok, qPrintable(station.errorMessage));
     QCOMPARE(station.data.value(QStringLiteral("createdChargers")).toInt(), 2);

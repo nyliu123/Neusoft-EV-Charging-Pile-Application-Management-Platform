@@ -36,9 +36,11 @@ signals:
                           const QJsonObject &data,
                           const QString &errorCode,
                           const QString &errorMessage);
+    void eventReceived(const QString &action, const QJsonObject &data);
 
 private:
     void readResponses();
+    void scheduleReconnect();
 
     QTcpSocket socket_;
     QTimer requestTimer_;
@@ -46,6 +48,10 @@ private:
     QString token_;
     QHash<QString, QString> pendingActions_;
     QHash<QString, qint64> requestDeadlines_;
+    QTimer reconnectTimer_;
+    QString host_;
+    quint16 port_ = 0;
+    bool reconnectEnabled_ = false;
 };
 
 } // namespace evcs

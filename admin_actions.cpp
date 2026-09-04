@@ -67,9 +67,8 @@ void MainWindow::connectSignals()
                 connectionLabel_->setText(message);
                 loginButton_->setEnabled(connected);
                 statusBar()->showMessage(message, 5000);
-                if (!connected) {
-                    apiClient_.clearToken();
-                    stack_->setCurrentWidget(loginPage_);
+                if (connected && !apiClient_.token().isEmpty()) {
+                    refreshAll();
                 }
             });
     connect(&apiClient_, &ApiClient::responseReceived, this,
@@ -114,7 +113,13 @@ void MainWindow::refreshStations() { apiClient_.sendRequest(QStringLiteral("admi
 void MainWindow::refreshChargers()
 {
     QJsonObject payload;
-    if (chargerStationFilterId_ > 0) payload.insert(QStringLiteral("stationId"), static_cast<double>(chargerStationFilterId_));
+    const qint64 selectedStation = chargerStationFilterCombo_
+        ? chargerStationFilterCombo_->currentData().toLongLong() : 0;
+    const qint64 stationId = selectedStation > 0 ? selectedStation : chargerStationFilterId_;
+    if (stationId > 0) payload.insert(QStringLiteral("stationId"), static_cast<double>(stationId));
+    if (chargerStatusFilterCombo_ && chargerStatusFilterCombo_->currentIndex() > 0) {
+        payload.insert(QStringLiteral("status"), chargerStatusFilterCombo_->currentData().toString());
+    }
     apiClient_.sendRequest(QStringLiteral("admin.charger.list"), payload);
 }
 
@@ -135,7 +140,19 @@ void MainWindow::refreshOrders()
     };
     if (orderStatusFilterCombo_->currentIndex() > 0)
         payload.insert(QStringLiteral("status"), orderStatusFilterCombo_->currentData().toString());
-    if (orderDateFilterCheck_->isChecked()) {
+    if (orderStationFilterCombo_ && orderStationFilterCombo_->currentData().toLongLong() > 0) {
+        payload.insert(QStringLiteral("stationId"), orderStationFilterCombo_->currentData().toDouble());
+    }
+    const QString timeRange = orderTimeRangeCombo_
+        ? orderTimeRangeCombo_->currentData().toString() : QStringLiteral("all");
+    if (timeRange == QStringLiteral("today")) {
+        payload.insert(QStringLiteral("startDate"), QDate::currentDate().toString(Qt::ISODate));
+        payload.insert(QStringLiteral("endDate"), QDate::currentDate().toString(Qt::ISODate));
+    } else if (timeRange == QStringLiteral("7") || timeRange == QStringLiteral("30")) {
+        const int days = timeRange.toInt();
+        payload.insert(QStringLiteral("startDate"), QDate::currentDate().addDays(1 - days).toString(Qt::ISODate));
+        payload.insert(QStringLiteral("endDate"), QDate::currentDate().toString(Qt::ISODate));
+    } else if (timeRange == QStringLiteral("custom")) {
         payload.insert(QStringLiteral("startDate"), orderStartDateEdit_->date().toString(Qt::ISODate));
         payload.insert(QStringLiteral("endDate"), orderEndDateEdit_->date().toString(Qt::ISODate));
     }
@@ -161,6 +178,10 @@ void MainWindow::showSelectedStationDevices()
         return;
     }
     chargerStationFilterId_ = stationId;
+    if (chargerStationFilterCombo_) {
+        const int index = chargerStationFilterCombo_->findData(stationId);
+        if (index >= 0) chargerStationFilterCombo_->setCurrentIndex(index);
+    }
     chargerFilterLabel_->setText(QStringLiteral("当前站点：%1（ID %2）")
                                      .arg(cellText(stationTable_, row, 1)).arg(stationId));
     tabs_->setCurrentIndex(2);
@@ -170,6 +191,8 @@ void MainWindow::showSelectedStationDevices()
 void MainWindow::showAllChargers()
 {
     chargerStationFilterId_ = 0;
+    if (chargerStationFilterCombo_) chargerStationFilterCombo_->setCurrentIndex(0);
+    if (chargerStatusFilterCombo_) chargerStatusFilterCombo_->setCurrentIndex(0);
     chargerFilterLabel_->setText(QStringLiteral("当前：全部站点"));
     refreshChargers();
 }
@@ -193,6 +216,19 @@ void MainWindow::editStation(bool createNew)
     auto *latitude = new QDoubleSpinBox;
     latitude->setRange(-90, 90); latitude->setDecimals(6);
     latitude->setValue(createNew ? 39.908 : cellText(stationTable_, row, 5).toDouble());
+    auto *geocode = new QPushButton(QStringLiteral("按地址获取经纬度"));
+    connect(geocode, &QPushButton::clicked, &dialog, [this, address, longitude, latitude] {
+        if (address->text().trimmed().isEmpty()) {
+            QMessageBox::information(this, QStringLiteral("请输入地址"), QStringLiteral("请先填写充电站地址。"));
+            return;
+        }
+        pendingLongitude_ = longitude;
+        pendingLatitude_ = latitude;
+        statusBar()->showMessage(QStringLiteral("正在由服务端调用腾讯地图解析地址…"));
+        apiClient_.sendRequest(QStringLiteral("map.geocode"), {
+            {QStringLiteral("address"), address->text().trimmed()}
+        });
+    });
     auto *hours = new QLineEdit(createNew ? QStringLiteral("00:00-24:00") : cellText(stationTable_, row, 6));
     auto *status = new QComboBox;
     status->addItem(QStringLiteral("正常"), QStringLiteral("active"));
@@ -205,17 +241,21 @@ void MainWindow::editStation(bool createNew)
     auto *defaultPower = new QDoubleSpinBox;
     defaultPower->setRange(1, 1000); defaultPower->setDecimals(1); defaultPower->setValue(60.0);
     defaultPower->setEnabled(createNew);
-    auto *tariffId = new QSpinBox;
-    tariffId->setRange(1, 100000000); tariffId->setValue(1); tariffId->setEnabled(createNew);
+    auto *price = new QDoubleSpinBox;
+    price->setRange(0.01, 99.99); price->setDecimals(2); price->setSuffix(QStringLiteral(" 元/kWh"));
+    price->setValue(createNew ? 0.80 : cellText(stationTable_, row, 11).toDouble());
     form->addRow(QStringLiteral("名称"), name); form->addRow(QStringLiteral("区域"), region);
-    form->addRow(QStringLiteral("地址"), address); form->addRow(QStringLiteral("经度"), longitude);
+    form->addRow(QStringLiteral("地址"), address); form->addRow(QString{}, geocode);
+    form->addRow(QStringLiteral("经度"), longitude);
     form->addRow(QStringLiteral("纬度"), latitude); form->addRow(QStringLiteral("营业时间"), hours);
     form->addRow(QStringLiteral("状态"), status);
     form->addRow(QStringLiteral("同步创建充电桩"), chargerCount);
     form->addRow(QStringLiteral("默认功率/kW"), defaultPower);
-    form->addRow(QStringLiteral("价格方案 ID"), tariffId);
+    form->addRow(QStringLiteral("充电单价"), price);
     finishDialog(dialog, form);
     if (dialog.exec() != QDialog::Accepted) return;
+    pendingLongitude_.clear();
+    pendingLatitude_.clear();
     apiClient_.sendRequest(QStringLiteral("admin.station.save"), {
         {QStringLiteral("id"), createNew ? 0.0 : static_cast<double>(selectedId(stationTable_))},
         {QStringLiteral("name"), name->text()}, {QStringLiteral("region"), region->text()},
@@ -224,7 +264,7 @@ void MainWindow::editStation(bool createNew)
         {QStringLiteral("status"), status->currentData().toString()},
         {QStringLiteral("chargerCount"), chargerCount->value()},
         {QStringLiteral("defaultPowerKw"), defaultPower->value()},
-        {QStringLiteral("tariffId"), tariffId->value()}
+        {QStringLiteral("priceCentsPerKwh"), qRound(price->value() * 100.0)}
     });
 }
 
@@ -317,9 +357,11 @@ void MainWindow::setUserStatus()
     if (id <= 0 || row < 0) { QMessageBox::information(this, QStringLiteral("请选择"), QStringLiteral("请先选择一个用户。")); return; }
     const QString target = cellText(userTable_, row, 6) == QStringLiteral("正常")
                                ? QStringLiteral("disabled") : QStringLiteral("active");
+    QString phone = cellText(userTable_, row, 4);
+    if (phone.size() == 11) phone = phone.left(3) + QStringLiteral("****") + phone.right(4);
     if (QMessageBox::question(this, QStringLiteral("确认"),
-            QStringLiteral("确定将用户 %1 设置为%2？")
-                .arg(cellText(userTable_, row, 1), statusText(target))) != QMessageBox::Yes) return;
+            QStringLiteral("确定将用户 %1（%2）设置为%3？")
+                .arg(phone, cellText(userTable_, row, 3), statusText(target))) != QMessageBox::Yes) return;
     apiClient_.sendRequest(QStringLiteral("admin.user.setStatus"), {
         {QStringLiteral("userId"), static_cast<double>(id)}, {QStringLiteral("status"), target}});
 }

@@ -6,14 +6,15 @@
 - GCC/G++ 11 或更高
 - qmake 3.1、Qt 6.2 或更高
 - Qt 模块：Core、Concurrent、Network、Sql、Widgets、Test、Charts、WebEngineWidgets
-- SQLite Qt 驱动、Python 3.10 或更高
+- SQLite Qt 驱动、Python 3.10 或更高、pandas、matplotlib、Pillow
 
 Ubuntu 22.04 安装命令：
 
 ```bash
 sudo apt update
 sudo apt install -y build-essential qmake6 qt6-base-dev libqt6sql6-sqlite \
-  libqt6charts6-dev qt6-webengine-dev qt6-webengine-dev-tools python3
+  libqt6charts6-dev qt6-webengine-dev qt6-webengine-dev-tools \
+  python3 python3-pandas python3-matplotlib python3-pil
 ```
 
 BitDev 虚拟机已验证 `/usr/bin/qmake6` 使用 Qt 6.2.4。
@@ -26,7 +27,7 @@ BitDev 虚拟机已验证 `/usr/bin/qmake6` 使用 Qt 6.2.4。
 - 用户端：`evcs_user_client.pro`
 - 管理端：`evcs_admin_client.pro`
 
-测试程序也各自提供独立 `.pro`。第一次配置 Kit 时选择系统 Qt 6.2.4/qmake6，构建目录应放在项目目录之外。
+测试程序也各自提供独立 `.pro`。第一次配置 Kit 时选择系统 Qt 6.2.4/qmake6，构建目录应放在项目目录之外。虚拟机内的逐步图文式操作顺序见 `vm-qtcreator-guide.md`。
 
 ## 3. 命令行构建和测试
 
@@ -53,25 +54,25 @@ chmod +x ./*.sh
 ./run_dashboard.sh
 ```
 
-运行数据默认写到项目同级的 `evcs-runtime`，不会在工程根目录生成子目录。默认端口：TCP `45454`，大屏 HTTP `8080`。
+运行数据默认写到项目同级的 `evcs-runtime`，不会在工程根目录生成子目录。默认端口：TCP `8888`，大屏 HTTP `8080`。
 
 ## 5. 腾讯地图与离线回退
 
 ```bash
 export EVCS_TENCENT_MAP_KEY='你的-WebService-Key'
 export EVCS_TENCENT_MAP_REFERER='你的应用名'
-./run_user_client.sh
+./run_server.sh
 ```
 
 未配置 Key 时，可输入“中关村、海淀、亦庄、大兴、望京、朝阳”等教学位置，程序仍会计算经纬度、距离排序并展示离线导航预览。
 
-## 6. 大屏和数据预处理
+## 6. 大屏和数据流水线
 
 ```bash
 ./test_dashboard.sh
-python3 preprocess_analytics.py \
+python3 data_pipeline.py all \
   --database ../evcs-runtime/evcharging.db \
-  --output-dir /tmp/evcs-processed
+  --data-root ../evcs-runtime/data
 ```
 
 ## 7. 发布包
