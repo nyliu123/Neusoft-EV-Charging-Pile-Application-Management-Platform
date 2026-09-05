@@ -30,6 +30,9 @@ public:
     void reconnectNow();
     void login(const QString &phone);
     void logout();
+    // Activate a session obtained outside the phone-login flow (e.g. admin
+    // login) so the heartbeat timer keeps it alive on the server.
+    void activateSession(const QString &sessionId);
     State state() const;
 
     // Send a frame to the server. Returns the request_id used.

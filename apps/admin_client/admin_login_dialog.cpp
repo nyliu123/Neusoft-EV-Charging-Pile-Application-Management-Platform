@@ -112,6 +112,7 @@ AdminLoginDialog::AdminLoginDialog(PlatformClient *client, QWidget *parent)
             const QJsonObject data = payload.value(QStringLiteral("data")).toObject();
             session.adminId = data.value(QStringLiteral("admin_id")).toInt();
             session.username = data.value(QStringLiteral("username")).toString();
+            session.sessionId = data.value(QStringLiteral("session_id")).toString();
             session.isLoggedIn = true;
         }
         onLoginResponse(success, message, session);
