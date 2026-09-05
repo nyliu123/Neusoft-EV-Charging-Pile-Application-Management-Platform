@@ -1,3 +1,4 @@
+#include "phone_login_widget.h"
 #include "network/platform_client.h"
 
 #include <QApplication>
@@ -72,9 +73,8 @@ int main(int argc, char *argv[])
     titleFont.setBold(true);
     title->setFont(titleFont);
     layout->addWidget(title);
-    layout->addWidget(new QLabel(
-        QStringLiteral("用户端主干已就绪：登录、找站、充电、会员与咨询页面将在功能分支接入。"),
-        central));
+    layout->addWidget(new PhoneLoginWidget(central));
+
     auto *connectionLabel = new QLabel(QStringLiteral("连接状态：正在连接"), central);
     auto *retryButton = new QPushButton(QStringLiteral("重新连接"), central);
     layout->addWidget(connectionLabel);

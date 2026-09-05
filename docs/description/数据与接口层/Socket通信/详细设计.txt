@@ -1,0 +1,307 @@
+================================================================================
+  数据与接口层 / Socket通信（UML-054 ~ UML-055，对应 B=54~55）
+================================================================================
+
+  中任务概述：
+  本中任务定义充电用户端、PC运营管理端与充电桩服务端之间的
+  TCP Socket通信机制。涵盖连接生命周期管理（UML-054）和
+  消息帧格式与粘包处理（UML-055）。
+
+  这是充电用户端（UML-010~033）和PC运营管理端（UML-034~046）
+  与服务端通信的底层基础设施——所有上层消息（LOGIN_REQ、
+  ADMIN_LOGIN_REQ、QUERY_STATIONS_REQ 等）都通过本中任务
+  定义的Socket通道传输。
+
+  组件清单（本中任务涉及）：
+  - 客户端Socket管理器（用户端和管理端各自维护的TCP连接管理器）
+  - 服务端Socket监听器（服务端接受连接的入口）
+  - 消息分发器（服务端按消息类型路由到各领域服务）
+  - 消息编解码器（客户端和服务端共享的消息序列化/反序列化模块）
+
+  解耦设计：
+  - Socket通信层是传输层基础设施，不包含任何业务逻辑
+  - 上层各领域服务（用户服务、站点服务等）只使用已定义的
+    消息类型（如LOGIN_REQ），不关心Socket如何传输
+  - 客户端Socket管理器对上层提供 send(msg_type, payload) 和
+    on_message(msg_type, payload) 回调接口
+  - 服务端消息分发器根据 msg_type 路由到对应服务：
+    LOGIN_* → 用户服务
+    GEOCODE_* → 站点服务
+    QUERY_STATIONS_* / QUERY_PILES_* → 站点服务
+    RESERVE_* / START_CHARGE_* / END_CHARGE_* / CHARGE_UPDATE → 充电服务
+    SETTLE_* → 充电服务
+    QUERY_ORDERS_* / CHECK_PENDING_* → 订单服务
+    ADMIN_LOGIN_* → 管理端服务
+    ADMIN_QUERY_* / ADMIN_ACTION_* → 管理端服务
+
+  与已有两个系统的兼容关系：
+  ┌─────────────┐                ┌─────────────┐
+  │  充电用户端   │                │ PC运营管理端  │
+  │ Socket管理器  │                │ Socket管理器  │
+  └──────┬──────┘                └──────┬──────┘
+         │                              │
+         │    TCP Socket (自定义协议)      │
+         │                              │
+         └──────────┬───────────────────┘
+                    │
+           ┌────────┴────────┐
+           │ 服务端Socket监听  │
+           │ ├─ 消息分发器    │
+           │ └─ 各领域服务    │
+           └─────────────────┘
+
+
+------------------------------------------------------------
+【UML-054】客户端服务端连接
+------------------------------------------------------------
+
+■ 场景
+  充电用户端或PC运营管理端启动时，客户端Socket管理器主动向
+  服务端发起TCP连接。连接建立后，客户端可通过此连接发送
+  业务消息和接收响应。连接在应用运行期间保持，应用关闭时
+  主动断开。网络异常时支持自动重连。
+
+■ 参与者
+  - 客户端Socket管理器（用户端/管理端各自实例）
+  - 服务端Socket监听器（服务端TCP Server）
+  - 消息分发器（服务端，连接建立后用于路由消息）
+
+■ 前置条件
+  - 服务端已启动，TCP监听端口已开放（默认端口 8888）
+  - 客户端已知服务端地址（默认 127.0.0.1:8888，可配置）
+
+■ 处理流程
+  1. 客户端应用启动 → 客户端Socket管理器：触发连接初始化
+  2. 客户端Socket管理器 → 客户端Socket管理器：创建 QTcpSocket
+     实例，配置服务端地址和端口
+  3. 客户端Socket管理器 → 服务端Socket监听器：调用
+     socket->connectToHost(host, port) 发起TCP三次握手
+  4. alt 连接成功
+     - 服务端Socket监听器 → 服务端Socket监听器：accept 新连接，
+       创建 QTcpSocket 服务端实例，分配唯一 client_id
+     - 服务端Socket监听器 → 消息分发器：注册该连接，
+       绑定 readyRead 信号到消息接收处理函数
+     - 服务端Socket监听器 → 客户端Socket管理器：TCP连接建立
+     - 客户端Socket管理器 → 客户端Socket管理器：标记 connected=true，
+       启动心跳定时器（每30秒发送一次）
+     - 客户端Socket管理器 → 上层界面：发出 connected 信号
+     - 客户端Socket管理器 → 服务端Socket监听器：发送 HEARTBEAT
+       { client_type: "user" 或 "admin" }
+     - 服务端Socket监听器 → 客户端Socket管理器：返回
+       HEARTBEAT_RESP { server_time }，确认连接活跃
+     - （上层界面进入登录流程：用户端→UML-010，管理端→UML-034）
+
+   else 连接失败（服务端未启动或网络不可达）
+     - 客户端Socket管理器 → 客户端Socket管理器：记录连接失败，
+       启动重连定时器（每5秒尝试一次）
+     - 客户端Socket管理器 → 上层界面：发出 connection_failed 信号
+     - 上层界面 → 用户：显示"无法连接服务器，正在重连..."
+     - loop 重连尝试（最多10次）
+       - 客户端Socket管理器 → 服务端Socket监听器：重试 connectToHost
+       - alt 重连成功
+         - （进入连接成功流程）
+       else 重连失败
+         - 继续等待5秒后重试
+       end
+     - alt 10次重连全部失败
+       - 客户端Socket管理器 → 上层界面：发出 connection_failed 信号
+       - 上层界面 → 用户：显示"服务器连接失败，请检查网络后重启应用"
+       - 客户端Socket管理器 → 客户端Socket管理器：停止重连定时器
+     end
+  end
+
+  5. （连接活跃期间）
+  6. loop 心跳维持
+     - alt 每30秒（客户端定时器）
+       - 客户端Socket管理器 → 服务端Socket监听器：发送 HEARTBEAT
+       - alt 服务端正常
+         - 服务端Socket监听器 → 客户端Socket管理器：返回 HEARTBEAT_RESP
+       else 服务端无响应（3秒超时）
+         - 客户端Socket管理器 → 客户端Socket管理器：判定连接断开，
+           标记 connected=false
+         - 客户端Socket管理器 → 上层界面：发出 disconnected 信号
+         - 上层界面 → 用户：提示"网络连接断开，正在重连..."
+         - 客户端Socket管理器 → 客户端Socket管理器：启动重连流程
+       end
+     end
+  end
+
+  7. alt 应用正常关闭
+     - 客户端应用 → 客户端Socket管理器：触发关闭
+     - 客户端Socket管理器 → 服务端Socket监听器：发送 DISCONNECT
+       { reason: "app_close" }
+     - 客户端Socket管理器 → 客户端Socket管理器：socket->disconnectFromHost()，
+       关闭TCP连接
+     - 服务端Socket监听器 → 服务端Socket监听器：检测连接断开，
+       注销该 client_id，清理相关资源
+   else 网络异常断开（非主动关闭）
+     - 服务端Socket监听器 → 服务端Socket监听器：检测 SocketError，
+       注销该 client_id，清理资源
+     - 客户端Socket管理器 → 客户端Socket管理器：检测连接断开，
+       启动重连流程
+   end
+
+■ 输出
+  - 连接成功：TCP连接建立，心跳定时器启动，上层进入登录流程
+  - 连接失败：显示提示，自动重连，10次失败后提示重启
+  - 断开：服务端清理资源，客户端尝试重连或提示用户
+
+■ 关联
+  - 前序：无（应用启动时最先执行）
+  - 后续：UML-010~033（用户端所有消息）、UML-034~046（管理端所有消息）
+    都通过此连接传输
+  - UML-055（消息结构与粘包处理）：定义在此连接上传输的消息格式
+  - 兼容性：用户端和管理端使用相同的Socket连接机制，区别仅在
+    HEARTBEAT 中的 client_type 标识和使用的消息类型不同
+
+
+------------------------------------------------------------
+【UML-055】消息结构与粘包处理
+------------------------------------------------------------
+
+■ 场景
+  定义客户端与服务端之间消息帧的二进制格式和粘包处理机制。
+  所有业务消息（LOGIN_REQ、ADMIN_LOGIN_REQ、QUERY_STATIONS_REQ
+  等，见系统架构概述的消息类型表）都按照此格式编解码。
+  粘包处理确保在TCP流式传输中正确拆分多条消息，不丢失、
+  不截断、不混乱。
+
+■ 参与者
+  - 消息编解码器（客户端和服务端共享的编码/解码模块）
+  - 客户端Socket管理器（调用编解码器发送消息）
+  - 服务端Socket监听器（调用编解码器接收消息）
+  - 消息分发器（接收解码后的消息，路由到领域服务）
+
+■ 消息帧格式
+  ┌──────────────────┬──────────────────┬──────────────────────┐
+  │ 消息类型 (4字节)  │ 载荷长度 (4字节)  │ JSON 载荷 (变长)      │
+  │ int32_t msg_type │ int32_t length   │ byte[] json_payload   │
+  └──────────────────┴──────────────────┴──────────────────────┘
+
+  说明：
+  - 消息类型：4字节整数（大端序），对应系统架构概述中定义的
+    消息类型枚举（如 LOGIN_REQ=0x01, LOGIN_RESP=0x02 等）
+  - 载荷长度：4字节整数（大端序），表示JSON载荷的字节数
+  - JSON载荷：变长字节流，UTF-8编码的JSON字符串
+  - 消息帧总长度 = 8 + 载荷长度
+
+  编码示例（客户端发送 LOGIN_REQ）：
+  msg_type = 0x01 (LOGIN_REQ)
+  payload = {"phone":"13800138000"}
+  json_bytes = UTF8_encode(payload) → [0x7B, 0x22, 0x70, ...]
+  length = len(json_bytes)
+  帧 = [0x00,0x00,0x00,0x01] + [0x00,0x00,0x00,length] + json_bytes
+
+■ 粘包处理机制
+  TCP是流式协议，不保证消息边界。可能出现的粘包场景：
+    1）两条消息合并：recv一次读取到 msg1 + msg2 的完整字节
+    2）半条消息：recv只读取到 msg1 的部分字节
+    3）跨消息半包：recv读取到 msg1完整 + msg2部分
+
+  处理策略（接收方固定步骤）：
+  1. 接收方维护一个接收缓冲区（QByteArray recv_buffer）
+  2. Socket readyRead 信号触发时，读取所有可用字节追加到 recv_buffer
+  3. loop 解包循环
+     - alt recv_buffer.size() >= 8（至少有消息头）
+       - 读取前4字节 → msg_type
+       - 读取后4字节 → payload_length
+       - alt recv_buffer.size() >= 8 + payload_length（载荷完整）
+         - 读取 payload_length 字节 → json_payload
+         - 从 recv_buffer 移除已读取的 (8 + payload_length) 字节
+         - 编解码器 → 消息分发器：传递 (msg_type, json_payload)
+         - 消息分发器按 msg_type 路由到对应领域服务
+         - 继续循环（处理缓冲区中剩余的完整消息）
+       else 载荷不完整
+         - 跳出循环，等待更多数据到达
+       end
+     else 缓冲区不足8字节
+       - 跳出循环，等待消息头到达
+     end
+  end
+
+  此机制确保：
+  - 粘包（多条消息合并）：循环拆分，逐条处理
+  - 半包（消息不完整）：等待后续数据，不处理不完整消息
+  - 跨消息半包：先处理完整的msg1，msg2的剩余部分等待
+
+■ 消息编解码接口
+  encode_message(msg_type, payload_dict) → QByteArray
+    -- 编码：消息类型 + JSON序列化 + 帧组装
+    -- 输入：消息类型枚举值 + Python/Qt字典对象
+    -- 输出：完整的消息帧字节流
+    -- 用于客户端发送消息和服务端返回响应
+
+  decode_message(recv_buffer) → (msg_type, payload_dict, consumed_bytes) | null
+    -- 解码：从接收缓冲区中解析一条完整消息
+    -- 输入：接收缓冲区（QByteArray，可能包含多条消息）
+    -- 输出：(消息类型, 载荷字典, 消耗的字节数)
+    --       若消息不完整则返回 null（需等待更多数据）
+    -- 用于客户端接收响应和服务端接收请求
+
+  parse_all_messages(recv_buffer) → List<(msg_type, payload_dict)>
+    -- 循环调用 decode_message，从缓冲区中解析所有完整消息
+    -- 返回消息列表，并从缓冲区移除已解析的字节
+    -- 未完整消息保留在缓冲区中等待下次到达
+
+■ 异常处理
+  - JSON解析失败：payload 不是合法JSON
+    - 编解码器 → 消息分发器：返回 ERROR_RESP
+      { error: "invalid_json", original_msg_type }
+    - 消息分发器不崩溃，继续处理后续消息
+
+  - 未知消息类型：msg_type 不在已定义枚举中
+    - 消息分发器 → 客户端：返回 ERROR_RESP
+      { error: "unknown_msg_type", msg_type }
+    - 忽略未知消息，不影响连接
+
+  - 载荷长度异常：payload_length 超出合理范围（如 > 10MB）
+    - 编解码器 → 消息分发器：判定为非法消息
+    - 消息分发器 → 客户端：断开连接（疑似恶意客户端）
+    - 防止恶意大长度字段导致内存耗尽
+
+  - Socket读取错误：底层TCP连接异常
+    - Qt信号 errorOccurred 触发
+    - Socket管理器标记连接断开，触发重连流程（见 UML-054）
+
+■ 与上层系统的消息路由关系
+  消息分发器根据 msg_type 路由到领域服务：
+
+  充电用户端消息路由：
+    LOGIN_REQ/RESP      → 用户服务（UML-011/012）
+    USER_UPDATE_REQ/RESP → 用户服务（UML-015）
+    RECHARGE_REQ/RESP    → 用户服务（UML-016）
+    GEOCODE_REQ/RESP     → 站点服务（UML-018）
+    QUERY_STATIONS_REQ/RESP → 站点服务（UML-018）
+    QUERY_PILES_REQ/RESP → 站点服务（UML-019）
+    RESERVE_REQ/RESP     → 充电服务（UML-025）
+    START_CHARGE_REQ/RESP → 充电服务（UML-027）
+    CHARGE_UPDATE        → 充电服务（UML-028，服务端推送）
+    END_CHARGE_REQ       → 充电服务（UML-030）
+    SETTLE_RESP          → 充电服务（UML-031）
+    QUERY_ORDERS_REQ/RESP → 订单服务（UML-033）
+    CHECK_PENDING_REQ/RESP → 订单服务（UML-025前置）
+    HEARTBEAT/RESP       → Socket管理器（连接维持）
+
+  PC运营管理端消息路由：
+    ADMIN_LOGIN_REQ/RESP  → 管理端服务（UML-034）
+    ADMIN_QUERY_REQ/RESP  → 管理端服务（UML-035~046）
+    ADMIN_ACTION_REQ/RESP → 管理端服务（UML-039/042/045）
+    HEARTBEAT/RESP        → Socket管理器（连接维持）
+
+■ 输出
+  - 编码成功：返回完整消息帧字节流，可写入Socket
+  - 解码成功：返回消息类型+载荷，消息分发器路由处理
+  - 消息不完整：返回null，保留在缓冲区等待更多数据
+  - 异常：返回错误响应或断开连接，不影响其他消息处理
+
+■ 关联
+  - 前序：UML-054（连接已建立，消息在连接上传输）
+  - 后续：所有上层消息（UML-010~046）都通过此编解码机制传输
+  - 兼容性：
+    - 用户端和管理端使用相同的消息帧格式和粘包处理逻辑
+    - 区别仅在使用的消息类型不同（LOGIN_* vs ADMIN_LOGIN_*）
+    - 服务端消息分发器统一处理两种客户端的消息
+  - 安全性：
+    - 载荷长度上限校验（防止恶意大长度）
+    - JSON解析容错（不崩溃）
+    - 未知消息类型容错（不影响连接）

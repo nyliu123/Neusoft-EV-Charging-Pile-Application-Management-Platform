@@ -1,0 +1,442 @@
+================================================================================
+  大数据与机器学习 / 数据处理（UML-059 ~ UML-062，对应 B=59~62）
+================================================================================
+
+  中任务概述：
+  本中任务是大数据模块的数据输入端，负责从业务数据库（SQLite）
+  中采集原始数据，存储为分析数据集（CSV格式），进行数据清洗
+  和特征工程预处理，最终输出可供模型训练和分析使用的标准化
+  数据集。整个数据处理流程是离线批处理，定时执行（如每日凌晨
+  重新生成一次）。
+
+  组件清单（本中任务涉及）：
+  - 数据采集模块（DataCollector，Python脚本，从SQLite读取数据）
+  - 分析数据集（CSV文件，存储在 data/ 目录下）
+  - 数据预处理模块（DataPreprocessor，Python脚本，pandas处理）
+  - 数据分析模块（DataAnalyzer，Python脚本，探索性统计分析）
+  - SQLite 业务数据库（数据源）
+
+  解耦设计：
+  - 大数据模块完全独立于业务系统，通过"读取数据库"单向获取数据
+  - 大数据模块不修改业务数据库（只读），分析结果写入CSV文件
+  - 数据处理是离线批处理，不影响业务系统的实时性能
+  - 数据采集、存储、预处理、分析四步形成流水线，每步的输出
+    是下一步的输入，各步可独立运行和重跑
+
+  与已有两个系统的兼容关系：
+  ┌─────────────┐         ┌─────────────┐
+  │  充电用户端   │         │ PC运营管理端  │
+  │ (Qt/C++)    │         │ (Qt/C++)    │
+  └──────┬──────┘         └──────┬──────┘
+         │                       │
+         └─────────┬─────────────┘
+                   │ 写入业务数据
+          ┌────────┴────────┐
+          │  SQLite 数据库   │ ←── 业务系统的唯一真相源
+          │  (users/piles/   │
+          │   stations/orders)│
+          └────────┬────────┘
+                   │ 只读读取（UML-059 数据采集）
+          ┌────────┴────────┐
+          │   分析数据集     │
+          │  (CSV 文件)     │
+          └────────┬────────┘
+                   │ 预处理/分析/训练/预测
+          ┌────────┴────────┐
+          │ 大数据分析模块    │
+          │ (Python)        │
+          └─────────────────┘
+
+
+------------------------------------------------------------
+【UML-059】数据采集
+------------------------------------------------------------
+
+■ 场景
+  数据采集模块定时（每日凌晨2:00）从SQLite业务数据库中读取
+  所有业务表的全量数据，导出为CSV文件，作为分析数据集的
+  原始输入。采集过程为只读操作，不修改业务数据库中的任何数据。
+
+■ 参与者
+  - 数据采集模块（DataCollector，Python脚本）
+  - SQLite 业务数据库（数据源）
+  - 分析数据集（CSV输出文件）
+
+■ 前置条件
+  - 业务数据库（SQLite文件）存在且可访问
+  - 数据输出目录（data/raw/）存在且有写入权限
+  - 采集脚本有数据库读取权限（只读模式打开）
+
+■ 处理流程
+  1. 调度器（cron或手动触发） → 数据采集模块：执行采集任务
+  2. 数据采集模块 → 数据采集模块：连接SQLite数据库（只读模式）
+  3. 数据采集模块 → SQLite：查询 users 表全量数据
+     SELECT * FROM users ORDER BY user_id ASC
+  4. SQLite → 数据采集模块：返回所有用户记录
+  5. 数据采集模块 → 分析数据集：写入 users.csv
+     列：user_id, phone, nickname, avatar_path, balance,
+          register_time, status
+  6. 数据采集模块 → SQLite：查询 charging_stations 表全量数据
+     SELECT * FROM charging_stations ORDER BY station_id ASC
+  7. SQLite → 数据采集模块：返回所有充电站记录
+  8. 数据采集模块 → 分析数据集：写入 stations.csv
+     列：station_id, station_name, address, longitude,
+          latitude, price_per_kwh
+  9. 数据采集模块 → SQLite：查询 charging_piles 表全量数据
+     SELECT * FROM charging_piles ORDER BY pile_id ASC
+  10. SQLite → 数据采集模块：返回所有充电桩记录
+  11. 数据采集模块 → 分析数据集：写入 piles.csv
+      列：pile_id, station_id, pile_number, pile_type, power_kw,
+           status, total_charge_count, total_charge_duration
+  12. 数据采集模块 → SQLite：查询 orders 表全量数据
+      SELECT * FROM orders ORDER BY order_id ASC
+  13. SQLite → 数据采集模块：返回所有订单记录
+  14. 数据采集模块 → 分析数据集：写入 orders.csv
+      列：order_id, user_id, pile_id, station_id, status,
+           reserve_time, start_time, end_time,
+           charge_amount_kwh, price_per_kwh, total_fee
+  15. 数据采集模块 → 数据采集模块：记录采集日志
+      （采集时间、各表记录数、总数据量、采集耗时）
+  16. 数据采集模块 → SQLite：关闭数据库连接
+
+■ 采集策略
+  - 频率：每日1次（凌晨2:00，业务低峰期）
+  - 方式：全量导出（非增量）—— 数据量小，全量导出简单可靠
+  - 文件命名：{table_name}.csv（固定文件名，每次覆盖）
+  - 备份：每次采集前将旧文件备份为 {table_name}_prev.csv
+  - 验证：采集完成后校验CSV行数与数据库行数一致
+
+■ 异常处理
+  - 数据库连接失败：记录错误日志，保留上次采集数据，不覆盖
+  - 表查询失败：跳过该表，其他表继续采集，记录错误
+  - 写入文件失败：磁盘空间检查，记录错误，不覆盖原文件
+  - 数据校验不通过：行数不一致时回滚（恢复_prev备份）
+
+■ 输出
+  - data/raw/users.csv — 全量用户数据
+  - data/raw/stations.csv — 全量充电站数据
+  - data/raw/piles.csv — 全量充电桩数据
+  - data/raw/orders.csv — 全量订单数据
+  - data/raw/collect_log.txt — 采集日志
+
+■ 关联
+  - 前序：业务数据库（UML-047~052）中有数据产生
+  - 后续：UML-060（数据存储）、UML-061（数据预处理）
+  - 兼容性：
+    - 数据采集只读取数据库，不影响业务系统运行
+    - 与两个Qt客户端完全解耦——客户端不知道大数据模块的存在
+    - 采集时机选在业务低峰期，避免与业务系统争用数据库
+
+
+------------------------------------------------------------
+【UML-060】数据存储
+------------------------------------------------------------
+
+■ 场景
+  定义大数据分析模块的文件存储结构。原始采集数据、预处理后
+  的数据、模型训练结果、预测输出等都按照统一的目录结构存储。
+  数据存储以CSV为主要格式（简单、通用、易查看），模型文件
+  使用Python的pickle或joblib格式。
+
+■ 参与者
+  - 数据存储管理器（StorageManager，Python模块，封装文件读写）
+  - 分析数据集（CSV文件目录树）
+
+■ 目录结构
+  data/
+  ├── raw/                    # 原始采集数据（UML-059输出）
+  │   ├── users.csv
+  │   ├── stations.csv
+  │   ├── piles.csv
+  │   └── orders.csv
+  │
+  ├── processed/              # 预处理后的数据（UML-061输出）
+  │   ├── daily_kwh.csv       # 每日充电量时序
+  │   ├── hourly_kwh.csv      # 每小时充电量时序
+  │   ├── station_daily.csv   # 各站点每日统计
+  │   ├── user_features.csv   # 用户特征
+  │   └── pile_features.csv   # 充电桩特征
+  │
+  ├── analysis/               # 分析结果（UML-062输出）
+  │   ├── station_stats.csv   # 站点统计指标
+  │   ├── user_stats.csv      # 用户统计指标
+  │   └── report.txt          # 分析报告
+  │
+  ├── models/                 # 训练好的模型（UML-066输出）
+  │   ├── demand_forecast.pkl  # 负荷预测模型
+  │   ├── peak_predict.pkl     # 高峰预测模型
+  │   └── recommendation.pkl   # 推荐模型
+  │
+  ├── predictions/            # 预测结果（UML-067~068输出）
+  │   ├── demand_next7.csv    # 未来7天负荷预测
+  │   ├── idle_predict.csv    # 空闲桩预测
+  │   └── peak_hours.csv      # 高峰时段预测
+  │
+  └── logs/                   # 运行日志
+      ├── collect.log
+      ├── preprocess.log
+      ├── train.log
+      └── predict.log
+
+■ 数据格式规范
+  - CSV文件：UTF-8编码，逗号分隔，首行为列名
+  - 日期时间格式：YYYY-MM-DD HH:MM:SS
+  - 数值格式：保留合理小数位（电量保留2位，百分比保留4位）
+  - 缺失值：空字符串表示（pandas读入后自动为NaN）
+
+■ 存储管理操作接口
+  save_csv(dataframe, path) → bool
+    -- 将pandas DataFrame保存为CSV
+    -- 自动创建父目录，文件存在则覆盖
+
+  load_csv(path) → DataFrame
+    -- 从CSV加载为pandas DataFrame
+    -- 文件不存在时抛出FileNotFoundError
+
+  save_model(model, path) → bool
+    -- 使用joblib保存训练好的模型
+    -- 自动创建父目录
+
+  load_model(path) → model
+    -- 使用joblib加载模型
+
+  backup_file(path) → void
+    -- 备份文件为 _prev 后缀
+    -- 用于采集/训练前备份旧版本
+
+■ 输出
+  - 统一的目录结构和文件命名规范
+  - 各模块通过 StorageManager 读写数据，不直接操作文件路径
+
+■ 关联
+  - 前序：UML-059（数据采集，输出到 raw/）
+  - 后续：UML-061（数据预处理，从 raw/ 读取，输出到 processed/）
+  - 所有大数据模块都依赖此存储规范
+
+
+------------------------------------------------------------
+【UML-061】数据预处理
+------------------------------------------------------------
+
+■ 场景
+  数据预处理模块读取原始CSV数据，进行清洗、转换、特征工程，
+  生成可供模型训练和分析使用的标准化数据集。预处理是数据
+  科学流程中的关键步骤——"垃圾进，垃圾出"，预处理的质量
+  直接决定模型效果。
+
+■ 参与者
+  - 数据预处理模块（DataPreprocessor，Python脚本，基于pandas）
+  - 原始数据（data/raw/*.csv）
+  - 预处理后数据（data/processed/*.csv）
+
+■ 前置条件
+  - UML-059 数据采集已完成，raw/ 目录下有原始CSV文件
+
+■ 处理流程
+
+  步骤1：数据清洗
+    a）缺失值处理
+       - 检查各列缺失率
+       - 订单时间缺失：根据状态推断（如reserved订单无start_time正常）
+       - 充电量为null且状态=settled：标记异常，删除或填充0
+       - 用户昵称为null：填充为"未知用户"
+
+    b）异常值处理
+       - 充电量异常：charge_amount_kwh < 0 的记录删除
+       - 充电量过大：charge_amount_kwh > 1000（超出单次充电合理范围）
+         的记录标记为异常
+       - 费用异常：total_fee < 0 的记录删除
+       - 时长异常：充电时长 < 1分钟或 > 24小时的记录标记
+
+    c）重复值处理
+       - 检查 order_id 唯一性，重复记录去重
+       - 保留最新一条或第一条
+
+  步骤2：时间特征提取
+    从订单时间戳中提取时间维度特征：
+    - 日期：date = reserve_time.date()
+    - 小时：hour = reserve_time.hour
+    - 星期几：weekday = reserve_time.weekday()（0=周一, 6=周日）
+    - 是否周末：is_weekend = (weekday >= 5)
+    - 时段：time_slot = 早高峰(7-9)/午间(11-13)/晚高峰(17-20)/其他
+    - 是否工作日：is_workday = not is_weekend（暂不考虑节假日）
+
+  步骤3：时序数据聚合
+    a）按日聚合（daily_kwh.csv）
+       日期, 总充电量(kwh), 总费用(元), 订单数, 充电时长(h)
+       按 date 分组，对 settled 订单求和
+       用途：负荷预测（UML-067）的输入
+
+    b）按小时聚合（hourly_kwh.csv）
+       日期, 小时, 总充电量(kwh), 订单数, 平均充电量
+       按 date+hour 分组，对 settled 订单求和
+       用途：高峰时段预测（UML-068）的输入
+
+    c）按站点按日聚合（station_daily.csv）
+       站点ID, 日期, 充电量, 费用, 订单数, 利用率
+       按 station_id+date 分组
+       用途：站点级分析和推荐（UML-069）
+
+  步骤4：用户特征构建（user_features.csv）
+    从订单数据中为每个用户构建特征：
+    - user_id
+    - total_orders：总订单数
+    - total_kwh：累计充电量
+    - total_fee：累计消费
+    - avg_kwh_per_order：平均每次充电量
+    - charge_frequency：充电频次（订单数/注册天数）
+    - preferred_station：最常去的站点
+    - peak_habit：是否高峰时段充电（1=经常，0=不经常）
+    用途：用户画像、推荐系统
+
+  步骤5：充电桩特征构建（pile_features.csv）
+    从订单数据中为每个充电桩构建特征：
+    - pile_id, station_id
+    - total_orders：累计订单数
+    - total_kwh：累计充电量
+    - fault_rate：故障率（故障时长/总时长）
+    - avg_daily_usage：日均使用时长
+    - peak_usage_rate：高峰时段使用率
+    用途：桩状态预测、异常检测
+
+  步骤6：数据归一化（可选，模型训练时按需执行）
+    - 数值特征 Min-Max 归一化到 [0,1]
+    - 或 Z-Score 标准化（均值0，方差1）
+    - 用于对输入敏感的模型（如神经网络、SVM）
+
+■ 输出
+  - data/processed/daily_kwh.csv — 每日充电量时序
+  - data/processed/hourly_kwh.csv — 每小时充电量时序
+  - data/processed/station_daily.csv — 站点日统计
+  - data/processed/user_features.csv — 用户特征
+  - data/processed/pile_features.csv — 充电桩特征
+  - data/logs/preprocess.log — 预处理日志（清洗记录、异常数）
+
+■ 关联
+  - 前序：UML-059（数据采集，读取 raw/）
+  - 后续：UML-062（数据分析）、UML-065（训练特征）、
+    UML-066（时序模型训练）
+  - 说明：预处理是数据分析和建模的基础，数据质量决定模型上限
+
+
+------------------------------------------------------------
+【UML-062】数据分析
+------------------------------------------------------------
+
+■ 场景
+  数据分析模块对预处理后的数据进行探索性统计分析，生成数据
+  洞察和统计报告。分析结果用于：
+    1）理解业务现状（站点利用率、用户行为、营收趋势）
+    2）为模型训练提供特征选择依据
+    3）生成大屏展示的统计数据（UML-063可视化大屏）
+
+■ 参与者
+  - 数据分析模块（DataAnalyzer，Python脚本，基于pandas+matplotlib）
+  - 预处理数据（data/processed/*.csv）
+  - 分析结果（data/analysis/）
+
+■ 前置条件
+  - UML-061 数据预处理已完成，processed/ 目录下有数据
+
+■ 分析内容
+
+  1. 站点维度分析（station_stats.csv）
+     每个站点的统计指标：
+     - 总充电量、总营收、总订单数
+     - 日均充电量、日均订单数
+     - 平均单次充电量
+     - 平均利用率（使用时长/总时长）
+     - 高峰时段分布（哪些时段最忙）
+     - 桩数、快充桩占比、慢充桩占比
+
+  2. 用户维度分析（user_stats.csv）
+     用户群体画像：
+     - 用户总数、活跃用户数（近30天有订单）
+     - 人均充电量、人均消费
+     - 用户充电频次分布（高频/中频/低频用户占比）
+     - 新用户注册趋势（按周/月统计）
+     - 用户留存率（注册后7天/30天复充率）
+
+  3. 时间维度分析
+     时序规律分析：
+     - 日充电量趋势（过去N天的折线趋势）
+     - 周内规律（周一到周日的充电量对比）
+     - 日内规律（24小时的充电量分布）
+     - 高峰时段识别（充电量Top3时段）
+     - 同比/环比增长（本周 vs 上周，本月 vs 上月）
+
+  4. 充电桩维度分析
+     设备使用情况：
+     - 各桩累计充电量排名
+     - 各桩利用率排名
+     - 故障桩占比、平均故障时长
+     - 快充桩 vs 慢充桩使用对比
+
+  5. 营收分析
+     财务维度：
+     - 总营收、日均营收
+     - 营收增长率（周/月）
+     - 各站点营收占比
+     - ARPU（每用户平均收入）
+
+■ 处理流程
+  1. 数据分析模块 → 数据存储管理器：加载预处理数据
+     （daily_kwh.csv, station_daily.csv, user_features.csv 等）
+  2. 数据分析模块 → 数据分析模块：执行各维度统计计算
+     （使用 pandas 的 groupby、describe、rolling 等方法）
+  3. 数据分析模块 → 数据分析模块：生成统计表格（CSV格式）
+  4. 数据分析模块 → 数据分析模块：生成可视化图表（PNG格式，
+     使用 matplotlib 或 seaborn）
+     - 日充电量趋势图
+     - 站点利用率对比柱状图
+     - 24小时充电分布饼图
+     - 用户频次分布直方图
+  5. 数据分析模块 → 分析结果：写入 station_stats.csv、
+     user_stats.csv、report.txt 等文件
+  6. 数据分析模块 → 数据分析模块：记录分析日志
+
+■ 输出
+  - data/analysis/station_stats.csv — 站点统计指标
+  - data/analysis/user_stats.csv — 用户统计指标
+  - data/analysis/report.txt — 分析报告文本（关键发现摘要）
+  - data/analysis/figures/*.png — 分析图表（可选，用于报告）
+
+■ 关联
+  - 前序：UML-061（数据预处理，读取 processed/）
+  - 后续：
+    - UML-063（可视化大屏，部分统计数据可直接展示）
+    - UML-065（训练特征，分析结果指导特征选择）
+    - UML-069~070（智能应用，分析结果支撑推荐和预警策略）
+  - 说明：
+    - 数据分析是"理解数据"的步骤，介于预处理和建模之间
+    - 分析结果也可直接服务于大屏展示（如站点排名、用户增长等）
+
+
+------------------------------------------------------------
+  数据处理流水线总览
+------------------------------------------------------------
+
+  数据处理是大数据模块的"输入端"，形成完整的流水线：
+
+  业务数据库(SQLite)
+       │
+       ▼ UML-059 数据采集（全量导出，每日1次）
+  data/raw/*.csv（原始数据）
+       │
+       ▼ UML-060 数据存储（目录结构与格式规范）
+  StorageManager（统一读写接口）
+       │
+       ▼ UML-061 数据预处理（清洗+特征工程+聚合）
+  data/processed/*.csv（标准化数据集）
+       │
+       ├─→ UML-062 数据分析（统计分析+可视化）
+       │     data/analysis/*.csv（分析结果）
+       │
+       └─→ UML-065 模型训练（特征→模型）
+             data/models/*.pkl（训练好的模型）
+
+  流水线特点：
+  - 单向流动：采集 → 存储 → 预处理 → 分析/训练
+  - 每步输出是下一步输入，各步可独立重跑
+  - 全量批处理，非实时——每日凌晨执行一次
+  - 只读业务库，不影响业务系统运行

@@ -1,3 +1,4 @@
+#include "common/phone_validator.h"
 #include "common/protocol.h"
 #include "data/database_manager.h"
 #include "network/frame_codec.h"
@@ -19,6 +20,9 @@ private slots:
     void feeUsesOrderSnapshotAndHalfUpRounding();
     void feeRejectsInvalidDiscount();
     void databaseCreatesCoreSchema();
+    void phoneValidation_data();
+    void phoneValidation();
+    void phoneValidationMessages();
 };
 
 void FoundationTests::frameRoundTrip()
@@ -103,6 +107,51 @@ void FoundationTests::databaseCreatesCoreSchema()
     QVERIFY(query.exec(QStringLiteral("PRAGMA foreign_keys")));
     QVERIFY(query.next());
     QCOMPARE(query.value(0).toInt(), 1);
+}
+
+void FoundationTests::phoneValidation_data()
+{
+    QTest::addColumn<QString>("phone");
+    QTest::addColumn<int>("expectedError");
+
+    QTest::newRow("empty") << QString() << static_cast<int>(ev::PhoneValidationError::Empty);
+    QTest::newRow("mobile-13") << QStringLiteral("13800138000")
+                                << static_cast<int>(ev::PhoneValidationError::None);
+    QTest::newRow("mobile-19") << QStringLiteral("19912345678")
+                                << static_cast<int>(ev::PhoneValidationError::None);
+    QTest::newRow("invalid-prefix") << QStringLiteral("12800138000")
+                                     << static_cast<int>(ev::PhoneValidationError::InvalidFormat);
+    QTest::newRow("too-short") << QStringLiteral("1380013800")
+                                << static_cast<int>(ev::PhoneValidationError::LengthIncorrect);
+    QTest::newRow("too-long") << QStringLiteral("138001380000")
+                               << static_cast<int>(ev::PhoneValidationError::LengthIncorrect);
+    QTest::newRow("country-code") << QStringLiteral("+8613800138000")
+                                   << static_cast<int>(ev::PhoneValidationError::LengthIncorrect);
+    QTest::newRow("contains-space") << QStringLiteral("138 00138000")
+                                     << static_cast<int>(ev::PhoneValidationError::LengthIncorrect);
+    QTest::newRow("contains-letter") << QStringLiteral("1380013800a")
+                                      << static_cast<int>(ev::PhoneValidationError::InvalidFormat);
+    QTest::newRow("trailing-newline") << QStringLiteral("13800138000\n")
+                                       << static_cast<int>(ev::PhoneValidationError::LengthIncorrect);
+}
+
+void FoundationTests::phoneValidation()
+{
+    QFETCH(QString, phone);
+    QFETCH(int, expectedError);
+
+    const ev::PhoneValidationResult result = ev::PhoneValidator::validate(QStringView(phone));
+    QCOMPARE(static_cast<int>(result.error), expectedError);
+}
+
+void FoundationTests::phoneValidationMessages()
+{
+    QCOMPARE(ev::PhoneValidator::errorMessage(ev::PhoneValidationError::Empty),
+             QStringLiteral("请输入手机号"));
+    QCOMPARE(ev::PhoneValidator::errorMessage(ev::PhoneValidationError::LengthIncorrect),
+             QStringLiteral("请输入11位手机号"));
+    QCOMPARE(ev::PhoneValidator::errorMessage(ev::PhoneValidationError::InvalidFormat),
+             QStringLiteral("手机号格式不正确，请检查后重新输入"));
 }
 
 QTEST_APPLESS_MAIN(FoundationTests)
