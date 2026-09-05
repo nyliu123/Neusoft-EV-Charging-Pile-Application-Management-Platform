@@ -12,10 +12,12 @@ INCLUDEPATH += $$PLATFORM_ROOT/src
 
 HEADERS += \
     error_code.h \
+    password_hasher.h \
     phone_validator.h \
     protocol.h \
     result.h
 
 SOURCES += \
     common.cpp \
+    password_hasher.cpp \
     phone_validator.cpp

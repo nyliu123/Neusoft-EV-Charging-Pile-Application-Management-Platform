@@ -2,12 +2,15 @@
 
 #include "common/error_code.h"
 #include "common/protocol.h"
+#include "services/admin_auth_service.h"
+#include "services/admin_seeder.h"
 #include "services/user_service.h"
 
 #include <QDebug>
 #include <QDateTime>
 #include <QJsonObject>
 #include <QTcpSocket>
+#include <QUuid>
 #include <utility>
 
 namespace ev {
@@ -26,10 +29,25 @@ bool ServerApplication::start(const QHostAddress &address, quint16 port)
         qCritical().noquote() << "database open failed:" << databaseResult.message;
         return false;
     }
-    auto migrationResult = databaseManager_.migrate(databaseResult.data);
+    mainDatabase_ = databaseResult.data;
+    databaseReady_ = true;
+
+    auto migrationResult = databaseManager_.migrate(mainDatabase_);
     if (!migrationResult.success) {
         qCritical().noquote() << "database migration failed:" << migrationResult.message;
         return false;
+    }
+
+    // Seed default admin if the admins table is empty.
+    auto seedResult = AdminSeeder::seedIfNeeded(mainDatabase_);
+    if (!seedResult.success) {
+        qCritical().noquote() << "admin seeding failed:" << seedResult.message;
+        return false;
+    }
+    if (seedResult.data > 0) {
+        qInfo().noquote() << "seeded default admin account:"
+                          << AdminSeeder::kDefaultUsername
+                          << "/" << AdminSeeder::kDefaultPassword;
     }
 
     if (!tcpServer_.listen(address, port)) {
@@ -87,40 +105,43 @@ void ServerApplication::readClient(QTcpSocket *socket)
 void ServerApplication::processFrame(QTcpSocket *socket, const Frame &frame)
 {
     const QString requestId = frame.payload.value(QStringLiteral("request_id")).toString();
-    if (frame.messageType == static_cast<quint32>(MessageType::LoginRequest)) {
-        processLogin(socket, frame);
-        return;
-    }
-    if (frame.messageType == static_cast<quint32>(MessageType::SessionHeartbeatRequest)) {
-        processSessionHeartbeat(socket, frame);
-        return;
-    }
-    if (frame.messageType == static_cast<quint32>(MessageType::LogoutRequest)) {
-        processLogout(socket, frame);
-        return;
-    }
-    if (frame.messageType != static_cast<quint32>(MessageType::HealthRequest)) {
-        sendError(socket, requestId, QStringLiteral("message type is not implemented"));
+    const auto msgType = static_cast<MessageType>(frame.messageType);
+
+    if (msgType == MessageType::HealthRequest) {
+        const auto requestedVersion = static_cast<quint32>(
+            frame.payload.value(QStringLiteral("protocol_version")).toInteger());
+        const bool compatible = requestedVersion == ProtocolVersion;
+        const QJsonObject response {
+            {QStringLiteral("protocol_version"), static_cast<qint64>(ProtocolVersion)},
+            {QStringLiteral("request_id"), requestId},
+            {QStringLiteral("success"), compatible},
+            {QStringLiteral("code"), compatible ? QStringLiteral("OK")
+                                                 : QStringLiteral("PROTOCOL_ERROR")},
+            {QStringLiteral("message"), compatible ? QStringLiteral("service is ready")
+                                                    : QStringLiteral("unsupported protocol version")},
+            {QStringLiteral("data"), QJsonObject {
+                 {QStringLiteral("server_version"), QStringLiteral("0.1.0")},
+                 {QStringLiteral("service"), QStringLiteral("ev_server")}
+             }}
+        };
+        socket->write(FrameCodec::encode(static_cast<quint32>(MessageType::HealthResponse), response));
         return;
     }
 
-    const auto requestedVersion = static_cast<quint32>(
-        frame.payload.value(QStringLiteral("protocol_version")).toInteger());
-    const bool compatible = requestedVersion == ProtocolVersion;
-    const QJsonObject response {
-        {QStringLiteral("protocol_version"), static_cast<qint64>(ProtocolVersion)},
-        {QStringLiteral("request_id"), requestId},
-        {QStringLiteral("success"), compatible},
-        {QStringLiteral("code"), compatible ? QStringLiteral("OK")
-                                             : QStringLiteral("PROTOCOL_ERROR")},
-        {QStringLiteral("message"), compatible ? QStringLiteral("service is ready")
-                                                : QStringLiteral("unsupported protocol version")},
-        {QStringLiteral("data"), QJsonObject {
-             {QStringLiteral("server_version"), QStringLiteral("0.1.0")},
-             {QStringLiteral("service"), QStringLiteral("ev_server")}
-         }}
-    };
-    socket->write(FrameCodec::encode(static_cast<quint32>(MessageType::HealthResponse), response));
+    if (msgType == MessageType::LoginRequest) {
+        processLogin(socket, frame);
+        return;
+    }
+    if (msgType == MessageType::SessionHeartbeatRequest) {
+        processSessionHeartbeat(socket, frame);
+        return;
+    }
+    if (msgType == MessageType::LogoutRequest) {
+        processLogout(socket, frame);
+        return;
+    }
+
+    sendError(socket, requestId, QStringLiteral("message type is not implemented"));
 }
 
 void ServerApplication::processLogin(QTcpSocket *socket, const Frame &frame)
@@ -134,19 +155,63 @@ void ServerApplication::processLogin(QTcpSocket *socket, const Frame &frame)
     }
 
     const QJsonObject requestData = frame.payload.value(QStringLiteral("data")).toObject();
+    const QString role = requestData.value(QStringLiteral("role")).toString();
+
+    // Admin login path.
+    if (role == QStringLiteral("admin")) {
+        if (!databaseReady_) {
+            sendError(socket, requestId, QStringLiteral("database is not ready"));
+            return;
+        }
+
+        const QString username = requestData.value(QStringLiteral("username")).toString();
+        const QString password = requestData.value(QStringLiteral("password")).toString();
+
+        const Result<AdminInfo> authResult = AdminAuthService::authenticate(
+            username, password, mainDatabase_);
+
+        QJsonObject responseData;
+        if (authResult.success) {
+            responseData = {
+                {QStringLiteral("admin_id"), authResult.data.adminId},
+                {QStringLiteral("username"), authResult.data.username}
+            };
+            qInfo().noquote() << "admin login succeeded:" << authResult.data.username
+                              << "from" << socket->peerAddress().toString();
+        } else {
+            responseData = {};
+            qInfo().noquote() << "admin login failed for" << username
+                              << "from" << socket->peerAddress().toString()
+                              << "-" << authResult.message;
+        }
+
+        const QJsonObject response {
+            {QStringLiteral("protocol_version"), static_cast<qint64>(ProtocolVersion)},
+            {QStringLiteral("request_id"), requestId},
+            {QStringLiteral("success"), authResult.success},
+            {QStringLiteral("code"), errorCodeName(authResult.code)},
+            {QStringLiteral("message"), authResult.message},
+            {QStringLiteral("data"), responseData}
+        };
+        socket->write(FrameCodec::encode(
+            static_cast<quint32>(MessageType::LoginResponse), response));
+        return;
+    }
+
+    // User login path (default).
     const QString phone = requestData.value(QStringLiteral("phone")).toString();
     const bool isAutoRegister =
         requestData.value(QStringLiteral("is_auto_register")).toBool();
-    auto databaseResult = databaseManager_.openForCurrentThread();
-    if (!databaseResult.success) {
-        sendError(socket, requestId, QStringLiteral("database is unavailable"));
+
+    if (!databaseReady_) {
+        sendError(socket, requestId, QStringLiteral("database is not ready"));
         return;
     }
 
     const UserService service;
     const Result<LoginUserInfo> loginResult = isAutoRegister
-        ? service.registerAutomatically(databaseResult.data, phone)
-        : service.loginExistingUser(databaseResult.data, phone);
+        ? service.registerAutomatically(mainDatabase_, phone)
+        : service.loginExistingUser(mainDatabase_, phone);
     if (!loginResult.success) {
         QString message = loginResult.message;
         QString error = loginResult.message;

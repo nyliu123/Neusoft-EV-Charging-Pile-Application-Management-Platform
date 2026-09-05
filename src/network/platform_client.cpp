@@ -99,6 +99,22 @@ PlatformClient::State PlatformClient::state() const
     return state_;
 }
 
+QString PlatformClient::sendFrame(quint32 messageType, const QJsonObject &data)
+{
+    if (socket_.state() != QAbstractSocket::ConnectedState
+        && socket_.state() != QAbstractSocket::ConnectingState) {
+        return {};
+    }
+    const QString requestId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const QJsonObject payload {
+        {QStringLiteral("protocol_version"), static_cast<qint64>(ProtocolVersion)},
+        {QStringLiteral("request_id"), requestId},
+        {QStringLiteral("data"), data}
+    };
+    socket_.write(FrameCodec::encode(messageType, payload));
+    return requestId;
+}
+
 void PlatformClient::login(const QString &phone)
 {
     if (state_ != State::Ready) {
@@ -137,6 +153,24 @@ void PlatformClient::logout()
     };
     socket_.write(FrameCodec::encode(static_cast<quint32>(MessageType::LogoutRequest), payload));
     sessionResponseTimer_.start();
+}
+
+void PlatformClient::setState(State state, const QString &detail)
+{
+    state_ = state;
+    emit stateChanged(state, detail);
+}
+
+void PlatformClient::sendHealthCheck()
+{
+    const QJsonObject payload {
+        {QStringLiteral("protocol_version"), static_cast<qint64>(ProtocolVersion)},
+        {QStringLiteral("request_id"), QUuid::createUuid().toString(QUuid::WithoutBraces)},
+        {QStringLiteral("data"), QJsonObject {
+             {QStringLiteral("client"), clientName_}
+         }}
+    };
+    socket_.write(FrameCodec::encode(static_cast<quint32>(MessageType::HealthRequest), payload));
 }
 
 void PlatformClient::sendLoginRequest(const QString &phone, bool isAutoRegister)
@@ -210,24 +244,6 @@ void PlatformClient::clearUserSession()
     logoutRequestId_.clear();
 }
 
-void PlatformClient::setState(State state, const QString &detail)
-{
-    state_ = state;
-    emit stateChanged(state, detail);
-}
-
-void PlatformClient::sendHealthCheck()
-{
-    const QJsonObject payload {
-        {QStringLiteral("protocol_version"), static_cast<qint64>(ProtocolVersion)},
-        {QStringLiteral("request_id"), QUuid::createUuid().toString(QUuid::WithoutBraces)},
-        {QStringLiteral("data"), QJsonObject {
-             {QStringLiteral("client"), clientName_}
-         }}
-    };
-    socket_.write(FrameCodec::encode(static_cast<quint32>(MessageType::HealthRequest), payload));
-}
-
 void PlatformClient::readFrames()
 {
     receiveBuffer_.append(socket_.readAll());
@@ -243,28 +259,11 @@ void PlatformClient::readFrames()
         }
 
         if (result.frame.messageType == static_cast<quint32>(MessageType::ErrorResponse)) {
-            const QString requestId =
-                result.frame.payload.value(QStringLiteral("request_id")).toString();
-            if (!pendingLoginRequestId_.isEmpty() && requestId == pendingLoginRequestId_) {
-                failPendingLogin(result.frame.payload.value(QStringLiteral("code")).toString(),
-                                 result.frame.payload.value(QStringLiteral("message")).toString());
-                continue;
+            const QString code = result.frame.payload.value(QStringLiteral("code")).toString();
+            if (code == QStringLiteral("PROTOCOL_ERROR")) {
+                setState(State::Connected,
+                         result.frame.payload.value(QStringLiteral("message")).toString());
             }
-            if (!heartbeatRequestId_.isEmpty() && requestId == heartbeatRequestId_) {
-                clearUserSession();
-                emit sessionExpired(QStringLiteral("登录已过期，请重新登录"));
-                continue;
-            }
-            if (!logoutRequestId_.isEmpty() && requestId == logoutRequestId_) {
-                sessionResponseTimer_.stop();
-                logoutRequestId_.clear();
-                sessionHeartbeatTimer_.start();
-                emit logoutFinished(false,
-                    result.frame.payload.value(QStringLiteral("message")).toString());
-                continue;
-            }
-            setState(State::Connected,
-                     result.frame.payload.value(QStringLiteral("message")).toString());
             continue;
         }
         if (result.frame.messageType == static_cast<quint32>(MessageType::HealthResponse)) {
@@ -283,6 +282,8 @@ void PlatformClient::readFrames()
             const QString requestId =
                 result.frame.payload.value(QStringLiteral("request_id")).toString();
             if (pendingLoginRequestId_.isEmpty() || requestId != pendingLoginRequestId_) {
+                // Not our pending login — pass through as generic frame.
+                emit frameReceived(result.frame.messageType, result.frame.payload);
                 continue;
             }
 
@@ -349,7 +350,11 @@ void PlatformClient::readFrames()
                 sessionHeartbeatTimer_.start();
             }
             emit logoutFinished(success, message);
+            continue;
         }
+
+        // All other frames are forwarded via the generic signal.
+        emit frameReceived(result.frame.messageType, result.frame.payload);
     }
 }
 

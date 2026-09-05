@@ -86,3 +86,8 @@ analysis/evaluation/
 *.swp
 *~
 .DS_Store
+
+# Office temporary files
+~$*.docx
+~$*.xlsx
+~$*.pptx

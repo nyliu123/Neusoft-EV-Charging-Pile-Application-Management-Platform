@@ -8,6 +8,7 @@
 #include <QHostAddress>
 #include <QObject>
 #include <QSet>
+#include <QSqlDatabase>
 #include <QTcpServer>
 
 namespace ev {
@@ -27,6 +28,8 @@ private:
     void sendError(QTcpSocket *socket, const QString &requestId, const QString &message);
 
     DatabaseManager databaseManager_;
+    QSqlDatabase mainDatabase_;
+    bool databaseReady_ = false;
     SessionManager sessionManager_;
     QTcpServer tcpServer_;
     QHash<QTcpSocket *, QByteArray> receiveBuffers_;

@@ -1,16 +1,14 @@
+#include "admin_login_dialog.h"
+#include "admin_main_window.h"
+#include "admin_session.h"
 #include "network/platform_client.h"
 
 #include <QApplication>
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QDebug>
-#include <QLabel>
-#include <QMainWindow>
-#include <QPushButton>
-#include <QStatusBar>
+#include <QMessageBox>
 #include <QTimer>
-#include <QVBoxLayout>
-#include <QWidget>
 
 int main(int argc, char *argv[])
 {
@@ -44,6 +42,7 @@ int main(int argc, char *argv[])
         qInfo().noquote() << "admin client:" << detail;
     });
 
+    // --check mode: exit after health check.
     if (parser.isSet(checkOption)) {
         QObject::connect(&client, &ev::PlatformClient::healthCheckSucceeded,
                          &application, [&application](const QString &version) {
@@ -60,38 +59,20 @@ int main(int argc, char *argv[])
         return application.exec();
     }
 
-    QMainWindow window;
-    window.setWindowTitle(QStringLiteral("汽车充电管理平台 管理端"));
-    window.resize(1100, 720);
-
-    auto *central = new QWidget(&window);
-    auto *layout = new QVBoxLayout(central);
-    auto *title = new QLabel(QStringLiteral("运营管理中心"), central);
-    QFont titleFont = title->font();
-    titleFont.setPointSize(22);
-    titleFont.setBold(true);
-    title->setFont(titleFont);
-    layout->addWidget(title);
-    layout->addWidget(new QLabel(
-        QStringLiteral("管理端主干已就绪：经营看板、站点、设备、用户和订单页面将在功能分支接入。"),
-        central));
-    auto *connectionLabel = new QLabel(QStringLiteral("连接状态：正在连接"), central);
-    auto *retryButton = new QPushButton(QStringLiteral("重新连接"), central);
-    layout->addWidget(connectionLabel);
-    layout->addWidget(retryButton, 0, Qt::AlignLeft);
-    layout->addStretch();
-    window.setCentralWidget(central);
-    QObject::connect(&client, &ev::PlatformClient::stateChanged, &window,
-                     [&window, connectionLabel](ev::PlatformClient::State state,
-                                                const QString &detail) {
-        connectionLabel->setText(QStringLiteral("连接状态：%1").arg(detail));
-        window.statusBar()->showMessage(
-            state == ev::PlatformClient::State::Ready
-                ? QStringLiteral("服务端可用") : detail);
-    });
-    QObject::connect(retryButton, &QPushButton::clicked,
-                     &client, &ev::PlatformClient::reconnectNow);
-    window.show();
+    // Normal mode: connect, then show login dialog, then main window.
     client.connectToServer(parser.value(hostOption), static_cast<quint16>(requestedPort));
+
+    // Wait for connection to be ready before showing login dialog.
+    // Show dialog immediately, but disable login button until ready.
+    ev::AdminLoginDialog loginDialog(&client);
+    const int dialogResult = loginDialog.exec();
+
+    if (dialogResult != QDialog::Accepted) {
+        return 0;
+    }
+
+    ev::AdminMainWindow mainWindow(&client, loginDialog.session());
+    mainWindow.show();
+
     return application.exec();
 }

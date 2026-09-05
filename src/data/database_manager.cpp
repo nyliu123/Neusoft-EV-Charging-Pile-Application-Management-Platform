@@ -35,6 +35,14 @@ QStringList sqlStatements(const QString &script)
     return statements;
 }
 
+const QStringList migrationScripts()
+{
+    return {
+        QStringLiteral(":/database/migrations/001_core.sql"),
+        QStringLiteral(":/database/migrations/002_seed_admin.sql")
+    };
+}
+
 } // namespace
 
 namespace ev {
@@ -86,30 +94,36 @@ Result<QSqlDatabase> DatabaseManager::openForCurrentThread() const
 
 Result<int> DatabaseManager::migrate(QSqlDatabase &database) const
 {
-    QFile migration(QStringLiteral(":/database/migrations/001_core.sql"));
-    if (!migration.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        return Result<int>::fail(ErrorCode::StorageError,
-                                 QStringLiteral("embedded database migration is unavailable"));
-    }
-
-    if (!database.transaction()) {
-        return Result<int>::fail(ErrorCode::StorageError, database.lastError().text());
-    }
-
     QSqlQuery query(database);
     int executed = 0;
-    const QString script = QString::fromUtf8(migration.readAll());
-    for (const QString &statement : sqlStatements(script)) {
-        if (!query.exec(statement)) {
-            database.rollback();
-            return Result<int>::fail(ErrorCode::StorageError, query.lastError().text());
+
+    for (const QString &scriptPath : migrationScripts()) {
+        QFile migration(scriptPath);
+        if (!migration.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            return Result<int>::fail(ErrorCode::StorageError,
+                QStringLiteral("migration script not found: %1").arg(scriptPath));
         }
-        ++executed;
+
+        if (!database.transaction()) {
+            return Result<int>::fail(ErrorCode::StorageError, database.lastError().text());
+        }
+
+        const QString script = QString::fromUtf8(migration.readAll());
+        for (const QString &statement : sqlStatements(script)) {
+            if (!query.exec(statement)) {
+                database.rollback();
+                return Result<int>::fail(ErrorCode::StorageError,
+                    QStringLiteral("%1: %2").arg(scriptPath, query.lastError().text()));
+            }
+            ++executed;
+        }
+
+        if (!database.commit()) {
+            database.rollback();
+            return Result<int>::fail(ErrorCode::StorageError, database.lastError().text());
+        }
     }
-    if (!database.commit()) {
-        database.rollback();
-        return Result<int>::fail(ErrorCode::StorageError, database.lastError().text());
-    }
+
     return Result<int>::ok(executed);
 }
 

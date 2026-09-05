@@ -11,10 +11,15 @@ include($$PLATFORM_ROOT/config/common.pri)
 INCLUDEPATH += $$PLATFORM_ROOT/src
 
 HEADERS += \
+    admin_auth_service.h \
+    admin_seeder.h \
     fee_calculator.h \
     session_manager.h \
     user_service.h
+
 SOURCES += \
+    admin_auth_service.cpp \
+    admin_seeder.cpp \
     fee_calculator.cpp \
     session_manager.cpp \
     user_service.cpp
