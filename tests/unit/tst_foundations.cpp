@@ -1,7 +1,9 @@
+#include "common/password_hasher.h"
 #include "common/phone_validator.h"
 #include "common/protocol.h"
 #include "data/database_manager.h"
 #include "network/frame_codec.h"
+#include "services/admin_auth_service.h"
 #include "services/fee_calculator.h"
 
 #include <QJsonObject>
@@ -23,6 +25,10 @@ private slots:
     void phoneValidation_data();
     void phoneValidation();
     void phoneValidationMessages();
+    void passwordHashRoundTrip();
+    void passwordHashRejectsWrongPassword();
+    void passwordSerializationRoundTrip();
+    void adminLoginSucceedsWithDefaultSeed();
 };
 
 void FoundationTests::frameRoundTrip()
@@ -152,6 +158,74 @@ void FoundationTests::phoneValidationMessages()
              QStringLiteral("请输入11位手机号"));
     QCOMPARE(ev::PhoneValidator::errorMessage(ev::PhoneValidationError::InvalidFormat),
              QStringLiteral("手机号格式不正确，请检查后重新输入"));
+}
+
+void FoundationTests::passwordHashRoundTrip()
+{
+    const QString password = QStringLiteral("TestPass123!");
+    const ev::PasswordHash hash = ev::PasswordHasher::hash(password);
+
+    QVERIFY(!hash.salt.isEmpty());
+    QVERIFY(!hash.hash.isEmpty());
+    QVERIFY(hash.iterations > 0);
+    QVERIFY(ev::PasswordHasher::verify(password, hash));
+}
+
+void FoundationTests::passwordHashRejectsWrongPassword()
+{
+    const ev::PasswordHash hash = ev::PasswordHasher::hash(QStringLiteral("correct"));
+    QVERIFY(!ev::PasswordHasher::verify(QStringLiteral("wrong"), hash));
+    QVERIFY(!ev::PasswordHasher::verify(QString(), hash));
+}
+
+void FoundationTests::passwordSerializationRoundTrip()
+{
+    const ev::PasswordHash original = ev::PasswordHasher::hash(QStringLiteral("serializeTest"));
+    const QString serialized = ev::PasswordHasher::serialize(original);
+
+    QVERIFY(serialized.startsWith(QStringLiteral("pbkdf2_sha256$")));
+
+    ev::PasswordHash deserialized;
+    QVERIFY(ev::PasswordHasher::deserialize(serialized, deserialized));
+    QCOMPARE(deserialized.iterations, original.iterations);
+    QCOMPARE(deserialized.salt, original.salt);
+    QCOMPARE(deserialized.hash, original.hash);
+    QVERIFY(ev::PasswordHasher::verify(QStringLiteral("serializeTest"), deserialized));
+}
+
+void FoundationTests::adminLoginSucceedsWithDefaultSeed()
+{
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+
+    const QString dbPath = tempDir.path() + QStringLiteral("/test_login.sqlite3");
+    ev::DatabaseManager manager(dbPath);
+
+    auto openResult = manager.openForCurrentThread();
+    QVERIFY(openResult.success);
+
+    auto migrateResult = manager.migrate(openResult.data);
+    QVERIFY(migrateResult.success);
+
+    // Default admin credentials: admin / admin123
+    const auto result = ev::AdminAuthService::authenticate(
+        QStringLiteral("admin"), QStringLiteral("admin123"));
+    QVERIFY(result.success);
+    QCOMPARE(result.code, ev::ErrorCode::Ok);
+    QCOMPARE(result.data.username, QStringLiteral("admin"));
+    QVERIFY(result.data.adminId > 0);
+
+    // Wrong password should fail.
+    const auto badResult = ev::AdminAuthService::authenticate(
+        QStringLiteral("admin"), QStringLiteral("wrongpass"));
+    QVERIFY(!badResult.success);
+    QCOMPARE(badResult.code, ev::ErrorCode::Unauthorized);
+
+    // Non-existent user should also return Unauthorized (not NotFound).
+    const auto missingResult = ev::AdminAuthService::authenticate(
+        QStringLiteral("nonexistent"), QStringLiteral("admin123"));
+    QVERIFY(!missingResult.success);
+    QCOMPARE(missingResult.code, ev::ErrorCode::Unauthorized);
 }
 
 QTEST_APPLESS_MAIN(FoundationTests)

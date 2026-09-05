@@ -67,6 +67,22 @@ PlatformClient::State PlatformClient::state() const
     return state_;
 }
 
+QString PlatformClient::sendFrame(quint32 messageType, const QJsonObject &data)
+{
+    if (socket_.state() != QAbstractSocket::ConnectedState
+        && socket_.state() != QAbstractSocket::ConnectingState) {
+        return {};
+    }
+    const QString requestId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const QJsonObject payload {
+        {QStringLiteral("protocol_version"), static_cast<qint64>(ProtocolVersion)},
+        {QStringLiteral("request_id"), requestId},
+        {QStringLiteral("data"), data}
+    };
+    socket_.write(FrameCodec::encode(messageType, payload));
+    return requestId;
+}
+
 void PlatformClient::setState(State state, const QString &detail)
 {
     state_ = state;
@@ -114,7 +130,10 @@ void PlatformClient::readFrames()
             const QString version = data.value(QStringLiteral("server_version")).toString();
             setState(State::Ready, QStringLiteral("服务可用，协议握手成功"));
             emit healthCheckSucceeded(version);
+            continue;
         }
+
+        emit frameReceived(result.frame.messageType, result.frame.payload);
     }
 }
 

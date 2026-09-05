@@ -1,5 +1,7 @@
 #pragma once
 
+#include "network/frame_codec.h"
+
 #include <QByteArray>
 #include <QObject>
 #include <QString>
@@ -27,9 +29,15 @@ public:
     void reconnectNow();
     State state() const;
 
+    // Send a frame to the server. Returns the request_id used.
+    QString sendFrame(quint32 messageType, const QJsonObject &data);
+
 signals:
     void stateChanged(ev::PlatformClient::State state, const QString &detail);
     void healthCheckSucceeded(const QString &serverVersion);
+
+    // Emitted when a complete frame is received (excluding health/error handled internally).
+    void frameReceived(quint32 messageType, const QJsonObject &payload);
 
 private:
     void setState(State state, const QString &detail);

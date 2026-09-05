@@ -1,4 +1,4 @@
-QT += core
+QT += core sql
 QT -= gui
 
 TEMPLATE = lib
@@ -10,8 +10,13 @@ include($$PLATFORM_ROOT/config/common.pri)
 
 INCLUDEPATH += $$PLATFORM_ROOT/src
 
-HEADERS += fee_calculator.h
-SOURCES += fee_calculator.cpp
+HEADERS += \
+    admin_auth_service.h \
+    fee_calculator.h
+
+SOURCES += \
+    admin_auth_service.cpp \
+    fee_calculator.cpp
 
 LIBS += -L$$PLATFORM_BUILD_ROOT/lib -lev_data -lev_common
 PRE_TARGETDEPS += \

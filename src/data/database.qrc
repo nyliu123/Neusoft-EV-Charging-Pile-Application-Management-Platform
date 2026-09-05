@@ -1,6 +1,6 @@
 <RCC>
     <qresource prefix="/database">
         <file alias="migrations/001_core.sql">../../resources/database/migrations/001_core.sql</file>
+        <file alias="migrations/002_seed_admin.sql">../../resources/database/migrations/002_seed_admin.sql</file>
     </qresource>
 </RCC>
-
