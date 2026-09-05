@@ -1,4 +1,4 @@
-QT += core
+QT += core network
 QT -= gui
 
 TEMPLATE = lib
@@ -10,9 +10,12 @@ include($$PLATFORM_ROOT/config/common.pri)
 
 INCLUDEPATH += $$PLATFORM_ROOT/src
 
-HEADERS += frame_codec.h
-SOURCES += frame_codec.cpp
+HEADERS += \
+    frame_codec.h \
+    platform_client.h
+SOURCES += \
+    frame_codec.cpp \
+    platform_client.cpp
 
 LIBS += -L$$PLATFORM_BUILD_ROOT/lib -lev_common
 PRE_TARGETDEPS += $$PLATFORM_BUILD_ROOT/lib/libev_common.a
-

@@ -11,8 +11,10 @@
 | `ev::Result<T>` | 公共 | `src/common/result.h` | 服务统一返回结构 |
 | `ev::Frame` | 通信 | `src/network/frame_codec.h` | 已解析消息帧 |
 | `ev::FrameCodec` | 通信 | `src/network/frame_codec.h` | 8 字节头加 JSON 正文编解码 |
+| `ev::PlatformClient` | 通信 | `src/network/platform_client.h` | 客户端连接、健康检查与重连 |
 | `ev::FeeCalculator` | 充电 | `src/services/fee_calculator.h` | 按订单快照计算整数分费用 |
 | `ev::DatabaseManager` | 数据 | `src/data/database_manager.h` | 每线程 SQLite 连接与迁移入口 |
 
 新增消息类型必须显式分配未使用编号，并同步更新客户端、服务端与协议测试；禁止依据枚举顺序隐式生成线上编号。
 
+主干保留 `HealthRequest=0x03` 和 `HealthResponse=0x04` 作为最小运行检查。业务分支不得改变其语义；健康检查只确认协议和服务状态，不执行登录或业务写入。

@@ -1,6 +1,26 @@
 TEMPLATE = subdirs
 CONFIG += ordered
 
+# Keep repository-level resources visible in Qt Creator's Projects tree.
+OTHER_FILES += \
+    README.md \
+    CONTRIBUTING.md \
+    LICENSE \
+    .editorconfig \
+    .gitattributes \
+    .gitignore \
+    .gitmessage \
+    config/common.pri \
+    config/app.ini.example \
+    docs/02概要设计说明书第5组（最终版）.docx \
+    docs/development/architecture.md \
+    docs/development/shared-identifiers.md \
+    resources/database/migrations/001_core.sql \
+    scripts/smoke-test.sh \
+    analysis/README.md \
+    src/adapters/README.md \
+    web/screen/README.md
+
 SUBDIRS += \
     common \
     network \
@@ -11,19 +31,26 @@ SUBDIRS += \
     admin_client \
     unit_tests
 
-common.file = src/common/common.pro
-network.file = src/network/network.pro
+common.subdir = src/common
+common.target = common
+network.subdir = src/network
+network.target = network
 network.depends = common
-data.file = src/data/data.pro
+data.subdir = src/data
+data.target = data
 data.depends = common
-services.file = src/services/services.pro
+services.subdir = src/services
+services.target = services
 services.depends = common data
-server.file = apps/server/server.pro
+server.subdir = apps/server
+server.target = server
 server.depends = common network data services
-user_client.file = apps/user_client/user_client.pro
+user_client.subdir = apps/user_client
+user_client.target = user_client
 user_client.depends = common network
-admin_client.file = apps/admin_client/admin_client.pro
+admin_client.subdir = apps/admin_client
+admin_client.target = admin_client
 admin_client.depends = common network
-unit_tests.file = tests/unit/unit_tests.pro
+unit_tests.subdir = tests/unit
+unit_tests.target = unit_tests
 unit_tests.depends = common network services
-

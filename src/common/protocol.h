@@ -11,6 +11,8 @@ inline constexpr quint32 MaxPayloadBytes = 10U * 1024U * 1024U;
 enum class MessageType : quint32 {
     LoginRequest = 0x01,
     LoginResponse = 0x02,
+    HealthRequest = 0x03,
+    HealthResponse = 0x04,
     UserRequest = 0x10,
     UserResponse = 0x11,
     StationRequest = 0x20,
@@ -29,4 +31,3 @@ enum class MessageType : quint32 {
 };
 
 } // namespace ev
-

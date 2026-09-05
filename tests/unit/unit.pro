@@ -21,3 +21,4 @@ PRE_TARGETDEPS += \
     $$PLATFORM_BUILD_ROOT/lib/libev_data.a \
     $$PLATFORM_BUILD_ROOT/lib/libev_network.a \
     $$PLATFORM_BUILD_ROOT/lib/libev_common.a
+

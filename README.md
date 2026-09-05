@@ -20,6 +20,12 @@ qmake6 ../ev-charging-platform.pro
 make -j"$(nproc)"
 ```
 
+### Qt Creator 打开方式
+
+在 Qt Creator 中选择“文件 → 打开文件或项目”，打开仓库根目录下的 `ev-charging-platform.pro`，不要单独打开 `apps` 或 `src` 中的子项目。选择 Desktop Qt 6 Kit，并使用 Qt Creator 建议的影子构建目录。
+
+顶层工程使用标准 qmake `SUBDIRS` 结构，项目树中应显示 `common`、`network`、`data`、`services`、`server`、`user_client`、`admin_client` 和 `unit_tests` 八个子项目。若本机曾打开过旧版本，先关闭项目并删除本机生成的 `ev-charging-platform.pro.user*`，然后重新打开顶层工程，以免 Qt Creator 继续使用旧解析缓存。
+
 构建结果位于 `build/bin`：
 
 - `ev_server`：业务服务端，默认监听 `127.0.0.1:8888`
@@ -31,7 +37,10 @@ make -j"$(nproc)"
 
 ```bash
 ./build/bin/ev_unit_tests
+./scripts/smoke-test.sh
 ```
+
+冒烟测试会短暂启动服务端，并让用户端、管理端以无界面检查模式完成真实 TCP 协议握手。运行数据和日志写入 `build/smoke`。
 
 服务端首次启动前，可复制示例配置并按需调整：
 
@@ -41,6 +50,42 @@ cp config/app.ini.example config/app.ini
 ```
 
 未提供配置文件时，服务端使用本机地址和 `data/ev_charging.sqlite3` 等安全演示默认值。密钥和本地配置不得提交。
+
+## 最小运行
+
+在三个终端分别执行：
+
+```bash
+./build/bin/ev_server
+./build/bin/ev_user_client
+./build/bin/ev_admin_client
+```
+
+两个客户端会自动连接 `127.0.0.1:8888`，界面显示“服务可用，协议握手成功”。服务端尚未提供业务功能，但数据库初始化、TCP 接入、帧解析和健康检查均真实运行。
+
+不同成员可使用独立端口和数据库，避免本机调试互相影响：
+
+```bash
+./build/bin/ev_server --port 18881 --database build/dev/member-a.sqlite3
+./build/bin/ev_user_client --port 18881
+```
+
+## 分支独立调试
+
+首次进入新工作树时先执行一次顶层 `qmake6`。之后可只构建自己的目标及其声明依赖：
+
+```bash
+cd build
+qmake6 ../ev-charging-platform.pro
+make user_client      # 用户端及依赖
+make admin_client     # 管理端及依赖
+make server           # 服务端及依赖
+make network          # 公共网络库
+make services         # 领域服务库
+make unit_tests       # 单元测试
+```
+
+建议每名成员使用自己的 Git 功能分支；如果需要同时保留多个分支，使用 `git worktree` 创建独立工作目录。各工作树使用自己的 `build` 目录、调试端口和 SQLite 文件。功能调好后推送对应分支交由组长审核，未完成分支不会影响 `main` 或其他工作树。
 
 ## 目录
 
