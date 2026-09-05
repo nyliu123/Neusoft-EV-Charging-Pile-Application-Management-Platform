@@ -50,6 +50,8 @@ bool ServerApplication::start(const QHostAddress &address, quint16 port)
                           << "/" << AdminSeeder::kDefaultPassword;
     }
 
+    adminHandler_ = std::make_unique<AdminHandler>(mainDatabase_, sessionManager_);
+
     if (!tcpServer_.listen(address, port)) {
         qCritical().noquote() << "listen failed:" << tcpServer_.errorString();
         return false;
@@ -140,6 +142,14 @@ void ServerApplication::processFrame(QTcpSocket *socket, const Frame &frame)
         processLogout(socket, frame);
         return;
     }
+    if (msgType == MessageType::AdminQuery) {
+        processAdminQuery(socket, frame);
+        return;
+    }
+    if (msgType == MessageType::AdminAction) {
+        processAdminAction(socket, frame);
+        return;
+    }
 
     sendError(socket, requestId, QStringLiteral("message type is not implemented"));
 }
@@ -172,9 +182,19 @@ void ServerApplication::processLogin(QTcpSocket *socket, const Frame &frame)
 
         QJsonObject responseData;
         if (authResult.success) {
+            const QString adminSessionId =
+                QUuid::createUuid().toString(QUuid::WithoutBraces);
+            if (!sessionManager_.registerUserSession(adminSessionId,
+                                                     authResult.data.adminId)) {
+                sendError(socket, requestId, QStringLiteral("cannot create admin session"));
+                return;
+            }
+            connectionSessions_[socket].insert(adminSessionId);
+            adminSessions_.insert(adminSessionId);
             responseData = {
                 {QStringLiteral("admin_id"), authResult.data.adminId},
-                {QStringLiteral("username"), authResult.data.username}
+                {QStringLiteral("username"), authResult.data.username},
+                {QStringLiteral("session_id"), adminSessionId}
             };
             qInfo().noquote() << "admin login succeeded:" << authResult.data.username
                               << "from" << socket->peerAddress().toString();
@@ -324,6 +344,7 @@ void ServerApplication::processLogout(QTcpSocket *socket, const Frame &frame)
     if (connectionSessions_.value(socket).contains(sessionId)) {
         sessionManager_.remove(sessionId);
         connectionSessions_[socket].remove(sessionId);
+        adminSessions_.remove(sessionId);
     }
 
     const QJsonObject response {
@@ -336,6 +357,53 @@ void ServerApplication::processLogout(QTcpSocket *socket, const Frame &frame)
     };
     socket->write(FrameCodec::encode(
         static_cast<quint32>(MessageType::LogoutResponse), response));
+}
+
+void ServerApplication::processAdminQuery(QTcpSocket *socket, const Frame &frame)
+{
+    processAdminRequest(socket, frame, false);
+}
+
+void ServerApplication::processAdminAction(QTcpSocket *socket, const Frame &frame)
+{
+    processAdminRequest(socket, frame, true);
+}
+
+void ServerApplication::processAdminRequest(QTcpSocket *socket, const Frame &frame,
+                                            bool isAction)
+{
+    const QString requestId = frame.payload.value(QStringLiteral("request_id")).toString();
+    const QJsonObject requestData = frame.payload.value(QStringLiteral("data")).toObject();
+    const QString type = requestData.value(QStringLiteral("type")).toString();
+    const QString sessionId = requestData.value(QStringLiteral("session_id")).toString();
+
+    const bool valid = !sessionId.isEmpty()
+        && adminSessions_.contains(sessionId)
+        && connectionSessions_.value(socket).contains(sessionId)
+        && sessionManager_.validateAndTouch(sessionId);
+
+    QJsonObject response;
+    if (!valid) {
+        response = QJsonObject {
+            {QStringLiteral("success"), false},
+            {QStringLiteral("code"), QStringLiteral("UNAUTHORIZED")},
+            {QStringLiteral("message"), QStringLiteral("登录已过期，请重新登录")},
+            {QStringLiteral("data"), QJsonObject {
+                {QStringLiteral("type"), type},
+                {QStringLiteral("error"), QStringLiteral("session_expired")}
+            }}
+        };
+    } else {
+        const QJsonObject params = requestData.value(QStringLiteral("params")).toObject();
+        response = isAction
+            ? adminHandler_->processAction(type, params)
+            : adminHandler_->processQuery(type, params);
+    }
+
+    response.insert(QStringLiteral("protocol_version"), static_cast<qint64>(ProtocolVersion));
+    response.insert(QStringLiteral("request_id"), requestId);
+    socket->write(FrameCodec::encode(static_cast<quint32>(MessageType::AdminResponse),
+                                     response));
 }
 
 void ServerApplication::sendError(QTcpSocket *socket,

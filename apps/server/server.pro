@@ -9,8 +9,8 @@ include($$PLATFORM_ROOT/config/common.pri)
 
 INCLUDEPATH += $$PLATFORM_ROOT/src
 
-HEADERS += server_application.h
-SOURCES += main.cpp server_application.cpp
+HEADERS += server_application.h admin_handler.h
+SOURCES += main.cpp server_application.cpp admin_handler.cpp
 
 LIBS += -L$$PLATFORM_BUILD_ROOT/lib \
     -lev_services \
