@@ -1,5 +1,6 @@
 #include "server_application.h"
 
+#include "admin_handler.h"
 #include "common/error_code.h"
 #include "common/protocol.h"
 #include "services/admin_auth_service.h"
