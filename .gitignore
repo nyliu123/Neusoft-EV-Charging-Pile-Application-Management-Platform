@@ -30,6 +30,13 @@ ui_*.h
 Makefile*
 *build-*
 build/
+build-*/
+bin/
+lib/
+obj/
+moc/
+rcc/
+ui/
 *.qm
 *.prl
 *.qmlls.ini
@@ -54,3 +61,28 @@ compile_commands.json
 *creator.user*
 
 *_qmlcache.qrc
+
+# Runtime data, local configuration and secrets
+data/
+logs/
+config/app.ini
+.env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+
+# Analysis outputs (keep directory documentation only)
+analysis/data/raw/
+analysis/data/processed/
+analysis/models/
+analysis/predictions/
+analysis/evaluation/
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store

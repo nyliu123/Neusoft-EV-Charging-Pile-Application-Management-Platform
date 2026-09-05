@@ -1,0 +1,14 @@
+<type>(<scope>): <subject>
+
+Why:
+- 
+
+What:
+- 
+
+Test:
+- 
+
+# type: feat | fix | refactor | test | docs | build | chore
+# scope: common | network | data | services | server | user | admin | analysis | docs
+

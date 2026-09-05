@@ -1,0 +1,20 @@
+QT += core
+QT -= gui
+
+TEMPLATE = lib
+CONFIG += staticlib
+TARGET = ev_services
+
+PLATFORM_ROOT = $$clean_path($$PWD/../..)
+include($$PLATFORM_ROOT/config/common.pri)
+
+INCLUDEPATH += $$PLATFORM_ROOT/src
+
+HEADERS += fee_calculator.h
+SOURCES += fee_calculator.cpp
+
+LIBS += -L$$PLATFORM_BUILD_ROOT/lib -lev_data -lev_common
+PRE_TARGETDEPS += \
+    $$PLATFORM_BUILD_ROOT/lib/libev_data.a \
+    $$PLATFORM_BUILD_ROOT/lib/libev_common.a
+
