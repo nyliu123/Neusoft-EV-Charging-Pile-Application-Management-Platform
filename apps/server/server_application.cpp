@@ -23,6 +23,8 @@ ServerApplication::ServerApplication(QString databasePath, QObject *parent)
             this, &ServerApplication::acceptPendingConnections);
 }
 
+ServerApplication::~ServerApplication() = default;
+
 bool ServerApplication::start(const QHostAddress &address, quint16 port)
 {
     auto databaseResult = databaseManager_.openForCurrentThread();

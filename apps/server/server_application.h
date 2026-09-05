@@ -21,6 +21,8 @@ class AdminHandler;
 class ServerApplication final : public QObject {
 public:
     ServerApplication(QString databasePath, QObject *parent = nullptr);
+    // Out-of-line so unique_ptr<AdminHandler> can stay forward-declared here.
+    ~ServerApplication() override;
     bool start(const QHostAddress &address, quint16 port);
 
 private:
