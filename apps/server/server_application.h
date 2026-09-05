@@ -6,6 +6,7 @@
 #include <QHash>
 #include <QHostAddress>
 #include <QObject>
+#include <QSqlDatabase>
 #include <QTcpServer>
 
 namespace ev {
@@ -22,6 +23,8 @@ private:
     void sendError(QTcpSocket *socket, const QString &requestId, const QString &message);
 
     DatabaseManager databaseManager_;
+    QSqlDatabase mainDatabase_;
+    bool databaseReady_ = false;
     QTcpServer tcpServer_;
     QHash<QTcpSocket *, QByteArray> receiveBuffers_;
 };

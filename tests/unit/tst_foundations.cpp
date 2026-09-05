@@ -209,18 +209,18 @@ void FoundationTests::adminLoginSucceedsWithDefaultSeed()
     QVERIFY(migrateResult.success);
 
     // Seed the default admin using AdminSeeder.
-    auto seedResult = ev::AdminSeeder::seedIfNeeded();
+    auto seedResult = ev::AdminSeeder::seedIfNeeded(openResult.data);
     QVERIFY(seedResult.success);
     QCOMPARE(seedResult.data, 1);
 
     // Second seed should be a no-op.
-    auto seedResult2 = ev::AdminSeeder::seedIfNeeded();
+    auto seedResult2 = ev::AdminSeeder::seedIfNeeded(openResult.data);
     QVERIFY(seedResult2.success);
     QCOMPARE(seedResult2.data, 0);
 
     // Default admin credentials: admin / admin123
     const auto result = ev::AdminAuthService::authenticate(
-        QStringLiteral("admin"), QStringLiteral("admin123"));
+        QStringLiteral("admin"), QStringLiteral("admin123"), openResult.data);
     QVERIFY(result.success);
     QCOMPARE(result.code, ev::ErrorCode::Ok);
     QCOMPARE(result.data.username, QStringLiteral("admin"));
@@ -228,13 +228,13 @@ void FoundationTests::adminLoginSucceedsWithDefaultSeed()
 
     // Wrong password should fail.
     const auto badResult = ev::AdminAuthService::authenticate(
-        QStringLiteral("admin"), QStringLiteral("wrongpass"));
+        QStringLiteral("admin"), QStringLiteral("wrongpass"), openResult.data);
     QVERIFY(!badResult.success);
     QCOMPARE(badResult.code, ev::ErrorCode::Unauthorized);
 
     // Non-existent user should also return Unauthorized (not NotFound).
     const auto missingResult = ev::AdminAuthService::authenticate(
-        QStringLiteral("nonexistent"), QStringLiteral("admin123"));
+        QStringLiteral("nonexistent"), QStringLiteral("admin123"), openResult.data);
     QVERIFY(!missingResult.success);
     QCOMPARE(missingResult.code, ev::ErrorCode::Unauthorized);
 }

@@ -2,14 +2,14 @@
 
 #include "common/password_hasher.h"
 
-#include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
 
 namespace ev {
 
 Result<AdminInfo> AdminAuthService::authenticate(const QString &username,
-                                                  const QString &password)
+                                                  const QString &password,
+                                                  QSqlDatabase &database)
 {
     // Validate input.
     if (username.trimmed().isEmpty() || password.isEmpty()) {
@@ -18,8 +18,7 @@ Result<AdminInfo> AdminAuthService::authenticate(const QString &username,
     }
 
     // Query admin by username.
-    QSqlDatabase db = QSqlDatabase::database();
-    QSqlQuery query(db);
+    QSqlQuery query(database);
     query.prepare(QStringLiteral("SELECT admin_id, username, password FROM admins WHERE username = ?"));
     query.addBindValue(username.trimmed());
 

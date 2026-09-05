@@ -26,14 +26,17 @@ bool ServerApplication::start(const QHostAddress &address, quint16 port)
         qCritical().noquote() << "database open failed:" << databaseResult.message;
         return false;
     }
-    auto migrationResult = databaseManager_.migrate(databaseResult.data);
+    mainDatabase_ = databaseResult.data;
+    databaseReady_ = true;
+
+    auto migrationResult = databaseManager_.migrate(mainDatabase_);
     if (!migrationResult.success) {
         qCritical().noquote() << "database migration failed:" << migrationResult.message;
         return false;
     }
 
     // Seed default admin if the admins table is empty.
-    auto seedResult = AdminSeeder::seedIfNeeded();
+    auto seedResult = AdminSeeder::seedIfNeeded(mainDatabase_);
     if (!seedResult.success) {
         qCritical().noquote() << "admin seeding failed:" << seedResult.message;
         return false;
@@ -132,7 +135,13 @@ void ServerApplication::processFrame(QTcpSocket *socket, const Frame &frame)
             return;
         }
 
-        const Result<AdminInfo> authResult = AdminAuthService::authenticate(username, password);
+        if (!databaseReady_) {
+            sendError(socket, requestId, QStringLiteral("database is not ready"));
+            return;
+        }
+
+        const Result<AdminInfo> authResult = AdminAuthService::authenticate(
+            username, password, mainDatabase_);
 
         QJsonObject responseData;
         if (authResult.success) {

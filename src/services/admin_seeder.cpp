@@ -2,18 +2,16 @@
 
 #include "common/password_hasher.h"
 
-#include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
+#include <QStringLiteral>
 
 namespace ev {
 
-Result<int> AdminSeeder::seedIfNeeded()
+Result<int> AdminSeeder::seedIfNeeded(QSqlDatabase &database)
 {
-    QSqlDatabase db = QSqlDatabase::database();
-
     // Check if any admin exists.
-    QSqlQuery countQuery(db);
+    QSqlQuery countQuery(database);
     if (!countQuery.exec(QStringLiteral("SELECT COUNT(*) FROM admins"))) {
         return Result<int>::fail(ErrorCode::StorageError, countQuery.lastError().text());
     }
@@ -31,7 +29,7 @@ Result<int> AdminSeeder::seedIfNeeded()
     const QString storedHash = PasswordHasher::serialize(hash);
 
     // Insert default admin.
-    QSqlQuery insertQuery(db);
+    QSqlQuery insertQuery(database);
     insertQuery.prepare(QStringLiteral(
         "INSERT INTO admins (username, password) VALUES (?, ?)"));
     insertQuery.addBindValue(QString::fromLatin1(kDefaultUsername));
