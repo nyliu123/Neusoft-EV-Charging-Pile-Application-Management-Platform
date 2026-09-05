@@ -2,6 +2,7 @@
 
 #include "common/protocol.h"
 #include "services/admin_auth_service.h"
+#include "services/admin_seeder.h"
 
 #include <QDebug>
 #include <QJsonObject>
@@ -29,6 +30,18 @@ bool ServerApplication::start(const QHostAddress &address, quint16 port)
     if (!migrationResult.success) {
         qCritical().noquote() << "database migration failed:" << migrationResult.message;
         return false;
+    }
+
+    // Seed default admin if the admins table is empty.
+    auto seedResult = AdminSeeder::seedIfNeeded();
+    if (!seedResult.success) {
+        qCritical().noquote() << "admin seeding failed:" << seedResult.message;
+        return false;
+    }
+    if (seedResult.data > 0) {
+        qInfo().noquote() << "seeded default admin account:"
+                          << AdminSeeder::kDefaultUsername
+                          << "/" << AdminSeeder::kDefaultPassword;
     }
 
     if (!tcpServer_.listen(address, port)) {

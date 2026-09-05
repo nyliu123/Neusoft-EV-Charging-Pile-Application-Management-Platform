@@ -4,6 +4,7 @@
 #include "data/database_manager.h"
 #include "network/frame_codec.h"
 #include "services/admin_auth_service.h"
+#include "services/admin_seeder.h"
 #include "services/fee_calculator.h"
 
 #include <QJsonObject>
@@ -206,6 +207,16 @@ void FoundationTests::adminLoginSucceedsWithDefaultSeed()
 
     auto migrateResult = manager.migrate(openResult.data);
     QVERIFY(migrateResult.success);
+
+    // Seed the default admin using AdminSeeder.
+    auto seedResult = ev::AdminSeeder::seedIfNeeded();
+    QVERIFY(seedResult.success);
+    QCOMPARE(seedResult.data, 1);
+
+    // Second seed should be a no-op.
+    auto seedResult2 = ev::AdminSeeder::seedIfNeeded();
+    QVERIFY(seedResult2.success);
+    QCOMPARE(seedResult2.data, 0);
 
     // Default admin credentials: admin / admin123
     const auto result = ev::AdminAuthService::authenticate(

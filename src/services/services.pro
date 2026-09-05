@@ -12,10 +12,12 @@ INCLUDEPATH += $$PLATFORM_ROOT/src
 
 HEADERS += \
     admin_auth_service.h \
+    admin_seeder.h \
     fee_calculator.h
 
 SOURCES += \
     admin_auth_service.cpp \
+    admin_seeder.cpp \
     fee_calculator.cpp
 
 LIBS += -L$$PLATFORM_BUILD_ROOT/lib -lev_data -lev_common
