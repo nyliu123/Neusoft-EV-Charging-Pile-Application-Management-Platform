@@ -63,7 +63,7 @@ compile_commands.json
 *_qmlcache.qrc
 
 # Runtime data, local configuration and secrets
-data/
+/data/
 logs/
 config/app.ini
 .env
