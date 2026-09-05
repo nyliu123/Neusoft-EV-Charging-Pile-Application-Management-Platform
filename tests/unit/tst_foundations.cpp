@@ -6,8 +6,11 @@
 #include "services/admin_auth_service.h"
 #include "services/admin_seeder.h"
 #include "services/fee_calculator.h"
+#include "services/session_manager.h"
+#include "services/user_service.h"
 
 #include <QJsonObject>
+#include <QSqlError>
 #include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QtEndian>
@@ -30,6 +33,9 @@ private slots:
     void passwordHashRejectsWrongPassword();
     void passwordSerializationRoundTrip();
     void adminLoginSucceedsWithDefaultSeed();
+    void existingUserLoginPaths();
+    void automaticRegistrationCreatesDefaultsAndHandlesConflict();
+    void sessionLifecycle();
 };
 
 void FoundationTests::frameRoundTrip()
@@ -237,6 +243,129 @@ void FoundationTests::adminLoginSucceedsWithDefaultSeed()
         QStringLiteral("nonexistent"), QStringLiteral("admin123"), openResult.data);
     QVERIFY(!missingResult.success);
     QCOMPARE(missingResult.code, ev::ErrorCode::Unauthorized);
+}
+
+void FoundationTests::existingUserLoginPaths()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+
+    ev::DatabaseManager manager(directory.filePath(QStringLiteral("login.sqlite3")));
+    auto openResult = manager.openForCurrentThread();
+    QVERIFY2(openResult.success, qPrintable(openResult.message));
+    auto migrationResult = manager.migrate(openResult.data);
+    QVERIFY2(migrationResult.success, qPrintable(migrationResult.message));
+
+    QSqlQuery insert(openResult.data);
+    insert.prepare(QStringLiteral(
+        "INSERT INTO users (phone, nickname, avatar_path, balance, status) "
+        "VALUES (?, ?, ?, ?, ?)"));
+    insert.addBindValue(QStringLiteral("13800138000"));
+    insert.addBindValue(QStringLiteral("测试用户"));
+    insert.addBindValue(QStringLiteral("/tmp/avatar.png"));
+    insert.addBindValue(12.34);
+    insert.addBindValue(QStringLiteral("normal"));
+    QVERIFY2(insert.exec(), qPrintable(insert.lastError().text()));
+
+    insert.prepare(QStringLiteral(
+        "INSERT INTO users (phone, nickname, balance, status) VALUES (?, ?, ?, ?)"));
+    insert.addBindValue(QStringLiteral("13900139000"));
+    insert.addBindValue(QStringLiteral("冻结用户"));
+    insert.addBindValue(0.0);
+    insert.addBindValue(QStringLiteral("frozen"));
+    QVERIFY2(insert.exec(), qPrintable(insert.lastError().text()));
+
+    const ev::UserService service;
+    const auto success = service.loginExistingUser(openResult.data,
+                                                   QStringLiteral("13800138000"));
+    QVERIFY2(success.success, qPrintable(success.message));
+    QVERIFY(success.data.userId > 0);
+    QCOMPARE(success.data.nickname, QStringLiteral("测试用户"));
+    QCOMPARE(success.data.balanceCent, 1234);
+    QVERIFY(!success.data.sessionId.isEmpty());
+
+    const auto frozen = service.loginExistingUser(openResult.data,
+                                                  QStringLiteral("13900139000"));
+    QVERIFY(!frozen.success);
+    QCOMPARE(frozen.code, ev::ErrorCode::AccountFrozen);
+    QCOMPARE(frozen.message, QStringLiteral("账号已被冻结，请联系管理员"));
+
+    const auto missing = service.loginExistingUser(openResult.data,
+                                                   QStringLiteral("13700137000"));
+    QVERIFY(!missing.success);
+    QCOMPARE(missing.code, ev::ErrorCode::NotFound);
+    QCOMPARE(missing.message, QStringLiteral("user_not_found"));
+}
+
+void FoundationTests::automaticRegistrationCreatesDefaultsAndHandlesConflict()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+
+    ev::DatabaseManager manager(directory.filePath(QStringLiteral("register.sqlite3")));
+    auto openResult = manager.openForCurrentThread();
+    QVERIFY2(openResult.success, qPrintable(openResult.message));
+    auto migrationResult = manager.migrate(openResult.data);
+    QVERIFY2(migrationResult.success, qPrintable(migrationResult.message));
+
+    const ev::UserService service;
+    const auto created = service.registerAutomatically(openResult.data,
+                                                       QStringLiteral("13612345678"));
+    QVERIFY2(created.success, qPrintable(created.message));
+    QVERIFY(created.data.isNewUser);
+    QVERIFY(created.data.userId > 0);
+    QCOMPARE(created.data.nickname, QStringLiteral("用户5678"));
+    QCOMPARE(created.data.avatarPath, QStringLiteral(":/images/default-avatar.svg"));
+    QCOMPARE(created.data.balanceCent, 0);
+    QVERIFY(!created.data.sessionId.isEmpty());
+
+    QSqlQuery query(openResult.data);
+    query.prepare(QStringLiteral(
+        "SELECT nickname, avatar_path, balance, status FROM users WHERE phone = ?"));
+    query.addBindValue(QStringLiteral("13612345678"));
+    QVERIFY2(query.exec(), qPrintable(query.lastError().text()));
+    QVERIFY(query.next());
+    QCOMPARE(query.value(0).toString(), QStringLiteral("用户5678"));
+    QCOMPARE(query.value(1).toString(), QStringLiteral(":/images/default-avatar.svg"));
+    QCOMPARE(query.value(2).toDouble(), 0.0);
+    QCOMPARE(query.value(3).toString(), QStringLiteral("normal"));
+
+    const auto conflict = service.registerAutomatically(openResult.data,
+                                                        QStringLiteral("13612345678"));
+    QVERIFY2(conflict.success, qPrintable(conflict.message));
+    QVERIFY(!conflict.data.isNewUser);
+    QCOMPARE(conflict.data.userId, created.data.userId);
+
+    QVERIFY(query.exec(QStringLiteral(
+        "SELECT COUNT(*) FROM users WHERE phone = '13612345678'")));
+    QVERIFY(query.next());
+    QCOMPARE(query.value(0).toInt(), 1);
+}
+
+void FoundationTests::sessionLifecycle()
+{
+    ev::SessionManager sessions(5);
+    QVERIFY(!sessions.registerUserSession({}, 1));
+    QVERIFY(!sessions.registerUserSession(QStringLiteral("invalid-user"), 0));
+
+    QVERIFY(sessions.registerUserSession(QStringLiteral("session-a"), 10));
+    QVERIFY(sessions.registerUserSession(QStringLiteral("session-b"), 10));
+    QVERIFY(sessions.registerUserSession(QStringLiteral("session-c"), 11));
+    QCOMPARE(sessions.activeSessionCount(), 3);
+    QVERIFY(sessions.validateAndTouch(QStringLiteral("session-a")));
+    QVERIFY(!sessions.validateAndTouch(QStringLiteral("missing")));
+
+    QCOMPARE(sessions.removeByUserId(10), 2);
+    QVERIFY(!sessions.validateAndTouch(QStringLiteral("session-a")));
+    QCOMPARE(sessions.activeSessionCount(), 1);
+
+    QVERIFY(sessions.registerUserSession(QStringLiteral("expiring"), 12));
+    QTest::qWait(10);
+    QVERIFY(!sessions.validateAndTouch(QStringLiteral("expiring")));
+
+    QCOMPARE(sessions.removeAll({QStringLiteral("session-c"),
+                                 QStringLiteral("does-not-exist")}), 1);
+    QCOMPARE(sessions.activeSessionCount(), 0);
 }
 
 QTEST_APPLESS_MAIN(FoundationTests)

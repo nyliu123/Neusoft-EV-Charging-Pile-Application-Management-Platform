@@ -3,6 +3,7 @@
 #include "network/frame_codec.h"
 
 #include <QByteArray>
+#include <QJsonObject>
 #include <QObject>
 #include <QString>
 #include <QTcpSocket>
@@ -27,6 +28,8 @@ public:
 
     void connectToServer(QString host, quint16 port);
     void reconnectNow();
+    void login(const QString &phone);
+    void logout();
     State state() const;
 
     // Send a frame to the server. Returns the request_id used.
@@ -35,6 +38,10 @@ public:
 signals:
     void stateChanged(ev::PlatformClient::State state, const QString &detail);
     void healthCheckSucceeded(const QString &serverVersion);
+    void loginSucceeded(const QJsonObject &userInfo, bool isNewUser);
+    void loginFailed(const QString &code, const QString &message);
+    void sessionExpired(const QString &message);
+    void logoutFinished(bool success, const QString &message);
 
     // Emitted when a complete frame is received (excluding health/error handled internally).
     void frameReceived(quint32 messageType, const QJsonObject &payload);
@@ -42,6 +49,11 @@ signals:
 private:
     void setState(State state, const QString &detail);
     void sendHealthCheck();
+    void sendLoginRequest(const QString &phone, bool isAutoRegister);
+    void activateUserSession(const QString &sessionId);
+    void sendSessionHeartbeat();
+    void clearUserSession();
+    void failPendingLogin(const QString &code, const QString &message);
     void readFrames();
     void scheduleReconnect();
 
@@ -54,6 +66,15 @@ private:
     QByteArray receiveBuffer_;
     QTcpSocket socket_;
     QTimer reconnectTimer_;
+    QTimer loginTimer_;
+    QTimer sessionHeartbeatTimer_;
+    QTimer sessionResponseTimer_;
+    QString pendingLoginRequestId_;
+    QString pendingLoginPhone_;
+    bool pendingAutoRegistration_ = false;
+    QString sessionId_;
+    QString heartbeatRequestId_;
+    QString logoutRequestId_;
 };
 
 } // namespace ev
