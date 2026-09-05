@@ -1,0 +1,752 @@
+================================================================================
+  数据与接口层 / 业务数据库（UML-047 ~ UML-053，对应 B=47~53）
+================================================================================
+
+  中任务概述：
+  本中任务是整个系统的数据持久化基础，定义5张核心表的完整数据
+ 操作接口（CRUD）、表间关系与完整性约束、以及事务安全机制。
+  所有上层模块——充电用户端（UML-010~033）和PC运营管理端
+  （UML-034~046）——的数据操作最终都通过本中任务定义的
+  数据访问层（DAL）与SQLite数据库交互。
+
+  组件清单（本中任务涉及）：
+  - 数据访问层 DAL（Data Access Layer，服务端内部模块）
+  - SQLite 数据库引擎（QSQLite，Qt内置的SQLite驱动）
+  - 5张核心表：users / admins / charging_stations / charging_piles / orders
+  - 事务管理器（DAL内部，基于SQLite的BEGIN/COMMIT/ROLLBACK）
+
+  解耦设计：
+  - DAL 是服务端内部唯一访问数据库的入口，所有业务服务
+    （用户服务、站点服务、充电服务、订单服务、管理端服务）
+    均通过 DAL 读写数据，不直接执行SQL
+  - DAL 封装了表结构细节，上层服务只看到领域对象
+    （如 User 对象、Order 对象），不关心SQL和表结构
+  - 完整性约束在数据库层（DDL）和DAL层双重保障：
+    - 数据库层：主键、外键、唯一约束、NOT NULL
+    - DAL层：业务状态约束（如只有idle桩可被预约）
+  - 事务管理由DAL统一控制，上层服务通过"事务方法"调用
+
+  与已有两个系统的兼容关系：
+  ┌─────────────┐         ┌─────────────┐
+  │  充电用户端   │         │ PC运营管理端  │
+  │ (UML-010~033)│         │ (UML-034~046)│
+  └──────┬──────┘         └──────┬──────┘
+         │                       │
+    各领域服务 ←──────→ 管理端服务
+         │                       │
+         └───────────┬───────────┘
+                     │
+              ┌──────┴──────┐
+              │  数据访问层   │
+              │   (DAL)     │
+              └──────┬──────┘
+                     │
+              ┌──────┴──────┐
+              │ SQLite 数据库 │
+              │  (5张核心表)  │
+              └─────────────┘
+
+  DAL向上提供的操作映射：
+  用户服务   → DAL.user_xxx()    操作 users 表
+  站点服务   → DAL.station_xxx() 操作 charging_stations 表
+  充电服务   → DAL.pile_xxx()    操作 charging_piles 表
+              DAL.order_xxx()   操作 orders 表
+  订单服务   → DAL.order_xxx()   操作 orders 表
+  管理端服务 → DAL.admin_xxx()   操作 admins 表
+              复用上述所有DAL方法
+
+
+------------------------------------------------------------
+【UML-047】用户数据
+------------------------------------------------------------
+
+■ 场景
+  定义 users 表的完整数据操作接口。充电用户端通过用户服务
+  调用DAL操作此表：登录/注册时查询和插入（UML-011/012）、
+  修改个人信息时更新昵称/头像（UML-015）、充值时更新余额
+  （UML-016）。PC运营管理端通过管理端服务调用DAL操作此表：
+  用户列表查询（UML-043）、手机号模糊查询（UML-044）、
+  冻结/解冻时更新status（UML-045）。
+
+■ 参与者
+  - 数据访问层 DAL（内部模块，非actor）
+  - 用户表 users
+  - 上层调用方：用户服务（用户端）、管理端服务（管理端）
+
+■ 表结构（见系统架构概述，此处完整定义）
+  users 表 DDL:
+  CREATE TABLE users (
+      user_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+      phone          VARCHAR(11) UNIQUE NOT NULL,
+      nickname       VARCHAR(50),
+      avatar_path    VARCHAR(255),
+      balance        DECIMAL(10,2) DEFAULT 0.00,
+      register_time  DATETIME DEFAULT (datetime('now','localtime')),
+      status         VARCHAR(10) DEFAULT 'normal'
+  );
+
+■ 约束规则
+  - 主键：user_id 自增，由SQLite分配
+  - 唯一约束：phone 不可重复（防止同一手机号重复注册）
+  - NOT NULL：phone 不可为空
+  - 默认值：balance=0.00, status='normal',
+    register_time=当前时间, nickname/avatar_path 可为NULL
+
+■ DAL 操作接口
+  -- 查询类（读操作，不修改数据）
+  user_find_by_phone(phone) → User | null
+    -- 用户端登录（UML-011）：按手机号查用户
+    -- SELECT * FROM users WHERE phone = ?
+  user_find_by_id(user_id) → User | null
+    -- 用户端各模块获取用户信息
+    -- SELECT * FROM users WHERE user_id = ?
+  user_count_all() → int
+    -- 管理端看板（UML-035）：注册用户数
+    -- SELECT COUNT(*) FROM users
+  user_list_all() → List<User>
+    -- 管理端用户列表（UML-043）
+    -- SELECT * FROM users ORDER BY register_time DESC
+  user_search_by_phone(keyword) → List<User>
+    -- 管理端模糊查询（UML-044）
+    -- SELECT * FROM users WHERE phone LIKE '%keyword%'
+
+  -- 写入类（写操作，需在事务中执行）
+  user_insert(phone, nickname, avatar_path) → user_id
+    -- 用户端自动注册（UML-012）
+    -- INSERT INTO users (phone, nickname, avatar_path)
+    --   VALUES (?, ?, ?)
+    -- 返回新 user_id
+  user_update_nickname(user_id, nickname) → bool
+    -- 用户端修改昵称（UML-015）
+    -- UPDATE users SET nickname = ? WHERE user_id = ?
+  user_update_avatar(user_id, avatar_path) → bool
+    -- 用户端修改头像（UML-015）
+    -- UPDATE users SET avatar_path = ? WHERE user_id = ?
+  user_update_balance(user_id, new_balance) → bool
+    -- 用户端充值（UML-016）/充电结算扣款（UML-030）
+    -- UPDATE users SET balance = ? WHERE user_id = ?
+  user_update_status(user_id, new_status) → bool
+    -- 管理端冻结/解冻（UML-045）
+    -- UPDATE users SET status = ? WHERE user_id = ?
+
+■ 与上层系统的交互路径
+  充电用户端：
+    UML-011 已存在用户登录 → user_find_by_phone()
+    UML-012 新用户自动注册 → user_insert()
+    UML-013 登录状态维护 → user_find_by_id()（刷新用户信息）
+    UML-015 修改昵称/头像 → user_update_nickname() / user_update_avatar()
+    UML-016 钱包充值 → user_update_balance()
+    UML-030 结算扣款 → user_update_balance()（事务内）
+    UML-033 个人订单列表 → user_find_by_id()（获取用户信息）
+  PC运营管理端：
+    UML-035 核心经营指标 → user_count_all()
+    UML-043 用户列表 → user_list_all()
+    UML-044 手机号模糊查询 → user_search_by_phone()
+    UML-045 冻结与解冻 → user_update_status()
+
+■ 输出
+  - 查询类：返回 User 对象或列表（含全部字段），无匹配返回null/空列表
+  - 写入类：返回成功/失败布尔值，失败时上层服务返回错误提示
+  - 约束生效：phone 唯一约束阻止重复注册，status 只能是
+    'normal' 或 'frozen'
+
+■ 关联
+  - 被调用方：用户服务（UML-010~033）、管理端服务（UML-034~046）
+  - 关联表：orders 表通过 user_id 外键引用本表
+  - 事务：充值和结算扣款必须在事务中执行（见 UML-053）
+
+
+------------------------------------------------------------
+【UML-048】充电站数据
+------------------------------------------------------------
+
+■ 场景
+  定义 charging_stations 表的完整数据操作接口。用户端通过
+  站点服务调用DAL查询充电站列表（UML-018~020）；管理端通过
+  管理端服务调用DAL查询充电站列表（UML-040）、新增充电站
+  （UML-042）。
+
+■ 表结构
+  CREATE TABLE charging_stations (
+      station_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+      station_name   VARCHAR(100) NOT NULL,
+      address        VARCHAR(255),
+      longitude      DECIMAL(10,6),
+      latitude       DECIMAL(10,6),
+      price_per_kwh  DECIMAL(10,2)
+  );
+
+■ 约束规则
+  - 主键：station_id 自增
+  - NOT NULL：station_name 不可为空
+  - 经纬度为DECIMAL(10,6)，精度到小数点后6位（约0.1米级）
+  - price_per_kwh 为正数（DAL层校验 > 0）
+
+■ DAL 操作接口
+  -- 查询类
+  station_find_nearby(longitude, latitude) → List<Station>
+    -- 用户端附近充电站查询（UML-018）
+    -- SELECT * FROM charging_stations
+    -- ORDER BY (经纬度距离计算) ASC
+    -- （SQLite无原生GIS函数，使用Haversine公式在DAL层计算距离排序）
+  station_find_by_id(station_id) → Station | null
+    -- 用户端充电站详情（UML-020）、管理端站内详情（UML-041）
+    -- SELECT * FROM charging_stations WHERE station_id = ?
+  station_list_all() → List<Station>
+    -- 管理端充电站列表（UML-040）
+    -- SELECT * FROM charging_stations ORDER BY station_id ASC
+
+  -- 写入类
+  station_insert(station_name, address, longitude, latitude,
+                 price_per_kwh) → station_id
+    -- 管理端新增充电站（UML-042）
+    -- INSERT INTO charging_stations (...) VALUES (...)
+
+■ 与上层系统的交互路径
+  充电用户端：
+    UML-018 附近充电站列表 → station_find_nearby()
+    UML-020 充电站详情 → station_find_by_id()
+  PC运营管理端：
+    UML-040 充电站列表 → station_list_all()
+    UML-041 站内设备详情 → station_find_by_id()
+    UML-042 新增充电站 → station_insert()
+
+■ 关联
+  - 被调用方：站点服务（用户端）、管理端服务（管理端）
+  - 关联表：charging_piles 表通过 station_id 外键引用本表；
+    orders 表通过 station_id 外键引用本表
+  - 说明：本系统不提供充电站更新和删除接口——充电站一经创建
+    不可修改（如需修改地址/单价需直接操作数据库，不在业务接口中）
+
+
+------------------------------------------------------------
+【UML-049】充电桩数据
+------------------------------------------------------------
+
+■ 场景
+  定义 charging_piles 表的完整数据操作接口。用户端通过站点服务
+  查询站内充电桩列表（UML-019）、通过充电服务预约/开始充电/
+  结束充电时更新桩状态（UML-025/027/030）；管理端通过管理端服务
+  查询充电桩列表（UML-038/041）、远程重启更新状态（UML-039）。
+
+■ 表结构
+  CREATE TABLE charging_piles (
+      pile_id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      station_id           INTEGER NOT NULL,
+      pile_number          VARCHAR(20),
+      pile_type            VARCHAR(10),
+      power_kw             DECIMAL(10,2),
+      status               VARCHAR(10) DEFAULT 'idle',
+      total_charge_count   INTEGER DEFAULT 0,
+      total_charge_duration DECIMAL DEFAULT 0,
+      FOREIGN KEY (station_id) REFERENCES charging_stations(station_id)
+  );
+
+■ 约束规则
+  - 主键：pile_id 自增
+  - 外键：station_id 必须存在于 charging_stations 表中
+  - NOT NULL：station_id 不可为空
+  - status 取值约束：'idle' / 'reserved' / 'in_use' / 'fault'
+    （DAL层校验状态值合法性）
+  - pile_type 取值约束：'fast' / 'slow'
+
+■ DAL 操作接口
+  -- 查询类
+  pile_find_by_station(station_id) → List<Pile>
+    -- 用户端站内充电桩列表（UML-019）
+    -- SELECT * FROM charging_piles WHERE station_id = ?
+    -- ORDER BY pile_number ASC
+  pile_find_by_id(pile_id) → Pile | null
+    -- 充电服务获取桩详情（预约/充电前确认状态）
+    -- SELECT * FROM charging_piles WHERE pile_id = ?
+  pile_list_all() → List<Pile>
+    -- 管理端充电桩列表（UML-038）
+    -- SELECT * FROM charging_piles ORDER BY station_id, pile_number
+  pile_list_by_station(station_id) → List<Pile>
+    -- 管理端站内设备详情（UML-041），同 pile_find_by_station
+  pile_count_by_status() → Dict<status, count>
+    -- 管理端看板桩状态统计（UML-037）
+    -- SELECT status, COUNT(*) FROM charging_piles GROUP BY status
+
+  -- 写入类（状态更新，需在事务中执行）
+  pile_update_status(pile_id, new_status, old_status) → bool
+    -- 乐观锁：WHERE pile_id = ? AND status = old_status
+    -- 用户端预约（UML-025）：idle → reserved
+    -- 用户端开始充电（UML-027）：reserved → in_use
+    -- 用户端结束充电（UML-030）：in_use → idle
+    -- 用户端取消预约（UML-026）：reserved → idle
+    -- 管理端远程重启（UML-039）：fault → idle
+    -- UPDATE charging_piles SET status = ?
+    -- WHERE pile_id = ? AND status = ?
+  pile_update_stats(pile_id, add_count, add_duration) → bool
+    -- 充电结束后更新累计统计
+    -- UPDATE charging_piles SET
+    --   total_charge_count = total_charge_count + ?,
+    --   total_charge_duration = total_charge_duration + ?
+    -- WHERE pile_id = ?
+
+■ 状态变更规则（DAL层强制校验，对应充电桩状态机）
+  允许的转换：
+    idle → reserved    （用户预约，UML-025）
+    reserved → in_use  （开始充电，UML-027）
+    reserved → idle    （取消预约，UML-026）
+    in_use → idle      （结束充电，UML-030）
+    fault → idle      （远程重启，UML-039）
+  DAL 层拒绝非法转换：
+    idle → in_use      （未预约直接充电，拒绝）
+    idle → fault       （空闲直接设为故障，拒绝）
+    in_use → reserved  （使用中回预约，拒绝）
+  实现方式：pile_update_status 的 old_status 参数即为乐观锁，
+    若数据库中当前状态与 old_status 不匹配，UPDATE 影响行数为0，
+    DAL 返回 false，上层服务报错。
+
+■ 与上层系统的交互路径
+  充电用户端：
+    UML-019 站内充电桩列表 → pile_find_by_station()
+    UML-025 预约充电 → pile_update_status(pile_id, 'reserved', 'idle')
+    UML-026 取消预约 → pile_update_status(pile_id, 'idle', 'reserved')
+    UML-027 开始充电 → pile_update_status(pile_id, 'in_use', 'reserved')
+    UML-030 结束充电 → pile_update_status(pile_id, 'idle', 'in_use')
+    UML-030 更新统计 → pile_update_stats(pile_id, 1, duration)
+  PC运营管理端：
+    UML-037 桩状态统计 → pile_count_by_status()
+    UML-038 充电桩列表 → pile_list_all()
+    UML-039 远程重启 → pile_update_status(pile_id, 'idle', 'fault')
+    UML-041 站内设备 → pile_list_by_station(station_id)
+
+■ 关联
+  - 被调用方：站点服务（用户端查询）、充电服务（状态变更）、
+    管理端服务（列表和重启）
+  - 关联表：station_id 外键引用 charging_stations；
+    orders 表通过 pile_id 外键引用本表
+  - 事务：所有状态变更必须在事务中执行，防止并发冲突
+
+
+------------------------------------------------------------
+【UML-050】订单数据
+------------------------------------------------------------
+
+■ 场景
+  定义 orders 表的完整数据操作接口。用户端通过充电服务创建
+  预约订单（UML-025）、更新充电中实时数据（UML-028）、
+  结束时更新最终数据（UML-030）；通过订单服务查询个人订单
+  （UML-033）。管理端通过管理端服务查询全量订单（UML-046）。
+
+■ 表结构
+  CREATE TABLE orders (
+      order_id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id             INTEGER NOT NULL,
+      pile_id             INTEGER NOT NULL,
+      station_id          INTEGER NOT NULL,
+      status              VARCHAR(20),
+      reserve_time        DATETIME,
+      start_time          DATETIME,
+      end_time           DATETIME,
+      charge_amount_kwh   DECIMAL(10,2),
+      price_per_kwh       DECIMAL(10,2),
+      total_fee           DECIMAL(10,2),
+      FOREIGN KEY (user_id) REFERENCES users(user_id),
+      FOREIGN KEY (pile_id) REFERENCES charging_piles(pile_id),
+      FOREIGN KEY (station_id) REFERENCES charging_stations(station_id)
+  );
+
+■ 约束规则
+  - 主键：order_id 自增
+  - 外键：user_id, pile_id, station_id 均需引用有效记录
+  - NOT NULL：user_id, pile_id, station_id 不可为空
+  - status 取值约束（对应订单状态机）：
+    'reserved' / 'charging' / 'pending_settlement' /
+    'settled' / 'cancelled'
+  - 业务约束（DAL层校验）：
+    - 同一 user_id 同时只能有一个非终态订单
+      （status IN ('reserved','charging','pending_settlement')）
+    - price_per_kwh 为下单时从 stations 表快照的值（不随后续调价变化）
+
+■ DAL 操作接口
+  -- 查询类
+  order_find_by_user(user_id) → List<Order>
+    -- 用户端个人订单列表（UML-033）
+    -- SELECT * FROM orders WHERE user_id = ?
+    -- ORDER BY reserve_time DESC
+  order_find_by_id(order_id) → Order | null
+    -- 充电服务获取订单详情（充电中/结算时）
+    -- SELECT * FROM orders WHERE order_id = ?
+  order_check_pending(user_id) → Order | null
+    -- 用户端检查未完成订单（UML-025 前置检查）
+    -- SELECT * FROM orders WHERE user_id = ?
+    --   AND status IN ('reserved','charging','pending_settlement')
+    --   ORDER BY reserve_time DESC LIMIT 1
+  order_list_all() → List<Order>
+    -- 管理端订单列表（UML-046）
+    -- 联合查询 users / charging_piles / charging_stations
+  order_list_filtered(status, station_id, start_date, end_date)
+    → List<Order>
+    -- 管理端筛选查询（UML-046）
+    -- 按条件组合 WHERE 子句
+  order_count_settled() → (total_kwh, total_revenue, total_count)
+    -- 管理端看板核心指标（UML-035）
+    -- SELECT SUM(charge_amount_kwh), SUM(total_fee), COUNT(*)
+    -- FROM orders WHERE status = 'settled'
+  order_revenue_by_date(start_date, end_date) → List<{date, revenue}>
+    -- 管理端看板营收趋势（UML-036）
+    -- SELECT DATE(end_time), SUM(total_fee)
+    -- FROM orders WHERE status = 'settled'
+    --   AND end_time >= start_date GROUP BY DATE(end_time)
+
+  -- 写入类（需在事务中执行）
+  order_insert(user_id, pile_id, station_id, price_per_kwh) → order_id
+    -- 用户端预约充电（UML-025）
+    -- INSERT INTO orders (user_id, pile_id, station_id, status,
+    --   reserve_time, price_per_kwh)
+    --   VALUES (?, ?, ?, 'reserved', datetime('now','localtime'), ?)
+  order_update_status(order_id, new_status) → bool
+    -- 状态流转（多个UML任务复用）
+    -- UML-027 开始充电：reserved → charging，同时写入 start_time
+    -- UML-030 结束充电：charging → pending_settlement，写入 end_time
+    -- UML-031 结算完成：pending_settlement → settled，写入 total_fee
+    -- UML-026 取消预约：reserved → cancelled
+  order_update_charge_data(order_id, kwh, fee) → bool
+    -- 充电中实时数据更新（UML-028）
+    -- UPDATE orders SET charge_amount_kwh = ?, total_fee = ?
+    --   WHERE order_id = ?
+  order_settle(order_id, final_kwh, final_fee) → bool
+    -- 结算时写入最终数据（UML-030/031）
+    -- UPDATE orders SET charge_amount_kwh = ?, total_fee = ?,
+    --   status = 'settled', end_time = datetime('now','localtime')
+    --   WHERE order_id = ?
+
+■ 与上层系统的交互路径
+  充电用户端：
+    UML-025 预约 → order_check_pending() + order_insert()
+    UML-026 取消 → order_update_status(order_id, 'cancelled')
+    UML-027 开始充电 → order_update_status(order_id, 'charging')
+    UML-028 充电中更新 → order_update_charge_data(order_id, kwh, fee)
+    UML-030 结束充电 → order_update_status(order_id, 'pending_settlement')
+    UML-031 结算 → order_settle(order_id, kwh, fee)
+    UML-033 个人订单 → order_find_by_user(user_id)
+  PC运营管理端：
+    UML-035 核心指标 → order_count_settled()
+    UML-036 营收趋势 → order_revenue_by_date()
+    UML-046 订单列表 → order_list_all() / order_list_filtered()
+
+■ 关联
+  - 被调用方：充电服务（创建/状态流转/数据更新）、
+    订单服务（个人订单查询）、管理端服务（全量查询/筛选/统计）
+  - 关联表：user_id → users, pile_id → charging_piles,
+    station_id → charging_stations
+  - 事务：预约（插入订单+更新桩状态）、结算（更新订单+扣减余额）
+    均需在事务中执行（见 UML-053）
+
+
+------------------------------------------------------------
+【UML-051】管理员数据
+------------------------------------------------------------
+
+■ 场景
+  定义 admins 表的完整数据操作接口。仅PC运营管理端通过管理端
+  服务调用DAL操作此表：管理员登录时查询验证（UML-034）。
+  本系统不提供管理员注册/修改/删除的业务接口——管理员账号
+  由系统预置或DBA直接操作数据库创建。
+
+■ 表结构
+  CREATE TABLE admins (
+      admin_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+      username        VARCHAR(50) UNIQUE NOT NULL,
+      password        VARCHAR(255) NOT NULL,
+      create_time     DATETIME DEFAULT (datetime('now','localtime'))
+  );
+
+  -- 系统初始化时预置默认管理员
+  INSERT INTO admins (username, password) VALUES ('admin', '123456');
+
+■ 约束规则
+  - 主键：admin_id 自增
+  - 唯一约束：username 不可重复
+  - NOT NULL：username, password 不可为空
+  - 默认管理员：username='admin', password='123456'
+
+■ DAL 操作接口
+  -- 查询类
+  admin_find_by_credentials(username, password) → Admin | null
+    -- 管理端登录（UML-034）
+    -- SELECT * FROM admins
+    --   WHERE username = ? AND password = ?
+    -- （密码明文比对，本项目简化处理）
+
+■ 与上层系统的交互路径
+  PC运营管理端：
+    UML-034 管理员登录 → admin_find_by_credentials(username, password)
+
+■ 关联
+  - 被调用方：管理端服务（仅登录场景）
+  - 无外键关联其他表
+  - 说明：admins 表是独立的认证表，不与 users 表产生关联。
+    管理员和充电用户是完全不同的角色，使用不同的认证机制。
+
+
+------------------------------------------------------------
+【UML-052】关系与完整性
+------------------------------------------------------------
+
+■ 场景
+  定义5张表之间的主外键关系、唯一约束、删除/更新规则和业务
+  状态约束。这些约束在数据库DDL层和DAL层双重保障，确保数据
+  不会因并发操作或程序错误而产生孤立记录、重复标识和非法状态。
+
+■ 参与者
+  - SQLite 数据库引擎（DDL层约束）
+  - 数据访问层 DAL（业务约束校验）
+
+■ 关系图
+  users (user_id PK)
+    │ 1
+    │
+    │ N
+  orders (user_id FK → users.user_id)
+
+  charging_stations (station_id PK)
+    │ 1
+    │
+    │ N
+  charging_piles (station_id FK → charging_stations.station_id)
+    │ 1
+    │
+    │ N
+  orders (pile_id FK → charging_piles.pile_id,
+          station_id FK → charging_stations.station_id)
+
+  admins (admin_id PK)  — 独立表，无外键关联
+
+■ DDL层约束（建表时定义）
+  1. 主键约束：
+     - users.user_id PRIMARY KEY AUTOINCREMENT
+     - admins.admin_id PRIMARY KEY AUTOINCREMENT
+     - charging_stations.station_id PRIMARY KEY AUTOINCREMENT
+     - charging_piles.pile_id PRIMARY KEY AUTOINCREMENT
+     - orders.order_id PRIMARY KEY AUTOINCREMENT
+
+  2. 外键约束：
+     - charging_piles.station_id → charging_stations.station_id
+     - orders.user_id → users.user_id
+     - orders.pile_id → charging_piles.pile_id
+     - orders.station_id → charging_stations.station_id
+     -- 注：SQLite 需要启用 PRAGMA foreign_keys = ON
+
+  3. 唯一约束：
+     - users.phone UNIQUE NOT NULL
+     - admins.username UNIQUE NOT NULL
+
+  4. NOT NULL 约束：
+     - users.phone NOT NULL
+     - charging_stations.station_name NOT NULL
+     - charging_piles.station_id NOT NULL
+     - orders.user_id, pile_id, station_id NOT NULL
+     - admins.username, password NOT NULL
+
+■ DAL层业务约束（程序逻辑校验）
+  1. 充电桩状态机约束（见 UML-049）：
+     - 只允许合法的状态转换路径
+     - 通过乐观锁（old_status参数）保证并发安全
+
+  2. 订单状态机约束（见 UML-050）：
+     - 只允许 reserved → charging → pending_settlement → settled
+     - 或 reserved → cancelled
+     - 不允许跳跃转换（如 reserved → settled）
+
+  3. 同一用户单订单约束：
+     - 创建预约前检查：同一 user_id 不能有非终态订单
+     - order_check_pending() 返回非null则拒绝新预约
+
+  4. 充电桩状态与订单一致性：
+     - 预约时：桩状态必须为idle才能预约（DAL层校验）
+     - 开始充电：桩状态必须为reserved
+     - 结束充电：桩状态必须为in_use
+     - 这些校验通过乐观锁的 old_status 参数实现
+
+  5. 余额非负约束：
+     - 结算扣款时，DAL层校验扣款后余额 >= 0
+     - 余额不足时拒绝结算，订单进入异常处理
+
+  6. 管理员密码校验：
+     - admin_find_by_credentials 同时匹配 username 和 password
+     - 不存在"用户名不存在"和"密码错误"的区分
+
+■ 删除/更新规则
+  - 本系统不提供物理删除操作（DELETE）：
+    - 用户不删除，只冻结（status='frozen'）
+    - 充电站不删除，不修改
+    - 充电桩不删除，只更新状态
+    - 订单不删除，只更新状态
+    - 管理员不删除
+  - 所有"删除"均为软删除（状态标记），保留完整历史数据
+  - 外键约束在创建充电桩/订单时生效：
+    - 插入充电桩时 station_id 必须存在
+    - 插入订单时 user_id, pile_id, station_id 必须存在
+
+■ 输出
+  - DDL层约束：阻止不合规的数据写入（如重复手机号、无效外键）
+  - DAL层约束：阻止非法的业务状态转换
+  - 两层保障确保数据完整性和业务一致性
+
+■ 关联
+  - 被所有DAL操作依赖
+  - 充电桩状态机 → 与 UML-049 的 pile_update_status 关联
+  - 订单状态机 → 与 UML-050 的 order_update_status 关联
+  - 外键约束 → 保障 users / charging_piles / charging_stations /
+    orders 之间的引用完整性
+
+
+------------------------------------------------------------
+【UML-053】持久化与事务
+------------------------------------------------------------
+
+■ 场景
+  定义DAL的事务管理机制。涉及多表、多步骤的数据变更必须在
+  事务中执行，确保"要么全部成功，要么全部回滚"。本系统中
+  需要事务保障的核心操作：
+    1）预约充电：插入订单 + 更新桩状态(idle→reserved)
+    2）开始充电：更新订单状态 + 更新桩状态(reserved→in_use)
+    3）结束充电结算：更新订单状态 + 更新桩状态(in_use→idle)
+       + 更新桩统计 + 扣减用户余额
+  这些操作如果中途失败（如数据库异常、乐观锁冲突），必须
+  回滚到操作前的状态，不能出现"订单创建了但桩状态没变"等
+  不一致情况。
+
+■ 参与者
+  - 事务管理器（DAL内部模块）
+  - SQLite 数据库引擎（提供 BEGIN/COMMIT/ROLLBACK）
+
+■ 前置条件
+  - 数据库连接已建立
+  - SQLite 已启用事务（默认每个连接自动开启事务）
+
+■ 事务接口
+  dal_begin_transaction() → void
+    -- 开启事务：BEGIN TRANSACTION
+  dal_commit_transaction() → void
+    -- 提交事务：COMMIT
+  dal_rollback_transaction() → void
+    -- 回滚事务：ROLLBACK
+
+  -- 事务辅助方法（封装常用的事务操作）
+  dal_execute_transaction(callback) → result
+    -- 自动事务包装：调用 callback，成功则COMMIT，异常则ROLLBACK
+    -- 伪代码：
+    --   BEGIN TRANSACTION
+    --   try:
+    --     result = callback()
+    --     COMMIT
+    --     return result
+    --   except:
+    --     ROLLBACK
+    --     raise
+
+■ 需要事务保障的核心操作
+
+  1. 预约充电事务（UML-025，用户端充电流程）
+     dal_execute_transaction(() => {
+       // 步骤1：检查同一用户是否有未完成订单
+       pending = order_check_pending(user_id)
+       if (pending != null) throw "存在未完成订单"
+
+       // 步骤2：更新桩状态 idle → reserved（乐观锁）
+       ok = pile_update_status(pile_id, 'reserved', 'idle')
+       if (!ok) throw "充电桩已被他人预约或状态已变"
+
+       // 步骤3：插入订单
+       order_id = order_insert(user_id, pile_id, station_id,
+                               price_per_kwh)
+
+       return order_id
+     })
+     -- 若步骤2成功但步骤3失败：步骤2的桩状态变更回滚
+     -- 若步骤2失败：不产生任何变更
+
+  2. 开始充电事务（UML-027，用户端充电流程）
+     dal_execute_transaction(() => {
+       // 步骤1：更新订单状态 reserved → charging，写入 start_time
+       ok1 = order_update_status(order_id, 'charging')
+       if (!ok1) throw "订单状态异常"
+
+       // 步骤2：更新桩状态 reserved → in_use（乐观锁）
+       ok2 = pile_update_status(pile_id, 'in_use', 'reserved')
+       if (!ok2) throw "充电桩状态异常"
+
+       return true
+     })
+
+  3. 结束充电结算事务（UML-030~031，用户端充电流程）
+     dal_execute_transaction(() => {
+       // 步骤1：更新订单数据（充电量、费用、状态→pending_settlement）
+       order_settle(order_id, final_kwh, final_fee)
+       -- 同时写入 end_time
+
+       // 步骤2：更新桩状态 in_use → idle + 更新桩统计
+       ok = pile_update_status(pile_id, 'idle', 'in_use')
+       if (!ok) throw "充电桩状态异常"
+       pile_update_stats(pile_id, 1, duration_hours)
+
+       // 步骤3：扣减用户余额
+       user = user_find_by_id(user_id)
+       if (user.balance < final_fee) throw "余额不足"
+       user_update_balance(user_id, user.balance - final_fee)
+
+       // 步骤4：更新订单状态 → settled
+       order_update_status(order_id, 'settled')
+
+       return true
+     })
+     -- 此事务涉及4个表的更新，任一步失败全部回滚
+
+  4. 取消预约事务（UML-026，用户端充电流程）
+     dal_execute_transaction(() => {
+       // 步骤1：更新订单状态 reserved → cancelled
+       order_update_status(order_id, 'cancelled')
+
+       // 步骤2：更新桩状态 reserved → idle
+       pile_update_status(pile_id, 'idle', 'reserved')
+
+       return true
+     })
+
+  5. 管理端冻结用户事务（UML-045，PC运营管理端）
+     dal_execute_transaction(() => {
+       // 步骤1：更新用户状态 normal → frozen
+       ok = user_update_status(user_id, 'frozen')
+       if (!ok) throw "用户状态异常"
+
+       // 步骤2：清除该用户的服务端会话（如有）
+       session_manager.remove_by_user_id(user_id)
+
+       return true
+     })
+
+  6. 管理端远程重启事务（UML-039，PC运营管理端）
+     dal_execute_transaction(() => {
+       // 更新桩状态 fault → idle（乐观锁）
+       ok = pile_update_status(pile_id, 'idle', 'fault')
+       if (!ok) throw "充电桩状态异常"
+       return true
+     })
+
+■ 事务隔离与并发安全
+  - SQLite 默认隔离级别：SERIALIZABLE（单写者模型）
+  - 写操作自动加锁，多个读操作可并发，写操作串行
+  - 乐观锁机制（old_status参数）防止并发状态冲突：
+    - 管理员远程重启（fault→idle）与用户端操作不会冲突
+      （用户不会操作fault状态的桩）
+    - 但两个用户同时预约同一个idle桩时，乐观锁保证只有一个
+      成功（第一个UPDATE影响行数1，第二个影响行数0）
+  - 事务超时：SQLite默认无超时，DAL层设置5秒忙等待超时
+    （PRAGMA busy_timeout = 5000）
+
+■ 输出
+  - 事务成功：所有操作COMMIT，数据一致
+  - 事务失败：所有操作ROLLBACK，数据回滚到操作前状态
+  - 上层服务根据事务结果返回成功/错误响应给客户端
+
+■ 关联
+  - 被调用方：充电服务（预约/充电/结算）、管理端服务（冻结/重启）
+  - 依赖：UML-047~052 的所有DAL操作接口
+  - 说明：事务是数据一致性的最终保障层。所有涉及多表/多步骤
+    的操作必须通过事务包装，绝不允许"部分成功"。

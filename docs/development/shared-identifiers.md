@@ -9,6 +9,7 @@
 | `ev::MessageType` | 通信 | `src/common/protocol.h` | TCP 消息类型编号 |
 | `ev::ErrorCode` | 公共 | `src/common/error_code.h` | 统一业务错误码 |
 | `ev::Result<T>` | 公共 | `src/common/result.h` | 服务统一返回结构 |
+| `ev::PhoneValidator` | 用户 | `src/common/phone_validator.h` | 客户端和服务端共用手机号格式校验 |
 | `ev::Frame` | 通信 | `src/network/frame_codec.h` | 已解析消息帧 |
 | `ev::FrameCodec` | 通信 | `src/network/frame_codec.h` | 8 字节头加 JSON 正文编解码 |
 | `ev::PlatformClient` | 通信 | `src/network/platform_client.h` | 客户端连接、健康检查与重连 |

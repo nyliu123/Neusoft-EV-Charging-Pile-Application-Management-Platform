@@ -1,0 +1,282 @@
+================================================================================
+  大数据与机器学习 / 模型部署（UML-072，对应 B=72）
+================================================================================
+
+  中任务概述：
+  本中任务定义模型的部署和调用机制。评估合格的模型通过
+  模型部署模块发布到生产环境，供预测任务和大屏数据服务
+  调用。模型部署包含版本管理、加载机制、调用接口和
+  回滚能力。
+
+  组件清单（本中任务涉及）：
+  - 模型部署管理器（ModelDeploymentManager，Python模块）
+  - 模型仓库（data/models/，存储所有版本的模型文件）
+  - 模型调用接口（ModelAPI，统一的模型加载和预测接口）
+  - 大屏数据服务（BigScreenAPI，UML-058，通过模型调用接口获取预测结果）
+  - 预测模块（Predictor，UML-067~068，通过模型调用接口加载模型）
+
+  解耦设计：
+  - 模型部署是"模型产出"和"模型使用"之间的桥梁
+  - 调用方不直接操作模型文件，通过统一接口调用
+  - 模型版本与调用解耦——调用方始终使用"当前版本"，
+    部署管理器负责切换版本
+  - 支持回滚：新版本有问题可快速切回旧版本
+
+
+------------------------------------------------------------
+【UML-072】模型调用
+------------------------------------------------------------
+
+■ 场景
+  各使用方（预测模块、大屏数据服务）通过统一的模型调用
+  接口加载模型并执行预测。模型部署管理器负责维护当前
+  生效的模型版本，确保调用方获取的是正确、最新、经过
+  评估的模型。
+
+  调用场景：
+    1）每日定时预测任务：加载最新模型，生成预测结果
+    2）大屏数据服务接口：按需读取预测结果文件
+       （预测结果是预生成的，不实时调用模型）
+    3）模型管理操作：发布新版本、回滚、查看版本列表
+
+■ 参与者
+  - 模型调用接口（ModelAPI，Python类，统一入口）
+  - 模型部署管理器（DeploymentManager，管理版本）
+  - 模型仓库（data/models/，所有模型文件）
+  - 模型元数据（model_meta.json，记录各版本信息）
+  - 调用方：预测模块（Predictor）、大屏数据服务（BigScreenAPI）
+
+■ 模型版本管理
+
+  模型仓库结构：
+  data/models/
+  ├── demand_forecast/
+  │   ├── v1_20260901.pkl     # 版本1（旧）
+  │   ├── v2_20260902.pkl     # 版本2（旧）
+  │   └── v3_20260903.pkl     # 版本3（当前）
+  ├── peak_predict/
+  │   ├── v1_20260901.pkl
+  │   └── v2_20260903.pkl     # 当前版本
+  ├── recommendation/
+  │   └── v1_20260901.pkl     # 当前版本
+  └── model_meta.json         # 版本元数据
+
+  model_meta.json 结构：
+  {
+    "demand_forecast": {
+      "current_version": "v3_20260903",
+      "versions": {
+        "v3_20260903": {
+          "file": "demand_forecast/v3_20260903.pkl",
+          "algorithm": "ARIMA(5,1,2)",
+          "train_date": "2026-09-03",
+          "metrics": {"MAE": 120.5, "RMSE": 180.3, "MAPE": 0.123},
+          "status": "active"
+        },
+        "v2_20260902": {
+          "file": "demand_forecast/v2_20260902.pkl",
+          "algorithm": "ARIMA(4,1,1)",
+          "train_date": "2026-09-02",
+          "metrics": {"MAE": 135.2, "RMSE": 200.1, "MAPE": 0.141},
+          "status": "archived"
+        }
+      }
+    },
+    "peak_predict": { ... },
+    "recommendation": { ... }
+  }
+
+■ 模型部署流程
+  1. 模型训练完成（UML-066），生成新模型文件
+  2. 模型评估完成（UML-071），生成评估指标
+  3. alt 评估合格
+     - 模型部署管理器 → 模型仓库：将新模型文件移入版本目录
+       （命名：v{N}_{日期}.pkl）
+     - 模型部署管理器 → model_meta.json：添加新版本信息
+       （版本号、训练日期、算法、评估指标、状态=pending）
+     - 模型部署管理器 → 模型部署管理器：执行冒烟测试
+       （加载模型，做一次预测，确认不报错）
+     - alt 冒烟测试通过
+       - 模型部署管理器 → model_meta.json：将新版本状态改为
+         "active"，旧版本状态改为 "archived"
+       - 模型部署管理器 → 模型部署管理器：记录部署日志
+       - 模型部署管理器 → 调用方：新模型在下一次预测时自动生效
+     else 冒烟测试失败
+       - 模型部署管理器 → model_meta.json：标记新版本 "failed"
+       - 模型部署管理器 → 模型部署管理器：记录错误日志
+       - 保留旧版本为 active，不影响生产
+     end
+   else 评估不合格
+     - 模型部署管理器 → 模型部署管理器：不部署，记录原因
+     - 通知训练模块需要改进
+  end
+
+■ 模型调用接口（ModelAPI）
+
+  接口定义（Python类）：
+
+  class ModelAPI:
+      def __init__(self):
+          self.meta = load_meta()  # 加载元数据
+          self.cache = {}         # 模型缓存
+
+      def get_model(self, model_name: str) -> object:
+          """加载当前生效版本的模型"""
+          # 1. 从meta中获取当前版本号
+          version = self.meta[model_name]["current_version"]
+          # 2. 检查缓存，有则直接返回
+          if model_name in self.cache and \
+             self.cache[model_name]["version"] == version:
+              return self.cache[model_name]["model"]
+          # 3. 无缓存则加载模型
+          model_path = self.meta[model_name]["versions"][version]["file"]
+          model = load_model(model_path)
+          # 4. 存入缓存
+          self.cache[model_name] = {"version": version, "model": model}
+          return model
+
+      def predict(self, model_name: str, input_data) -> dict:
+          """统一预测接口，输入数据返回预测结果"""
+          model = self.get_model(model_name)
+          result = model.forecast(input_data)  # 具体方法因模型而异
+          return result
+
+      def get_current_version(self, model_name: str) -> str:
+          """获取当前版本号"""
+          return self.meta[model_name]["current_version"]
+
+      def list_versions(self, model_name: str) -> list:
+          """列出所有版本及其信息"""
+          return list(self.meta[model_name]["versions"].keys())
+
+      def rollback(self, model_name: str, target_version: str):
+          """回滚到指定版本"""
+          if target_version in self.meta[model_name]["versions"]:
+              # 更新current_version
+              self.meta[model_name]["current_version"] = target_version
+              save_meta(self.meta)
+              # 清除缓存，下次加载时使用新版本
+              if model_name in self.cache:
+                  del self.cache[model_name]
+              return True
+          return False
+
+■ 模型调用方式
+
+  场景1：定时预测任务（每日凌晨）
+    - 预测模块 → ModelAPI.get_model("demand_forecast")
+    - 获取当前生效版本的模型
+    - 加载数据，执行预测
+    - 保存预测结果
+
+  场景2：大屏数据服务（HTTP API）
+    - 大屏前端 → 大屏数据服务：GET /prediction?type=charging_demand
+    - 大屏数据服务 → 数据存储管理器：读取预测结果CSV
+      （注意：大屏不直接调用模型，而是读取预生成的预测结果）
+    - 大屏数据服务 → 大屏前端：返回JSON响应
+    - 设计：预测是离线预生成的，HTTP接口只读取文件，
+      不实时推理——保证接口响应速度，避免并发计算
+
+  场景3：模型管理（手动操作）
+    - 管理员 → 模型部署管理器：执行部署/回滚命令
+    - 模型部署管理器 → model_meta.json：修改版本状态
+    - 下次预测自动使用新版本
+
+■ 模型缓存策略
+  - 缓存方式：内存缓存（进程内字典）
+  - 缓存键：模型名称 + 版本号
+  - 缓存生命周期：
+    - 首次调用时加载并缓存
+    - 版本切换时清除旧缓存
+    - 进程重启后重新加载
+  - 内存占用：单个ARIMA模型通常 < 1MB，可忽略
+  - （注：若是深度学习模型，需考虑更复杂的缓存策略）
+
+■ 回滚机制
+  - 触发条件：
+    - 在线评估发现模型性能严重下降
+    - 新版本模型出现异常错误
+    - 人工发现预测结果明显不合理
+  - 回滚操作：
+    - 修改 model_meta.json 的 current_version
+    - 清除模型缓存
+    - 下一次预测自动加载旧版本
+  - 回滚耗时：秒级（只改配置，不涉及文件复制）
+  - 回滚不删除新版本文件——保留所有版本，可随时切回
+
+■ 输出
+  - 统一的模型调用接口（ModelAPI）
+  - 版本化的模型仓库（多版本并存，当前版本可切换）
+  - 快速回滚能力（秒级切换）
+
+■ 关联
+  - 前序：UML-066（模型训练，产出模型文件）、
+    UML-071（模型评估，决定是否部署）
+  - 被调用方：
+    - UML-067~068（预测模块，通过ModelAPI加载模型执行预测）
+    - UML-058（大屏数据服务，读取预生成的预测结果）
+  - 后续：预测结果产出 → 大屏展示 → 智能应用
+  - 说明：
+    - 模型部署是"训练"和"使用"的最后一道质量门
+    - 版本管理和回滚能力保证生产环境的稳定性
+    - 预测结果预生成+HTTP读取的模式，解耦了模型推理和
+      在线服务，避免推理延迟影响接口响应
+
+
+------------------------------------------------------------
+  大数据与机器学习模块整体架构总览
+------------------------------------------------------------
+
+  业务数据库（SQLite）
+       │
+       ▼ UML-059 数据采集  ──┐
+  data/raw/*.csv            │
+       │                    │
+       ▼ UML-060 数据存储    │  数据处理层
+  StorageManager            │  （UML-059~062）
+       │                    │
+       ▼ UML-061 数据预处理  │
+  data/processed/*.csv      │
+       │                    │
+       ├─→ UML-062 数据分析 ─┘
+       │     data/analysis/
+       │
+       ▼ UML-065 训练特征  ──┐
+  train_*.csv                │
+       │                      │  模型训练层
+       ▼ UML-066 时序模型训练 │  （UML-065~066）
+  data/models/*.pkl          │
+       │                      │
+       ▼ UML-071 模型评估  ──┘
+       │  （合格则通过）
+       │
+       ▼ UML-072 模型部署  ──┐
+  ModelAPI（统一接口）        │
+       │                      │  智能应用层
+       ├─→ UML-067 负荷预测  │  （UML-067~070）
+       │     predictions/    │
+       ├─→ UML-068 高峰预测  │
+       │     predictions/    │
+       ├─→ UML-069 站点推荐  │
+       │     predictions/    │
+       └─→ UML-070 负荷预警 ─┘
+             predictions/
+                  │
+                  ▼
+       UML-058 大屏数据服务（HTTP API）
+                  │
+                  ▼
+       UML-063 可视化大屏（ECharts）
+                  │
+                  ▼
+              决策者/观众
+
+  全链路：数据采集 → 存储 → 预处理 → 分析 → 特征 → 训练 → 评估 →
+         部署 → 预测/推荐/预警 → 大屏展示
+
+  与两个已有系统的兼容性：
+  - 大数据模块完全独立，只读业务数据库，不修改业务数据
+  - 不影响充电用户端和PC运营管理端的正常运行
+  - 推荐和预警结果通过大屏和用户端界面间接服务于用户和管理员
+  - 所有大数据操作都是离线批处理（每日执行），不占用业务系统资源
+  - 业务系统不知道大数据模块的存在——大数据是"旁观者"而非"参与者"

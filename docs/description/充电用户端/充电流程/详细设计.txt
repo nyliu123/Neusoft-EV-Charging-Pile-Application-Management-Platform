@@ -1,0 +1,633 @@
+================================================================================
+  充电用户端 / 充电流程（UML-025 ~ UML-032，对应 B=25~32）
+================================================================================
+
+  中任务概述：
+  这是平台的核心业务闭环，涵盖"检查未完成订单 → 选择充电桩 →
+  预约 → 开始充电 → 充电模拟 → 计费 → 结束结算 → 状态一致性"
+  完整八步流程。涉及订单状态机（reserved→charging→settled）和
+  充电桩状态机（idle→reserved→in_use→idle）的双重状态流转，
+  以及钱包余额扣减的事务安全。
+
+  组件清单（本中任务涉及）：
+  - 用户（actor）
+  - 充电界面（QT 充电操作页，含桩选择、充电进度、结束按钮）
+  - 充电服务（服务端，处理预约/充电/结算的核心业务逻辑）
+  - 订单表（orders，订单状态流转）
+  - 充电桩表（charging_piles，桩状态流转）
+  - 用户表（users，余额扣减）
+  - 充电站表（charging_stations，读取单价）
+  - 用户端全局状态（提供 user_id 和登录态）
+
+  解耦设计：
+  - 充电服务是独立领域服务，不直接调用用户服务或站点服务，
+    而是直接访问相关数据表（跨表操作在同一事务中完成）
+  - 充电模拟使用服务端独立线程，通过 Socket 推送实时数据，
+    客户端只负责展示，不做计费计算
+  - 订单状态和桩状态的变更在同一数据库事务中完成，保证一致性
+  - 充电流程各步骤之间通过 order_id 关联，而非直接函数调用
+
+
+------------------------------------------------------------
+【UML-025】未完成订单检查
+------------------------------------------------------------
+
+■ 场景
+  用户准备进入充电操作（从首页点击"充电"入口，或在充电站详情页
+  UML-022 选定充电桩后），系统首先检查该用户是否存在未完成的
+  充电订单（状态为 reserved / charging / pending_settlement）。
+  如果存在，弹出提示"您有未完成的充电订单，请先结算"，并强制
+  跳转至结算页面（UML-031）。如果不存在，正常进入充电操作流程。
+  这一检查确保同一用户同时只有一个活跃订单。
+
+■ 参与者
+  - 用户（actor）
+  - 充电界面
+  - 充电服务
+  - 订单表（orders）
+  - 用户端全局状态
+
+■ 前置条件
+  - 用户已登录（UML-013）
+  - 用户端全局状态持有 user_id
+
+■ 处理流程
+  1. 用户 → 充电界面：点击"充电"入口（或从充电站详情选定桩后进入）
+  2. 充电界面 → 用户端全局状态：校验登录态，获取 user_id
+  3. 用户端全局状态 → 充电界面：返回 user_id, logged_in = true
+  4. 充电界面 → 充电服务：发送 CHECK_PENDING_REQ { user_id, session_id }
+  5. 充电服务 → 订单表：SELECT order_id, status, pile_id, station_id,
+     charge_amount_kwh, total_fee FROM orders
+     WHERE user_id = ? AND status IN ('reserved', 'charging', 'pending_settlement')
+     ORDER BY reserve_time DESC LIMIT 1
+  6. alt 存在未完成订单
+     - 订单表 → 充电服务：返回订单记录
+     - 充电服务 → 充电服务：根据 status 决定跳转目标：
+       - status = 'reserved' 或 'charging'：订单仍在充电中，
+         应跳转到充电进度页（恢复充电界面）
+       - status = 'pending_settlement'：订单待结算，
+         应跳转到结算页面
+     - 充电服务 → 充电界面：返回 CHECK_PENDING_RESP
+       { has_pending: true, order_info: { order_id, status, pile_id,
+         charge_amount_kwh, total_fee } }
+     - 充电界面 → 用户：弹窗提示"您有未完成的充电订单，
+       请先处理"，弹窗有"去处理"按钮
+     - 充电界面 → 用户：用户点击"去处理"后跳转到对应页面
+       （充电进度页或结算页）
+   else 无未完成订单
+     - 订单表 → 充电服务：无匹配记录
+     - 充电服务 → 充电界面：返回 CHECK_PENDING_RESP
+       { has_pending: false }
+     - 充电界面 → 充电界面：正常进入充电操作流程
+     - （控制流转入 UML-026 选择空闲充电桩）
+  end
+
+■ 输出
+  - 有未完成订单：弹窗提示，跳转到充电进度页或结算页
+  - 无未完成订单：进入正常充电流程
+
+■ 关联
+  - 前序：UML-013（登录态）、UML-022（充电站详情，可选来源）
+  - 后续：UML-026（选择空闲充电桩，无未完成订单时）、
+    UML-031（结束与结算，有待结算订单时）
+  - 数据：SELECT orders WHERE user_id AND status IN (...)
+  - 业务规则：同一用户同时只能有一个非终态订单。
+    这条规则在预约时（UML-027）也会再次校验（双重保险）。
+
+
+------------------------------------------------------------
+【UML-026】选择空闲充电桩
+------------------------------------------------------------
+
+■ 场景
+  UML-025 确认无未完成订单后，用户进入充电操作页面。如果用户
+  是从充电站详情页（UML-022）进入的，已经选定了某个充电桩；
+  如果用户从首页"充电"入口直接进入，需要引导用户先选择充电站
+  和充电桩。选定充电桩后，用户端向服务端发送"锁定校验"请求——
+  确认该桩当前确实处于 idle 状态（因为从 UML-022 查看桩列表到
+  现在选定，可能有其他用户已经预约了该桩）。
+
+■ 参与者
+  - 用户（actor）
+  - 充电界面
+  - 充电服务
+  - 充电桩表（charging_piles）
+  - 充电站表（charging_stations）
+
+■ 前置条件
+  - UML-025 确认无未完成订单
+  - 用户已选定目标充电桩（pile_id，来自 UML-022）或需要先选择
+
+■ 处理流程
+  1. alt 用户从充电站详情页进入（已选定 pile_id）
+     - 充电界面 → 充电界面：已有 pile_id，直接进入锁定校验（步骤4）
+   else 用户从首页"充电"入口进入（未选定 pile_id）
+     - 充电界面 → 用户：提示"请先选择充电站和充电桩"
+     - 充电界面 → 充电界面：跳转到充电站查询流程（UML-018~022）
+     - 用户完成站点和桩选择后返回，携带 pile_id
+  end
+  2. 充电界面 → 充电服务：发送 CHECK_PILE_REQ { pile_id }
+  3. 充电服务 → 充电桩表：SELECT pile_id, status, pile_type, power_kw,
+     station_id FROM charging_piles WHERE pile_id = ?
+  4. alt 充电桩存在且 status = 'idle'
+     - 充电桩表 → 充电服务：返回桩信息（status = 'idle'）
+     - 充电服务 → 充电站表：SELECT station_name, price_per_kwh
+       FROM charging_stations WHERE station_id = ?
+     - 充电站表 → 充电服务：返回站名和单价
+     - 充电服务 → 充电界面：返回 CHECK_PILE_RESP
+       { available: true, pile_info: { pile_id, pile_type, power_kw,
+         station_name, price_per_kwh } }
+     - 充电界面 → 充电界面：展示桩信息和单价，显示"预约充电"按钮
+     - （控制流转入 UML-027 预约充电）
+   else 充电桩已被其他用户预约或使用（status = 'reserved'/'in_use'）
+     - 充电桩表 → 充电服务：返回桩信息（status ≠ 'idle'）
+     - 充电服务 → 充电界面：返回 CHECK_PILE_RESP
+       { available: false, reason: "该充电桩已被占用" }
+     - 充电界面 → 用户：提示"该充电桩已被占用，请选择其他桩"
+     - 充电界面 → 充电界面：引导用户返回充电站详情重新选择
+   else 充电桩故障（status = 'fault'）
+     - 充电桩表 → 充电服务：返回桩信息（status = 'fault'）
+     - 充电服务 → 充电界面：返回 CHECK_PILE_RESP
+       { available: false, reason: "该充电桩故障" }
+     - 充电界面 → 用户：提示"该充电桩当前故障，请选择其他桩"
+   else 充电桩不存在
+     - 充电桩表 → 充电服务：无记录
+     - 充电服务 → 充电界面：返回 CHECK_PILE_RESP
+       { available: false, reason: "充电桩不存在" }
+     - 充电界面 → 用户：提示"充电桩信息有误，请重新选择"
+  end
+
+■ 输出
+  - 可用：桩信息展示，显示"预约充电"按钮
+  - 不可用：提示原因，引导重新选择
+
+■ 关联
+  - 前序：UML-022（充电站详情，提供 pile_id）、UML-025（未完成订单检查）
+  - 后续：UML-027（预约充电）
+  - 数据：SELECT charging_piles WHERE pile_id, SELECT charging_stations WHERE station_id
+  - 说明：此步骤是"乐观锁校验"——UML-022 查看的桩状态可能已过期，
+    此处在预约前实时查询确认。防止"选了桩但已被占用"的竞态问题。
+
+
+------------------------------------------------------------
+【UML-027】预约充电
+------------------------------------------------------------
+
+■ 场景
+  UML-026 确认充电桩可用后，用户点击"预约充电"按钮。充电服务
+  在数据库事务中完成：① 再次校验用户无未完成订单 ② 再次校验
+  桩状态为 idle ③ 更新桩状态为 reserved ④ 创建订单（状态 reserved，
+  记录预约时间和单价快照）。返回 order_id 给用户端。
+
+■ 参与者
+  - 用户（actor）
+  - 充电界面
+  - 充电服务
+  - 充电桩表（charging_piles）
+  - 订单表（orders）
+  - 用户端全局状态
+
+■ 前置条件
+  - UML-026 确认桩可用（status = 'idle'）
+  - 用户端全局状态持有 user_id
+
+■ 处理流程
+  1. 用户 → 充电界面：点击"预约充电"按钮
+  2. 充电界面 → 用户端全局状态：获取 user_id
+  3. 充电界面 → 充电服务：发送 RESERVE_REQ
+     { user_id, pile_id, session_id }
+  4. 充电服务 → 充电服务：BEGIN TRANSACTION（开启数据库事务）
+  5. 充电服务 → 订单表：SELECT COUNT(*) FROM orders
+     WHERE user_id = ? AND status IN ('reserved','charging','pending_settlement')
+  6. alt 无未完成订单（COUNT = 0）
+     - 充电服务 → 充电桩表：SELECT status FROM charging_piles
+       WHERE pile_id = ? （再次校验，防止并发预约）
+     - alt 桩状态仍为 idle
+       - 充电服务 → 充电桩表：UPDATE charging_piles
+         SET status = 'reserved' WHERE pile_id = ? AND status = 'idle'
+       - 充电桩表 → 充电服务：返回更新行数（1=成功）
+       - 充电服务 → 充电站表：SELECT price_per_kwh
+         FROM charging_stations WHERE station_id = ?（获取单价快照）
+       - 充电站表 → 充电服务：返回 price_per_kwh
+       - 充电服务 → 订单表：INSERT INTO orders
+         (user_id, pile_id, station_id, status, reserve_time, price_per_kwh)
+         VALUES (?, ?, ?, 'reserved', NOW(), ?)
+       - 订单表 → 充电服务：返回新 order_id
+       - 充电服务 → 充电服务：COMMIT（提交事务）
+       - 充电服务 → 充电界面：返回 RESERVE_RESP
+         { success: true, order_id: 新订单ID, pile_info: { pile_type,
+           power_kw }, price_per_kwh }
+       - 充电界面 → 充电界面：保存 order_id 到界面状态
+       - 充电界面 → 用户：显示"预约成功！"，展示桩信息和单价，
+         显示"开始充电"按钮
+       - （控制流转入 UML-028 开始充电）
+     else 桩已被其他用户预约（status ≠ 'idle'，并发竞态）
+       - 充电服务 → 充电服务：ROLLBACK（回滚事务）
+       - 充电服务 → 充电界面：返回 RESERVE_RESP
+         { success: false, error: "该充电桩刚被其他用户预约" }
+       - 充电界面 → 用户：提示"该充电桩刚被其他用户预约，请选择其他桩"
+       - 充电界面 → 充电界面：引导用户返回充电站详情重新选择
+     end
+   else 存在未完成订单（COUNT > 0，极端并发场景）
+     - 充电服务 → 充电服务：ROLLBACK（回滚事务）
+     - 充电服务 → 充电界面：返回 RESERVE_RESP
+       { success: false, error: "您有未完成的充电订单" }
+     - 充电界面 → 用户：提示"您有未完成的充电订单，请先处理"
+     - 充电界面 → 充电界面：跳转到未完成订单处理页面
+  end
+
+■ 输出
+  - 成功：桩状态变为 reserved，订单创建（status=reserved），
+    返回 order_id，用户端显示"开始充电"按钮
+  - 失败：提示原因（桩被占用或有未完成订单）
+
+■ 关联
+  - 前序：UML-026（选择空闲充电桩）
+  - 后续：UML-028（开始充电）
+  - 数据：事务内 UPDATE charging_piles.status, INSERT orders
+  - 业务规则：
+    1）预约操作在数据库事务中完成，保证桩状态和订单创建原子性
+    2）price_per_kwh 在预约时快照到订单中，后续充电计费使用此快照价
+    3）双重校验：用户无未完成订单 + 桩状态为 idle
+
+
+------------------------------------------------------------
+【UML-028】开始充电
+------------------------------------------------------------
+
+■ 场景
+  预约成功后（UML-027），用户点击"开始充电"按钮。充电服务在
+  事务中：① 校验订单状态为 reserved ② 校验桩状态为 reserved
+  ③ 更新订单状态为 charging，记录 start_time ④ 更新桩状态为
+  in_use ⑤ 启动充电模拟线程（定时推送充电数据）⑥ 返回成功。
+
+■ 参与者
+  - 用户（actor）
+  - 充电界面
+  - 充电服务
+  - 订单表（orders）
+  - 充电桩表（charging_piles）
+
+■ 前置条件
+  - UML-027 预约成功，持有 order_id
+  - 订单状态为 reserved，桩状态为 reserved
+
+■ 处理流程
+  1. 用户 → 充电界面：点击"开始充电"按钮
+  2. 充电界面 → 充电服务：发送 START_CHARGE_REQ
+     { order_id, session_id }
+  3. 充电服务 → 充电服务：BEGIN TRANSACTION
+  4. 充电服务 → 订单表：SELECT status, pile_id, price_per_kwh
+     FROM orders WHERE order_id = ?
+  5. alt 订单状态为 reserved
+     - 订单表 → 充电服务：返回订单信息（status = 'reserved'）
+     - 充电服务 → 充电桩表：SELECT status FROM charging_piles
+       WHERE pile_id = ?
+     - alt 桩状态为 reserved
+       - 充电服务 → 订单表：UPDATE orders SET status = 'charging',
+         start_time = NOW() WHERE order_id = ? AND status = 'reserved'
+       - 充电服务 → 充电桩表：UPDATE charging_piles SET status = 'in_use'
+         WHERE pile_id = ? AND status = 'reserved'
+       - 充电服务 → 充电服务：COMMIT
+       - 充电服务 → 充电服务：启动充电模拟线程（ChargingThread）：
+         创建独立线程，按1秒间隔计算充电量和费用并推送（见 UML-029）
+       - 充电服务 → 充电界面：返回 START_CHARGE_RESP
+         { success: true, start_time: 开始时间 }
+       - 充电界面 → 充电界面：切换到充电进度界面：
+         - 显示充电进度条（0%开始）
+         - 显示当前充电量"0.00 度"
+         - 显示当前费用"¥0.00"
+         - 显示"结束充电"按钮
+       - 充电界面 → 用户：充电进度界面渲染完成，开始接收实时充电数据
+       - （控制流转入 UML-029 充电过程模拟）
+     else 桩状态异常（非 reserved）
+       - 充电服务 → 充电服务：ROLLBACK
+       - 充电服务 → 充电界面：返回 START_CHARGE_RESP
+         { success: false, error: "充电桩状态异常" }
+       - 充电界面 → 用户：提示"充电桩状态异常，请联系管理员"
+     end
+   else 订单状态异常（非 reserved）
+     - 充电服务 → 充电服务：ROLLBACK
+     - 充电服务 → 充电界面：返回 START_CHARGE_RESP
+       { success: false, error: "订单状态异常" }
+     - 充电界面 → 用户：提示"订单状态异常，请重新操作"
+  end
+
+■ 输出
+  - 成功：订单状态变为 charging，桩状态变为 in_use，
+    充电模拟线程启动，界面显示充电进度
+  - 失败：提示状态异常
+
+■ 关联
+  - 前序：UML-027（预约充电）
+  - 后续：UML-029（充电过程模拟）
+  - 数据：事务内 UPDATE orders.status='charging', UPDATE piles.status='in_use'
+  - 说明：充电模拟线程在服务端独立运行，通过 Socket 推送数据
+    到客户端。线程生命周期：从 UML-028 启动，到 UML-031 结束时终止。
+
+
+------------------------------------------------------------
+【UML-029】充电过程模拟
+------------------------------------------------------------
+
+■ 场景
+  UML-028 启动充电后，服务端充电模拟线程开始运行。线程每隔
+  1秒计算当前充电量和费用，通过 Socket 推送 CHARGE_UPDATE 消息
+  到用户端。用户端接收后刷新充电进度界面（进度条、电量、费用）。
+  这个过程持续到用户点击"结束充电"（UML-031）。
+  模拟规则：充电量按桩功率线性增长，每秒增量 = power_kw / 3600 度。
+
+■ 参与者
+  - 充电服务（服务端，含充电模拟线程 ChargingThread）
+  - 充电界面（接收实时数据并刷新显示）
+  - 订单表（orders，存储中间数据——可选）
+
+■ 前置条件
+  - UML-028 已启动充电，充电模拟线程已运行
+
+■ 处理流程
+  1. 充电服务 → 充电服务：充电模拟线程循环（每1秒一次）：
+     a. 读取订单信息：pile_id → 查询 power_kw（桩功率）
+     b. 计算已充电时间：elapsed = NOW() - start_time（秒）
+     c. 计算当前充电量：charge_amount_kwh = power_kw × elapsed / 3600（度）
+     d. 计算当前费用：current_fee = charge_amount_kwh × price_per_kwh
+        （price_per_kwh 为订单中快照的单价）
+     e. 计算进度百分比：progress = min(100, charge_amount_kwh / 假设满充量 × 100)
+        （假设满充量为50度，充到50度即100%）
+  2. 充电服务 → 充电界面：推送 CHARGE_UPDATE
+     { order_id, charge_amount_kwh, current_fee, progress }
+  3. 充电界面 → 充电界面：接收 CHARGE_UPDATE，刷新界面：
+     - 进度条更新到 progress%
+     - 充电量显示"X.XX 度"
+     - 费用显示"¥XX.XX"
+  4. loop 持续循环
+     - 每隔1秒重复步骤1~3
+     - 直到收到 END_CHARGE_REQ（UML-031）或连接断开
+  5. alt 用户点击"结束充电"
+     - 充电界面 → 充电服务：发送 END_CHARGE_REQ { order_id }
+     - 充电服务 → 充电服务：充电模拟线程收到停止信号，退出循环
+     - （控制流转入 UML-031 结束与结算）
+   else 连接断开（异常情况）
+     - 充电服务 → 充电服务：检测到 Socket 断开，
+       充电模拟线程停止，订单保持 charging 状态
+     - 用户重连后，通过 UML-025 未完成订单检查恢复充电界面
+  end
+
+■ 输出
+  - 持续推送充电进度数据，界面实时刷新
+  - 用户可随时点击"结束充电"终止
+
+■ 关联
+  - 前序：UML-028（开始充电，启动模拟线程）
+  - 后续：UML-030（充电计费，计算规则在此执行）、UML-031（结束与结算）
+  - 数据：读取 orders.price_per_kwh 和 charging_piles.power_kw
+  - 说明：充电模拟是服务端驱动的——客户端不自行计算电量和费用，
+    只接收服务端推送的数据并展示。这样保证了计费逻辑的单一来源
+    和不可篡改性。
+
+
+------------------------------------------------------------
+【UML-030】充电计费
+------------------------------------------------------------
+
+■ 场景
+  充电计费不是一个独立的用户操作，而是贯穿 UML-029（充电模拟）
+  和 UML-031（结束结算）的计算规则。本任务描述计费公式和规则，
+  确保设计者和用户都清楚费用是如何产生的。
+  计费公式：总费用 = 充电量(度) × 充电单价(元/度)
+  其中充电单价在预约时（UML-027）从充电站表快照到订单表的
+  price_per_kwh 字段，充电过程中不变。
+
+■ 参与者
+  - 充电服务（执行计费计算）
+  - 订单表（orders，提供 price_per_kwh 快照）
+
+■ 前置条件
+  - 订单已创建（UML-027），price_per_kwh 已快照
+
+■ 处理流程
+  本任务描述的是计费规则而非操作流程：
+
+  1. 充电服务 → 订单表：读取 price_per_kwh
+     SELECT price_per_kwh FROM orders WHERE order_id = ?
+  2. 充电服务 → 充电服务：计费计算（在充电模拟线程中每秒执行）：
+     current_fee = charge_amount_kwh × price_per_kwh
+     示例：桩功率 60kW，充电10分钟（600秒），
+     charge_amount_kwh = 60 × 600 / 3600 = 10度，
+     price_per_kwh = 1.5元/度，
+     current_fee = 10 × 1.5 = 15.00元
+  3. 充电服务 → 充电界面：计费结果随 CHARGE_UPDATE 推送（UML-029）
+  4. 充电服务 → 充电服务：结算时（UML-031）计算最终费用：
+     total_fee = final_charge_amount_kwh × price_per_kwh
+  5. note over 充电服务, 订单表
+     计费规则说明：
+     - 单价在预约时从充电站表读取并快照到订单表，充电期间不变
+     - 即使管理端在此期间修改了充电站的单价，已创建的订单不受影响
+     - 计费精度：电量保留2位小数（度），费用保留2位小数（元）
+     - 费用 = 电量 × 单价，无阶梯计费、无服务费、无停车费
+  end note
+
+■ 输出
+  - 充电过程中实时费用通过 CHARGE_UPDATE 推送
+  - 结算时最终费用写入 orders.total_fee
+
+■ 关联
+  - 前序：UML-027（预约时快照 price_per_kwh）
+  - 后续：UML-029（充电模拟中使用计费规则推送实时费用）、
+    UML-031（结算时计算最终费用并扣款）
+  - 数据：SELECT orders.price_per_kwh（不修改）
+  - 说明：本任务在 UML 时序图中体现为充电模拟过程中的一条
+    note 说明，描述计费公式和规则。不需要独立的消息交互。
+
+
+------------------------------------------------------------
+【UML-031】结束与结算
+------------------------------------------------------------
+
+■ 场景
+  用户在充电进度界面点击"结束充电"按钮。充电服务停止模拟线程，
+  计算最终充电量和费用，检查用户钱包余额是否充足。如果充足，
+  在数据库事务中完成：① 扣减用户余额 ② 订单状态置为 settled
+  ③ 充电桩状态恢复为 idle ④ 更新桩累计统计。如果余额不足，
+  订单置为 pending_settlement，桩保持 in_use，提示用户充值后重试。
+
+■ 参与者
+  - 用户（actor）
+  - 充电界面
+  - 充电服务
+  - 订单表（orders）
+  - 充电桩表（charging_piles）
+  - 用户表（users）
+
+■ 前置条件
+  - UML-029 充电模拟运行中，用户点击"结束充电"
+  - 订单状态为 charging
+
+■ 处理流程
+  1. 用户 → 充电界面：点击"结束充电"按钮
+  2. 充电界面 → 充电服务：发送 END_CHARGE_REQ { order_id, session_id }
+  3. 充电服务 → 充电服务：停止充电模拟线程
+  4. 充电服务 → 订单表：SELECT status, pile_id, user_id, start_time,
+     price_per_kwh FROM orders WHERE order_id = ?
+  5. alt 订单状态为 charging
+     - 订单表 → 充电服务：返回订单信息
+     - 充电服务 → 充电服务：计算最终充电量：
+       elapsed = NOW() - start_time（秒）
+       final_kwh = power_kw × elapsed / 3600（度）
+       total_fee = final_kwh × price_per_kwh（元）
+     - 充电服务 → 用户表：SELECT balance FROM users WHERE user_id = ?
+     - 用户表 → 充电服务：返回当前余额
+     - alt 余额充足（balance >= total_fee）
+       - 充电服务 → 充电服务：BEGIN TRANSACTION
+       - 充电服务 → 用户表：UPDATE users SET balance = balance - total_fee
+         WHERE user_id = ?
+       - 充电服务 → 订单表：UPDATE orders SET status = 'settled',
+         end_time = NOW(), charge_amount_kwh = final_kwh,
+         total_fee = total_fee WHERE order_id = ?
+       - 充电服务 → 充电桩表：UPDATE charging_piles SET status = 'idle',
+         total_charge_count = total_charge_count + 1,
+         total_charge_duration = total_charge_duration + (elapsed/3600)
+         WHERE pile_id = ?
+       - 充电服务 → 充电服务：COMMIT
+       - 充电服务 → 用户表：SELECT balance FROM users WHERE user_id = ?
+         （查询扣减后的最新余额）
+       - 用户表 → 充电服务：返回新余额
+       - 充电服务 → 充电界面：返回 SETTLE_RESP
+         { success: true, order_id, total_kwh: final_kwh,
+           total_fee, new_balance }
+       - 充电界面 → 用户端全局状态：更新 user_info.balance = new_balance
+       - 充电界面 → 用户：显示结算结果页：
+         "充电完成！充电量 X.XX 度，费用 ¥XX.XX，
+          当前余额 ¥XX.XX"
+       - 充电界面 → 用户：显示"返回首页"按钮
+     else 余额不足（balance < total_fee）
+       - 充电服务 → 充电服务：BEGIN TRANSACTION
+       - 充电服务 → 订单表：UPDATE orders SET status = 'pending_settlement',
+         end_time = NOW(), charge_amount_kwh = final_kwh,
+         total_fee = total_fee WHERE order_id = ?
+       - 充电服务 → 充电桩表：（桩保持 in_use 状态，不释放）
+       - 充电服务 → 充电服务：COMMIT
+       - 充电服务 → 充电界面：返回 SETTLE_RESP
+         { success: false, error: "余额不足",
+           total_kwh: final_kwh, total_fee,
+           current_balance: balance, shortfall: total_fee - balance }
+       - 充电界面 → 用户：显示"余额不足"提示：
+         "充电费用 ¥XX.XX，当前余额 ¥XX.XX，差额 ¥XX.XX"
+       - 充电界面 → 用户：显示"去充值"按钮（跳转到 UML-017 钱包充值）
+       - note over 充电界面, 用户
+         充值后返回此页面，用户重新点击"结算"按钮，
+         系统重新执行扣款流程。桩在结算成功前保持 in_use 状态。
+       end note
+     end
+   else 订单状态异常（非 charging）
+     - 充电服务 → 充电界面：返回 SETTLE_RESP
+       { success: false, error: "订单状态异常" }
+     - 充电界面 → 用户：提示"订单状态异常，请联系管理员"
+  end
+
+■ 输出
+  - 余额充足：扣减余额，订单 settled，桩 idle，显示结算结果
+  - 余额不足：订单 pending_settlement，桩保持 in_use，提示充值
+  - 异常：提示错误
+
+■ 关联
+  - 前序：UML-029（充电过程模拟，产生充电量数据）、UML-030（计费规则）
+  - 后续：UML-032（状态一致性校验）、UML-017（钱包充值，余额不足时）
+  - 数据：事务内 UPDATE users.balance, UPDATE orders.status/end_time/kwh/fee,
+    UPDATE piles.status/count/duration
+  - 业务规则：
+    1）结算涉及三表更新（users/orders/piles），必须在同一事务中完成
+    2）余额不足时订单进入 pending_settlement 而非失败，桩不释放
+    3）充电桩累计统计（total_charge_count, total_charge_duration）在结算时更新
+
+
+------------------------------------------------------------
+【UML-032】状态一致性
+------------------------------------------------------------
+
+■ 场景
+  状态一致性不是一次用户操作，而是充电流程中每个状态变更后的
+  数据完整性保障机制。在 UML-027（预约）、UML-028（开始充电）、
+  UML-031（结束结算）三个关键操作后，系统执行一致性校验：
+  确认订单状态、充电桩状态、用户余额三者保持逻辑一致。如果
+  检测到不一致（如事务部分失败），执行回滚并记录错误日志。
+  本任务在 UML 时序图中体现为每次状态变更后的 ref 校验片段。
+
+■ 参与者
+  - 充电服务（执行一致性校验）
+  - 订单表（orders）
+  - 充电桩表（charging_piles）
+  - 用户表（users）
+
+■ 前置条件
+  - UML-027/UML-028/UML-031 中某个状态变更操作刚完成
+
+■ 处理流程
+  本任务描述的是一致性校验规则，在每个状态变更操作后执行：
+
+  1. ref UML-027 预约完成后校验
+     - 充电服务 → 订单表：SELECT status FROM orders WHERE order_id = ?
+     - 充电服务 → 充电桩表：SELECT status FROM charging_piles
+       WHERE pile_id = ?
+     - alt 一致（order.status='reserved' AND pile.status='reserved'）
+       - 校验通过，无需额外操作
+     else 不一致（如 order.status='reserved' 但 pile.status='idle'）
+       - 充电服务 → 充电服务：记录错误日志，
+         执行修复：UPDATE charging_piles SET status='reserved'
+         WHERE pile_id = ?
+     end
+  end
+
+  2. ref UML-028 开始充电后校验
+     - 充电服务 → 订单表：SELECT status, start_time FROM orders
+       WHERE order_id = ?
+     - 充电服务 → 充电桩表：SELECT status FROM charging_piles
+       WHERE pile_id = ?
+     - alt 一致（order.status='charging' AND pile.status='in_use'
+       AND start_time 非空）
+       - 校验通过
+     else 不一致
+       - 充电服务 → 充电服务：记录错误日志，
+         根据实际情况修复状态
+     end
+  end
+
+  3. ref UML-031 结算完成后校验
+     - 充电服务 → 订单表：SELECT status, total_fee, charge_amount_kwh,
+       end_time FROM orders WHERE order_id = ?
+     - 充电服务 → 充电桩表：SELECT status, total_charge_count
+       FROM charging_piles WHERE pile_id = ?
+     - 充电服务 → 用户表：SELECT balance FROM users WHERE user_id = ?
+     - alt 一致（order.status='settled' AND pile.status='idle'
+       AND total_fee > 0 AND end_time 非空
+       AND balance 已正确扣减）
+       - 校验通过
+     else 不一致（如 order settled 但 pile 仍 in_use）
+       - 充电服务 → 充电服务：记录错误日志
+       - 充电服务 → 充电桩表：执行修复 UPDATE charging_piles
+         SET status='idle' WHERE pile_id = ?
+       - 充电服务 → 用户服务：通知管理员检查数据异常
+     end
+  end
+
+  4. note over 充电服务
+     一致性保障机制说明：
+     - 所有关键状态变更操作（预约/开始/结束）在数据库事务中完成，
+       事务保证原子性——要么全部成功，要么全部回滚
+     - 事务提交后执行一致性校验，检测可能的逻辑不一致
+     - 检测到不一致时，优先尝试自动修复（如更新桩状态）
+     - 无法自动修复的情况记录错误日志并通知管理员
+     - 客户端断连时，服务端通过心跳检测和重连恢复机制
+       确保充电流程不会因网络中断而丢失状态
+  end note
+
+■ 输出
+  - 一致：正常继续
+  - 不一致：自动修复 + 记录日志 + 通知管理员
+
+■ 关联
+  - 前序：UML-027（预约）、UML-028（开始充电）、UML-031（结束结算）
+  - 数据：SELECT orders.status, charging_piles.status, users.balance
+  - 说明：本任务在 UML 时序图中体现为 ref 片段——在每次状态变更
+    操作后引用一致性校验流程。实际上一致性主要由数据库事务保证，
+    本任务描述的是事务提交后的额外校验层。

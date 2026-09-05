@@ -1,0 +1,255 @@
+================================================================================
+  数据与接口层 / 外部接口（UML-057，对应 B=57）
+================================================================================
+
+  中任务概述：
+  本中任务定义系统与腾讯地图Web API的集成接口。腾讯地图API
+  提供两个核心能力：
+    1）地理编码（Geocoding）：将地址文本转换为经纬度坐标
+    2）逆地理编码（Reverse Geocoding）：将经纬度转换为地址文本
+  这两个能力被以下上层模块使用：
+    - 充电用户端：充电站查询时地址转经纬度（UML-018）、
+      地图导航（UML-023~024）
+    - PC运营管理端：新增充电站时地址转经纬度（UML-042）
+
+  组件清单（本中任务涉及）：
+  - 地图接口适配器（MapAPIAdapter，服务端内部模块，封装腾讯地图API调用）
+  - 腾讯地图 Web API（外部HTTP服务）
+  - 腾讯地图 JavaScript SDK（前端地图展示，通过QWebEngineView加载）
+  - QNetworkAccessManager（Qt的HTTP客户端，用于调用API）
+
+  解耦设计：
+  - 地图接口适配器是服务端访问腾讯地图API的唯一入口
+  - 上层服务（站点服务、管理端服务）通过统一的接口调用，
+    不直接构造HTTP请求
+  - API Key、请求URL格式、响应解析等细节封装在适配器内部
+  - 前端地图展示通过QWebEngineView加载腾讯地图JavaScript SDK，
+    与服务端HTTP调用是两条独立路径（前端展示 vs 后端地理编码）
+
+  与已有两个系统的兼容关系：
+  ┌─────────────┐         ┌─────────────┐
+  │  充电用户端   │         │ PC运营管理端  │
+  │ UML-018/023  │         │ UML-042     │
+  │ 024          │         │             │
+  └──────┬──────┘         └──────┬──────┘
+         │                       │
+    GEOCODE_REQ              ADMIN_ACTION_REQ
+    (站点服务)               (管理端服务)
+         │                       │
+         └───────────┬───────────┘
+                     │
+              ┌──────┴──────┐
+              │ 地图接口适配器 │
+              └──────┬──────┘
+                     │ HTTP GET
+              ┌──────┴──────┐
+              │ 腾讯地图API   │
+              │ (Web服务)    │
+              └─────────────┘
+
+  另一条路径（前端地图展示）：
+  ┌─────────────┐
+  │ 充电用户端   │
+  │ QWebEngineView│
+  └──────┬──────┘
+         │ 加载HTML+JS
+  ┌──────┴──────┐
+  │ 腾讯地图JS SDK│
+  │ (浏览器渲染)  │
+  └─────────────┘
+
+
+------------------------------------------------------------
+【UML-057】腾讯地图接口
+------------------------------------------------------------
+
+■ 场景
+  当系统需要将地址文本转换为经纬度坐标时（如用户端搜索充电站、
+  管理端新增充电站），站点服务或管理端服务调用地图接口适配器，
+  适配器向腾讯地图API发送HTTP请求，获取经纬度并返回。
+  当系统需要在地图上展示充电站位置、导航路线时，用户端通过
+  QWebEngineView加载腾讯地图JavaScript SDK，在嵌入式地图上
+  渲染标记点和路线。
+
+■ 参与者
+  - 地图接口适配器（MapAPIAdapter，服务端内部模块）
+  - 腾讯地图 Web API（外部HTTP服务）
+  - 腾讯地图 JavaScript SDK（前端展示）
+  - 上层调用方：站点服务（用户端地理编码）、管理端服务（管理端地理编码）
+
+■ 前置条件
+  - 网络可用（可访问腾讯地图API服务器）
+  - 腾讯地图 API Key 已配置（服务端配置文件中）
+  - 用户端已初始化 QWebEngineView 实例（地图页面容器）
+
+■ 接口定义
+
+  1. 地理编码接口（地址 → 经纬度）
+     地图接口适配器方法：
+     geocode(address: string) → GeocodeResult
+
+     内部HTTP调用：
+     GET https://apis.map.qq.com/ws/geocoder/v1/
+       ?address={address}&key={API_KEY}
+
+     腾讯地图API响应格式（JSON）：
+     {
+       "status": 0,              -- 0=成功，非0=失败
+       "message": "query ok",
+       "result": {
+         "location": {
+           "lng": 116.397428,   -- 经度
+           "lat": 39.90923      -- 纬度
+         },
+         "precise": 1,           -- 是否精确匹配
+         "confidence": 80        -- 置信度（0-100）
+       }
+     }
+
+     适配器返回：
+     成功 → { success: true, lng: 116.397428, lat: 39.90923 }
+     失败 → { success: false, error: "具体错误原因" }
+
+  2. 逆地理编码接口（经纬度 → 地址）
+     地图接口适配器方法：
+     reverse_geocode(lng: float, lat: float) → ReverseGeocodeResult
+
+     内部HTTP调用：
+     GET https://apis.map.qq.com/ws/geocoder/v1/
+       ?location={lat},{lng}&key={API_KEY}
+
+     返回最近的地址文本，用于用户端展示当前位置。
+
+  3. 前端地图展示接口（QWebEngineView + JavaScript SDK）
+     用户端通过QWebEngineView加载本地HTML文件，HTML中引入
+     腾讯地图JavaScript SDK：
+     <script src="https://map.qq.com/api/gljs?v=1.exp&key={API_KEY}"></script>
+
+     HTML中通过JavaScript初始化地图：
+     - 创建地图实例，设置中心点和缩放级别
+     - 在地图上添加充电站标记点（Marker）
+     - 绘制导航路线（DrivingRoute）
+     - 处理用户交互（点击标记、拖拽地图）
+
+■ 处理流程
+
+  A. 地理编码流程（后端HTTP调用）
+
+  1. 上层服务 → 地图接口适配器：调用 geocode(address)
+  2. 地图接口适配器 → 地图接口适配器：校验 address 非空且长度合理
+  3. alt 地址合法
+     - 地图接口适配器 → QNetworkAccessManager：构造HTTP GET请求
+       （URL中address参数需URL编码）
+     - QNetworkAccessManager → 腾讯地图API：发送HTTP请求
+     - alt API响应成功（HTTP 200 且 status=0）
+       - 腾讯地图API → QNetworkAccessManager：返回JSON响应
+       - QNetworkAccessManager → 地图接口适配器：传递响应数据
+       - 地图接口适配器 → 地图接口适配器：解析JSON，提取lng和lat
+       - alt 经纬度有效（在合理范围内：lng 73~135, lat 3~54）
+         - 地图接口适配器 → 上层服务：返回
+           { success: true, lng: 结果经度, lat: 结果纬度 }
+       else 经纬度无效（超出中国范围或为0,0）
+         - 地图接口适配器 → 上层服务：返回
+           { success: false, error: "地理编码结果无效" }
+       end
+     else API响应失败（HTTP错误 或 status非0）
+       - 腾讯地图API → QNetworkAccessManager：返回错误响应
+       - 地图接口适配器 → 地图接口适配器：解析错误信息
+       - 地图接口适配器 → 上层服务：返回
+         { success: false, error: "地址无法解析，请检查地址或手动填写" }
+     end
+   else 地址为空或过长
+     - 地图接口适配器 → 上层服务：返回
+       { success: false, error: "地址不能为空" }
+  end
+
+  B. 前端地图展示流程（QWebEngineView + JavaScript SDK）
+
+  1. 用户端界面 → QWebEngineView：加载本地HTML文件
+     （包含腾讯地图JavaScript SDK的引用和地图初始化代码）
+  2. QWebEngineView → 腾讯地图JS SDK：通过网络加载SDK脚本
+  3. 腾讯地图JS SDK → QWebEngineView：SDK加载完成，初始化地图实例
+  4. QWebEngineView → 用户端界面：地图渲染完成，发出 load_finished 信号
+  5. 用户端界面 → QWebEngineView：通过 runJavaScript() 调用前端函数：
+     - addMarker(lng, lat, label) — 添加充电站标记
+     - clearMarkers() — 清除所有标记
+     - drawRoute(from_lng, from_lat, to_lng, to_lat) — 绘制导航路线
+     - setCenter(lng, lat, zoom) — 设置地图中心和缩放级别
+  6. QWebEngineView → 腾讯地图JS SDK：执行对应的地图操作
+  7. 腾讯地图JS SDK → QWebEngineView：更新地图渲染（标记/路线/视角）
+  8. QWebEngineView → 用户：地图界面实时更新
+
+■ 异常处理
+
+  1. 网络不可用（无法连接腾讯地图服务器）
+     - QNetworkAccessManager → 地图接口适配器：返回网络错误
+     - 地图接口适配器 → 上层服务：返回
+       { success: false, error: "网络不可用，无法获取地理编码" }
+     - 上层服务 → 客户端：返回 GEOCODE_RESP
+       { error: "网络不可用，请稍后重试" }
+     - 用户端/管理端 → 用户：显示提示信息
+
+  2. API Key 无效（腾讯地图返回鉴权失败）
+     - 腾讯地图API → 地图接口适配器：返回 status=120（鉴权失败）
+     - 地图接口适配器 → 上层服务：返回
+       { success: false, error: "地图服务鉴权失败" }
+     - 上层服务 → 客户端：返回错误响应
+     - （此错误通常为配置问题，不应在生产环境出现）
+
+  3. 地址无匹配结果（腾讯地图返回空结果）
+     - 腾讯地图API → 地图接口适配器：返回 status=0 但 result为空
+     - 地图接口适配器 → 上层服务：返回
+       { success: false, error: "地址无法解析，请检查地址或手动填写" }
+     - 上层服务 → 客户端：返回错误响应
+     - 管理端新增充电站 → 解锁经纬度手动输入框（见 UML-042）
+
+  4. 前端SDK加载失败（QWebEngineView无法加载腾讯地图JS）
+     - QWebEngineView → 用户端界面：发出 load_failed 信号
+     - 用户端界面 → 用户：地图区域显示"地图加载失败，请检查网络"
+     - 用户端界面 → 用户端界面：地图区域降级为文本列表展示
+       （不依赖地图，仍可查看充电站列表）
+
+  5. API调用频率超限（腾讯地图免费版有QPS限制）
+     - 腾讯地图API → 地图接口适配器：返回 status=130（配额超限）
+     - 地图接口适配器 → 地图接口适配器：记录告警日志
+     - 地图接口适配器 → 上层服务：返回
+       { success: false, error: "地图服务繁忙，请稍后重试" }
+     - 上层服务 → 客户端：返回错误响应
+
+■ 与上层系统的交互路径
+
+  充电用户端：
+    UML-018 附近充电站查询：
+      → 站点服务 → 地图接口适配器.geocode(address)
+      → 返回经纬度后查询附近充电站
+    UML-023~024 地图导航：
+      → QWebEngineView 加载腾讯地图JS SDK
+      → 添加充电站标记点
+      → 绘制导航路线
+      → 前端地图展示（不经过服务端地理编码）
+
+  PC运营管理端：
+    UML-042 新增充电站：
+      → 管理端服务 → 地图接口适配器.geocode(address)
+      → 返回经纬度后填入表单
+      → 地理编码失败时解锁手动输入
+
+■ 输出
+  - 地理编码成功：返回经纬度坐标 { lng, lat }
+  - 地理编码失败：返回错误原因，上层服务降级处理
+  - 前端地图：QWebEngineView渲染地图，展示标记和路线
+  - 前端地图失败：降级为文本列表，不影响核心功能
+
+■ 关联
+  - 前序：无（外部接口，按需调用）
+  - 被调用方：站点服务（用户端 UML-018/023/024）、
+    管理端服务（管理端 UML-042）
+  - 兼容性：
+    - 用户端和管理端使用相同的地理编码接口（geocode方法）
+    - 前端地图展示仅用户端使用（管理端无地图展示需求）
+    - API Key 在服务端统一配置，两个客户端不直接持有Key
+  - 降级策略：
+    - 地理编码失败 → 管理端允许手动输入经纬度（UML-042）
+    - 地理编码失败 → 用户端充电站查询降级为纯列表（无地图）
+    - 前端地图加载失败 → 降级为文本列表展示
+    - 核心充电流程不依赖地图（只依赖经纬度坐标的数据库查询）
