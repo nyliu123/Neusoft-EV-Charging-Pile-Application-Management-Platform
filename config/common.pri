@@ -1,5 +1,4 @@
 CONFIG += c++17 warn_on
-CONFIG -= depend_includepath
 
 QMAKE_CXXFLAGS += -Wall -Wextra -Wpedantic
 
@@ -18,4 +17,3 @@ OBJECTS_DIR = $$PLATFORM_BUILD_ROOT/obj/$$TARGET
 MOC_DIR = $$PLATFORM_BUILD_ROOT/moc/$$TARGET
 RCC_DIR = $$PLATFORM_BUILD_ROOT/rcc/$$TARGET
 UI_DIR = $$PLATFORM_BUILD_ROOT/ui/$$TARGET
-

@@ -14,6 +14,8 @@ class PhoneLoginWidget final : public QWidget {
 public:
     explicit PhoneLoginWidget(QWidget *parent = nullptr);
     void setLoginInProgress(bool inProgress);
+    void showLoginError(const QString &message);
+    void resetForLogin();
 
 signals:
     void phoneAccepted(const QString &phone);

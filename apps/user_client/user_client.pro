@@ -7,10 +7,17 @@ PLATFORM_ROOT = $$clean_path($$PWD/../..)
 include($$PLATFORM_ROOT/config/common.pri)
 
 INCLUDEPATH += $$PLATFORM_ROOT/src
-HEADERS += phone_login_widget.h
+HEADERS += \
+    phone_login_widget.h \
+    user_home_widget.h \
+    user_session_state.h
 SOURCES += \
     main.cpp \
-    phone_login_widget.cpp
+    phone_login_widget.cpp \
+    user_home_widget.cpp \
+    user_session_state.cpp
+
+RESOURCES += user_client.qrc
 
 LIBS += -L$$PLATFORM_BUILD_ROOT/lib -lev_network -lev_common
 PRE_TARGETDEPS += \

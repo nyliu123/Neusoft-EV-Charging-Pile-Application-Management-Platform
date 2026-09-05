@@ -1,8 +1,11 @@
 #include "server_application.h"
 
+#include "common/error_code.h"
 #include "common/protocol.h"
+#include "services/user_service.h"
 
 #include <QDebug>
+#include <QDateTime>
 #include <QJsonObject>
 #include <QTcpSocket>
 #include <utility>
@@ -48,12 +51,14 @@ void ServerApplication::acceptPendingConnections()
         }
         socket->setParent(this);
         receiveBuffers_.insert(socket, {});
+        connectionSessions_.insert(socket, {});
         qInfo().noquote() << "client connected:" << socket->peerAddress().toString()
                           << socket->peerPort();
         connect(socket, &QTcpSocket::readyRead, this, [this, socket] {
             readClient(socket);
         });
         connect(socket, &QTcpSocket::disconnected, this, [this, socket] {
+            sessionManager_.removeAll(connectionSessions_.take(socket));
             receiveBuffers_.remove(socket);
             qInfo().noquote() << "client disconnected:" << socket->peerAddress().toString();
             socket->deleteLater();
@@ -82,6 +87,18 @@ void ServerApplication::readClient(QTcpSocket *socket)
 void ServerApplication::processFrame(QTcpSocket *socket, const Frame &frame)
 {
     const QString requestId = frame.payload.value(QStringLiteral("request_id")).toString();
+    if (frame.messageType == static_cast<quint32>(MessageType::LoginRequest)) {
+        processLogin(socket, frame);
+        return;
+    }
+    if (frame.messageType == static_cast<quint32>(MessageType::SessionHeartbeatRequest)) {
+        processSessionHeartbeat(socket, frame);
+        return;
+    }
+    if (frame.messageType == static_cast<quint32>(MessageType::LogoutRequest)) {
+        processLogout(socket, frame);
+        return;
+    }
     if (frame.messageType != static_cast<quint32>(MessageType::HealthRequest)) {
         sendError(socket, requestId, QStringLiteral("message type is not implemented"));
         return;
@@ -104,6 +121,156 @@ void ServerApplication::processFrame(QTcpSocket *socket, const Frame &frame)
          }}
     };
     socket->write(FrameCodec::encode(static_cast<quint32>(MessageType::HealthResponse), response));
+}
+
+void ServerApplication::processLogin(QTcpSocket *socket, const Frame &frame)
+{
+    const QString requestId = frame.payload.value(QStringLiteral("request_id")).toString();
+    const auto requestedVersion = static_cast<quint32>(
+        frame.payload.value(QStringLiteral("protocol_version")).toInteger());
+    if (requestedVersion != ProtocolVersion) {
+        sendError(socket, requestId, QStringLiteral("unsupported protocol version"));
+        return;
+    }
+
+    const QJsonObject requestData = frame.payload.value(QStringLiteral("data")).toObject();
+    const QString phone = requestData.value(QStringLiteral("phone")).toString();
+    const bool isAutoRegister =
+        requestData.value(QStringLiteral("is_auto_register")).toBool();
+    auto databaseResult = databaseManager_.openForCurrentThread();
+    if (!databaseResult.success) {
+        sendError(socket, requestId, QStringLiteral("database is unavailable"));
+        return;
+    }
+
+    const UserService service;
+    const Result<LoginUserInfo> loginResult = isAutoRegister
+        ? service.registerAutomatically(databaseResult.data, phone)
+        : service.loginExistingUser(databaseResult.data, phone);
+    if (!loginResult.success) {
+        QString message = loginResult.message;
+        QString error = loginResult.message;
+        if (loginResult.code == ErrorCode::StorageError) {
+            qWarning().noquote() << "login query failed:" << loginResult.message;
+            message = isAutoRegister
+                ? QStringLiteral("注册失败，请稍后重试")
+                : QStringLiteral("登录失败，请稍后重试");
+            error = message;
+        }
+        const QJsonObject response {
+            {QStringLiteral("protocol_version"), static_cast<qint64>(ProtocolVersion)},
+            {QStringLiteral("request_id"), requestId},
+            {QStringLiteral("success"), false},
+            {QStringLiteral("code"), errorCodeName(loginResult.code)},
+            {QStringLiteral("message"), message},
+            {QStringLiteral("error"), error},
+            {QStringLiteral("data"), QJsonObject {}}
+        };
+        socket->write(FrameCodec::encode(
+            static_cast<quint32>(MessageType::LoginResponse), response));
+        return;
+    }
+
+    const LoginUserInfo &user = loginResult.data;
+    if (!sessionManager_.registerUserSession(user.sessionId, user.userId)) {
+        sendError(socket, requestId, QStringLiteral("cannot create user session"));
+        return;
+    }
+    connectionSessions_[socket].insert(user.sessionId);
+    const QJsonObject userInfo {
+        {QStringLiteral("user_id"), user.userId},
+        {QStringLiteral("nickname"), user.nickname},
+        {QStringLiteral("avatar_path"), user.avatarPath},
+        {QStringLiteral("balance"), static_cast<double>(user.balanceCent) / 100.0},
+        {QStringLiteral("session_id"), user.sessionId}
+    };
+    const QJsonObject response {
+        {QStringLiteral("protocol_version"), static_cast<qint64>(ProtocolVersion)},
+        {QStringLiteral("request_id"), requestId},
+        {QStringLiteral("success"), true},
+        {QStringLiteral("code"), QStringLiteral("OK")},
+        {QStringLiteral("message"), user.isNewUser
+            ? QStringLiteral("注册成功，欢迎加入！")
+            : QStringLiteral("登录成功")},
+        {QStringLiteral("data"), QJsonObject {
+             {QStringLiteral("user_info"), userInfo},
+             {QStringLiteral("is_new_user"), user.isNewUser}
+         }}
+    };
+    socket->write(FrameCodec::encode(
+        static_cast<quint32>(MessageType::LoginResponse), response));
+}
+
+void ServerApplication::processSessionHeartbeat(QTcpSocket *socket, const Frame &frame)
+{
+    const QString requestId = frame.payload.value(QStringLiteral("request_id")).toString();
+    const auto requestedVersion = static_cast<quint32>(
+        frame.payload.value(QStringLiteral("protocol_version")).toInteger());
+    if (requestedVersion != ProtocolVersion) {
+        sendError(socket, requestId, QStringLiteral("unsupported protocol version"));
+        return;
+    }
+    const QJsonObject requestData = frame.payload.value(QStringLiteral("data")).toObject();
+    const QString sessionId = requestData.value(QStringLiteral("session_id")).toString();
+    const bool validForConnection = connectionSessions_.value(socket).contains(sessionId);
+    const bool valid = validForConnection && sessionManager_.validateAndTouch(sessionId);
+    if (!valid) {
+        connectionSessions_[socket].remove(sessionId);
+        const QJsonObject response {
+            {QStringLiteral("protocol_version"), static_cast<qint64>(ProtocolVersion)},
+            {QStringLiteral("request_id"), requestId},
+            {QStringLiteral("success"), false},
+            {QStringLiteral("code"), QStringLiteral("UNAUTHORIZED")},
+            {QStringLiteral("message"), QStringLiteral("登录已过期，请重新登录")},
+            {QStringLiteral("error"), QStringLiteral("session_expired")},
+            {QStringLiteral("data"), QJsonObject {}}
+        };
+        socket->write(FrameCodec::encode(
+            static_cast<quint32>(MessageType::SessionHeartbeatResponse), response));
+        return;
+    }
+
+    const QJsonObject response {
+        {QStringLiteral("protocol_version"), static_cast<qint64>(ProtocolVersion)},
+        {QStringLiteral("request_id"), requestId},
+        {QStringLiteral("success"), true},
+        {QStringLiteral("code"), QStringLiteral("OK")},
+        {QStringLiteral("message"), QStringLiteral("session is active")},
+        {QStringLiteral("data"), QJsonObject {
+             {QStringLiteral("server_time"),
+              QDateTime::currentDateTimeUtc().toString(Qt::ISODate)}
+         }}
+    };
+    socket->write(FrameCodec::encode(
+        static_cast<quint32>(MessageType::SessionHeartbeatResponse), response));
+}
+
+void ServerApplication::processLogout(QTcpSocket *socket, const Frame &frame)
+{
+    const QString requestId = frame.payload.value(QStringLiteral("request_id")).toString();
+    const auto requestedVersion = static_cast<quint32>(
+        frame.payload.value(QStringLiteral("protocol_version")).toInteger());
+    if (requestedVersion != ProtocolVersion) {
+        sendError(socket, requestId, QStringLiteral("unsupported protocol version"));
+        return;
+    }
+    const QJsonObject requestData = frame.payload.value(QStringLiteral("data")).toObject();
+    const QString sessionId = requestData.value(QStringLiteral("session_id")).toString();
+    if (connectionSessions_.value(socket).contains(sessionId)) {
+        sessionManager_.remove(sessionId);
+        connectionSessions_[socket].remove(sessionId);
+    }
+
+    const QJsonObject response {
+        {QStringLiteral("protocol_version"), static_cast<qint64>(ProtocolVersion)},
+        {QStringLiteral("request_id"), requestId},
+        {QStringLiteral("success"), true},
+        {QStringLiteral("code"), QStringLiteral("OK")},
+        {QStringLiteral("message"), QStringLiteral("退出登录成功")},
+        {QStringLiteral("data"), QJsonObject {}}
+    };
+    socket->write(FrameCodec::encode(
+        static_cast<quint32>(MessageType::LogoutResponse), response));
 }
 
 void ServerApplication::sendError(QTcpSocket *socket,

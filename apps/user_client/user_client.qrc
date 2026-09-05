@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/images">
+        <file alias="default-avatar.svg">../../resources/images/default-avatar.svg</file>
+    </qresource>
+</RCC>

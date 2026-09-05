@@ -15,6 +15,10 @@
 | `ev::PlatformClient` | 通信 | `src/network/platform_client.h` | 客户端连接、健康检查与重连 |
 | `ev::FeeCalculator` | 充电 | `src/services/fee_calculator.h` | 按订单快照计算整数分费用 |
 | `ev::DatabaseManager` | 数据 | `src/data/database_manager.h` | 每线程 SQLite 连接与迁移入口 |
+| `ev::UserRepository` | 用户数据 | `src/data/user_repository.h` | 按手机号读取已有用户记录 |
+| `ev::UserService` | 用户服务 | `src/services/user_service.h` | UML-011 已有用户登录与 UML-012 自动注册 |
+| `ev::SessionManager` | 用户服务 | `src/services/session_manager.h` | UML-013 服务端内存会话、续期与清理 |
+| `UserSessionState` | 用户端 | `apps/user_client/user_session_state.h` | 保存当前登录用户与会话标识 |
 
 新增消息类型必须显式分配未使用编号，并同步更新客户端、服务端与协议测试；禁止依据枚举顺序隐式生成线上编号。
 
