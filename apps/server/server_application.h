@@ -6,16 +6,23 @@
 
 #include <QHash>
 #include <QHostAddress>
+#include <QJsonObject>
 #include <QObject>
 #include <QSet>
 #include <QSqlDatabase>
 #include <QTcpServer>
 
+#include <memory>
+
 namespace ev {
+
+class AdminHandler;
 
 class ServerApplication final : public QObject {
 public:
     ServerApplication(QString databasePath, QObject *parent = nullptr);
+    // Out-of-line so unique_ptr<AdminHandler> can stay forward-declared here.
+    ~ServerApplication() override;
     bool start(const QHostAddress &address, quint16 port);
 
 private:
@@ -25,6 +32,9 @@ private:
     void processLogin(QTcpSocket *socket, const Frame &frame);
     void processSessionHeartbeat(QTcpSocket *socket, const Frame &frame);
     void processLogout(QTcpSocket *socket, const Frame &frame);
+    void processAdminQuery(QTcpSocket *socket, const Frame &frame);
+    void processAdminAction(QTcpSocket *socket, const Frame &frame);
+    void processAdminRequest(QTcpSocket *socket, const Frame &frame, bool isAction);
     void sendError(QTcpSocket *socket, const QString &requestId, const QString &message);
 
     DatabaseManager databaseManager_;
@@ -34,6 +44,8 @@ private:
     QTcpServer tcpServer_;
     QHash<QTcpSocket *, QByteArray> receiveBuffers_;
     QHash<QTcpSocket *, QSet<QString>> connectionSessions_;
+    QSet<QString> adminSessions_;
+    std::unique_ptr<AdminHandler> adminHandler_;
 };
 
 } // namespace ev

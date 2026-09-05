@@ -205,6 +205,11 @@ void PlatformClient::failPendingLogin(const QString &code, const QString &messag
     emit loginFailed(code, message);
 }
 
+void PlatformClient::activateSession(const QString &sessionId)
+{
+    activateUserSession(sessionId);
+}
+
 void PlatformClient::activateUserSession(const QString &sessionId)
 {
     clearUserSession();

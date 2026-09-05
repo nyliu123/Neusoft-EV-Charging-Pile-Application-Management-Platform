@@ -39,7 +39,8 @@ const QStringList migrationScripts()
 {
     return {
         QStringLiteral(":/database/migrations/001_core.sql"),
-        QStringLiteral(":/database/migrations/002_seed_admin.sql")
+        QStringLiteral(":/database/migrations/002_seed_admin.sql"),
+        QStringLiteral(":/database/migrations/003_seed_test_data.sql")
     };
 }
 
