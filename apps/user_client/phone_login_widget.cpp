@@ -50,6 +50,23 @@ void PhoneLoginWidget::setLoginInProgress(bool inProgress)
                                      : QStringLiteral("登录"));
 }
 
+void PhoneLoginWidget::showLoginError(const QString &message)
+{
+    phoneMessage_->setText(message);
+    phoneMessage_->setStyleSheet(QStringLiteral("color: #b3261e;"));
+    setLoginInProgress(false);
+    QMessageBox::warning(this, QStringLiteral("提示"), message);
+    phoneInput_->setFocus();
+}
+
+void PhoneLoginWidget::resetForLogin()
+{
+    phoneMessage_->clear();
+    phoneMessage_->setStyleSheet({});
+    setLoginInProgress(false);
+    phoneInput_->setFocus();
+}
+
 void PhoneLoginWidget::validatePhone()
 {
     const ev::PhoneValidationResult result =

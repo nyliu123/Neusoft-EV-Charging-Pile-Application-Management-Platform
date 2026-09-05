@@ -1,4 +1,6 @@
 #include "phone_login_widget.h"
+#include "user_home_widget.h"
+#include "user_session_state.h"
 #include "network/platform_client.h"
 
 #include <QApplication>
@@ -7,8 +9,10 @@
 #include <QDebug>
 #include <QLabel>
 #include <QMainWindow>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QStatusBar>
+#include <QStackedWidget>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -73,7 +77,16 @@ int main(int argc, char *argv[])
     titleFont.setBold(true);
     title->setFont(titleFont);
     layout->addWidget(title);
-    layout->addWidget(new PhoneLoginWidget(central));
+    auto *pages = new QStackedWidget(central);
+    auto *loginPage = new QWidget(pages);
+    auto *loginLayout = new QVBoxLayout(loginPage);
+    auto *loginWidget = new PhoneLoginWidget(loginPage);
+    loginLayout->addWidget(loginWidget);
+    loginLayout->addStretch();
+    auto *homeWidget = new UserHomeWidget(pages);
+    pages->addWidget(loginPage);
+    pages->addWidget(homeWidget);
+    layout->addWidget(pages, 1);
 
     auto *connectionLabel = new QLabel(QStringLiteral("连接状态：正在连接"), central);
     auto *retryButton = new QPushButton(QStringLiteral("重新连接"), central);
@@ -91,6 +104,52 @@ int main(int argc, char *argv[])
     });
     QObject::connect(retryButton, &QPushButton::clicked,
                      &client, &ev::PlatformClient::reconnectNow);
+    QObject::connect(loginWidget, &PhoneLoginWidget::phoneAccepted,
+                     &client, &ev::PlatformClient::login);
+    QObject::connect(&client, &ev::PlatformClient::loginFailed, &window,
+                     [loginWidget](const QString &, const QString &message) {
+        loginWidget->showLoginError(message);
+    });
+    QObject::connect(&client, &ev::PlatformClient::loginSucceeded, &window,
+                     [&window, pages, homeWidget, loginWidget](const QJsonObject &userInfo,
+                                                              bool isNewUser) {
+        if (!UserSessionState::instance().setUserInfo(userInfo)) {
+            loginWidget->showLoginError(QStringLiteral("服务端返回的用户信息不完整"));
+            return;
+        }
+        homeWidget->refresh();
+        pages->setCurrentWidget(homeWidget);
+        homeWidget->showWelcome(isNewUser);
+        window.statusBar()->showMessage(
+            isNewUser ? QStringLiteral("注册成功，欢迎加入！")
+                      : QStringLiteral("登录成功"),
+            3000);
+    });
+    QObject::connect(homeWidget, &UserHomeWidget::logoutRequested,
+                     &client, &ev::PlatformClient::logout);
+    QObject::connect(&client, &ev::PlatformClient::logoutFinished, &window,
+                     [&window, pages, loginPage, loginWidget, homeWidget](
+                         bool success, const QString &message) {
+        homeWidget->setLogoutInProgress(false);
+        if (!success) {
+            pages->setCurrentWidget(homeWidget);
+            QMessageBox::warning(&window, QStringLiteral("提示"),
+                message.isEmpty() ? QStringLiteral("退出登录失败，请稍后重试") : message);
+            return;
+        }
+        UserSessionState::instance().clear();
+        loginWidget->resetForLogin();
+        pages->setCurrentWidget(loginPage);
+        window.statusBar()->showMessage(QStringLiteral("已退出登录"), 3000);
+    });
+    QObject::connect(&client, &ev::PlatformClient::sessionExpired, &window,
+                     [pages, loginPage, loginWidget, homeWidget](const QString &message) {
+        UserSessionState::instance().clear();
+        homeWidget->setLogoutInProgress(false);
+        pages->setCurrentWidget(loginPage);
+        loginWidget->showLoginError(message.isEmpty()
+            ? QStringLiteral("登录已过期，请重新登录") : message);
+    });
     window.show();
     client.connectToServer(parser.value(hostOption), static_cast<quint16>(requestedPort));
     return application.exec();
