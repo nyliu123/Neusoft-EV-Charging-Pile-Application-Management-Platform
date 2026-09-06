@@ -29,6 +29,9 @@ public:
     bool queryStations(double longitude, double latitude,
                        QObject *context, Callback callback);
     bool queryStationDetail(qint64 stationId, QObject *context, Callback callback);
+    bool route(double fromLongitude, double fromLatitude,
+               double toLongitude, double toLatitude, const QString &mode,
+               QObject *context, Callback callback);
 
 signals:
     void sessionExpired(const QString &message);

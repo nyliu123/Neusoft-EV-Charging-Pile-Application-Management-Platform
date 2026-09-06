@@ -27,6 +27,22 @@ double StationService::haversineKm(double firstLongitude, double firstLatitude,
     return earthRadiusKm * 2.0 * qAtan2(qSqrt(clamped), qSqrt(1.0 - clamped));
 }
 
+double StationService::onlineRate(const StationDetailRecord &detail)
+{
+    if (detail.station.totalPiles <= 0) {
+        return 0.0;
+    }
+    int online = 0;
+    for (const StationPileRecord &pile : detail.piles) {
+        if (pile.status == QStringLiteral("idle")
+            || pile.status == QStringLiteral("reserved")
+            || pile.status == QStringLiteral("in_use")) {
+            ++online;
+        }
+    }
+    return static_cast<double>(online) / detail.station.totalPiles;
+}
+
 Result<QVector<StationListItem>> StationService::listStations(
     QSqlDatabase &database, std::optional<double> longitude,
     std::optional<double> latitude) const

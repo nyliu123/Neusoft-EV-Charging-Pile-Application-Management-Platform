@@ -17,8 +17,14 @@ def run_pipeline(database: Path, output: Path) -> dict:
     predictions = generate_predictions(output)
     return {
         "features": features,
-        "models": {name: details["accepted"]
-                   for name, details in models["models"].items()},
+        "models": {
+            name: {
+                "candidate_accepted": details["accepted"],
+                "active_updated": details["active_updated"],
+                "active_algorithm": details["active_model"]["algorithm"],
+            }
+            for name, details in models["models"].items()
+        },
         "predictions": predictions,
     }
 

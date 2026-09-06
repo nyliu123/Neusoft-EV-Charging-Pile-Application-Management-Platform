@@ -459,6 +459,10 @@ void FoundationTests::stationQueriesSortByDistanceAndPreserveStatus()
     QVERIFY2(detail.success, qPrintable(detail.message));
     QCOMPARE(detail.data.piles.size(), 4);
     QCOMPARE(detail.data.piles.first().pileNumber, QStringLiteral("A-01"));
+    QVERIFY(qAbs(ev::StationService::onlineRate(detail.data) - 0.75) < 0.000001);
+    const auto reservedDetail = service.stationDetail(openResult.data, 2);
+    QVERIFY2(reservedDetail.success, qPrintable(reservedDetail.message));
+    QVERIFY(qAbs(ev::StationService::onlineRate(reservedDetail.data) - 0.75) < 0.000001);
     QVERIFY(!service.stationDetail(openResult.data, 0).success);
     QVERIFY(!service.listStations(openResult.data, 121.5, std::nullopt).success);
 }
@@ -489,6 +493,11 @@ void FoundationTests::mapAdapterValidatesInputsAndUsesTeachingFallback()
                   [](const auto &result) {
         QVERIFY(!result.success);
         QCOMPARE(result.code, ev::ErrorCode::MapUnavailable);
+    });
+    adapter.route(121.5, 38.8, 121.6, 38.9, QStringLiteral("flying"),
+                  [](const auto &result) {
+        QVERIFY(!result.success);
+        QCOMPARE(result.code, ev::ErrorCode::InvalidInput);
     });
 }
 

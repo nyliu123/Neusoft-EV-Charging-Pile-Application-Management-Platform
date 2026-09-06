@@ -475,8 +475,7 @@ void ServerApplication::processStationRequest(QTcpSocket *socket, const Frame &f
             });
         }
         const int total = detail.station.totalPiles;
-        const double onlineRate = total > 0
-            ? static_cast<double>(detail.station.idlePiles + inUse) / total : 0.0;
+        const double onlineRate = StationService::onlineRate(detail);
         QJsonObject station {
             {QStringLiteral("station_id"), detail.station.stationId},
             {QStringLiteral("station_name"), detail.station.stationName},

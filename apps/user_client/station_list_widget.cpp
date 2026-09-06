@@ -43,6 +43,10 @@ StationListWidget::StationListWidget(ev::UserApiClient *api, QWidget *parent)
     locationBar->addWidget(addressEdit_, 1);
     searchButton_ = new QPushButton(QStringLiteral("搜索并按距离排序"), this);
     locationBar->addWidget(searchButton_);
+    modeBox_ = new QComboBox(this);
+    modeBox_->addItem(QStringLiteral("驾车"), QStringLiteral("driving"));
+    modeBox_->addItem(QStringLiteral("步行"), QStringLiteral("walking"));
+    locationBar->addWidget(modeBox_);
     root->addLayout(locationBar);
 
     statusLabel_ = new QLabel(QStringLiteral("正在加载站点列表..."), this);
@@ -105,6 +109,7 @@ void StationListWidget::resolveLocation()
 
 void StationListWidget::loadStations()
 {
+    hasOrigin_ = false;
     api_->queryStations(this,
         [this](bool ok, const QJsonObject &result, const QString &message) {
             searchButton_->setEnabled(true);
@@ -121,6 +126,9 @@ void StationListWidget::loadStations()
 void StationListWidget::loadStations(double longitude, double latitude,
                                      const QString &source)
 {
+    hasOrigin_ = true;
+    originLongitude_ = longitude;
+    originLatitude_ = latitude;
     api_->queryStations(longitude, latitude, this,
         [this, source](bool ok, const QJsonObject &result, const QString &message) {
             searchButton_->setEnabled(true);
@@ -167,10 +175,55 @@ void StationListWidget::showStations(const QJsonObject &result, const QString &s
             dialog->open();
         });
         connect(card, &StationCard::navigationRequested,
-                this, &StationListWidget::navigationRequested);
+                this, &StationListWidget::requestNavigation);
         cardsLayout_->addWidget(card);
     }
     cardsLayout_->addStretch();
+}
+
+void StationListWidget::requestNavigation(const QJsonObject &station)
+{
+    if (!hasOrigin_) {
+        QMessageBox::information(this, QStringLiteral("导航"),
+            QStringLiteral("请先输入位置并完成距离排序，再规划路线。"));
+        return;
+    }
+    if (!station.value(QStringLiteral("longitude")).isDouble()
+        || !station.value(QStringLiteral("latitude")).isDouble()) {
+        QMessageBox::warning(this, QStringLiteral("导航"),
+                             QStringLiteral("该站点缺少有效坐标。"));
+        return;
+    }
+    emit navigationRequested(station);
+    const QString mode = modeBox_->currentData().toString();
+    statusLabel_->setStyleSheet(QString());
+    statusLabel_->setText(QStringLiteral("正在规划%1路线...")
+        .arg(mode == QStringLiteral("walking") ? QStringLiteral("步行")
+                                                : QStringLiteral("驾车")));
+    api_->route(originLongitude_, originLatitude_,
+                station.value(QStringLiteral("longitude")).toDouble(),
+                station.value(QStringLiteral("latitude")).toDouble(),
+                mode, this,
+        [this, station, mode](bool ok, const QJsonObject &result,
+                              const QString &message) {
+            if (!ok) {
+                statusLabel_->setText(QStringLiteral("路线规划失败：%1").arg(message));
+                statusLabel_->setStyleSheet(QStringLiteral("color: #b42318;"));
+                QMessageBox::warning(this, QStringLiteral("导航失败"), message);
+                return;
+            }
+            const QString modeText = mode == QStringLiteral("walking")
+                ? QStringLiteral("步行") : QStringLiteral("驾车");
+            const QString summary = QStringLiteral(
+                "%1路线：当前位置 → %2\n预计距离 %3 km，约 %4 分钟。")
+                .arg(modeText,
+                     station.value(QStringLiteral("station_name")).toString())
+                .arg(result.value(QStringLiteral("distance_km")).toDouble(), 0, 'f', 2)
+                .arg(result.value(QStringLiteral("duration_minutes")).toInt());
+            statusLabel_->setText(summary);
+            statusLabel_->setStyleSheet(QStringLiteral("color: #157347;"));
+            QMessageBox::information(this, QStringLiteral("路线规划结果"), summary);
+        });
 }
 
 void StationListWidget::clearCards()

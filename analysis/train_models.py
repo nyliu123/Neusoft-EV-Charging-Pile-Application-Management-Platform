@@ -1,4 +1,4 @@
-"""Train versioned, explainable daily and hourly seasonal models."""
+"""Train, validate, version, and publish daily/hourly forecasting models."""
 
 from __future__ import annotations
 
@@ -10,34 +10,39 @@ import os
 import pickle
 import statistics
 import tempfile
+import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
 
+try:
+    from statsmodels.tsa.arima.model import ARIMA
+except ImportError:  # The pipeline remains usable with an explicitly labelled SMA fallback.
+    ARIMA = None
 
-def _read_series(path: Path, time_field: str) -> list[tuple[str, float]]:
+
+def _read_partitioned_series(path: Path, time_field: str) -> dict[str, list[tuple[str, float]]]:
+    partitions: dict[str, list[tuple[str, float]]] = {
+        "train": [], "validation": [], "test": []
+    }
     with path.open(encoding="utf-8", newline="") as handle:
-        return [(row[time_field], float(row["kwh"])) for row in csv.DictReader(handle)]
+        for row in csv.DictReader(handle):
+            split = row.get("split", "train")
+            if split not in partitions:
+                raise ValueError(f"invalid split {split!r} in {path}")
+            partitions[split].append((row[time_field], float(row["kwh"])))
+    return partitions
 
 
 def _mean(values: Sequence[float]) -> float:
     return statistics.fmean(values) if values else 0.0
 
 
-def _linear_slope(values: Sequence[float]) -> float:
-    if len(values) < 2:
-        return 0.0
-    x_mean = (len(values) - 1) / 2.0
-    y_mean = _mean(values)
-    denominator = sum((index - x_mean) ** 2 for index in range(len(values)))
-    return (sum((index - x_mean) * (value - y_mean)
-                for index, value in enumerate(values)) / denominator
-            if denominator else 0.0)
-
-
 def _metrics(actual: Sequence[float], predicted: Sequence[float]) -> dict[str, float | None]:
     if not actual:
         return {"mae": None, "rmse": None, "mape": None}
+    if len(actual) != len(predicted):
+        raise ValueError("actual and predicted lengths differ")
     errors = [prediction - observed for observed, prediction in zip(actual, predicted)]
     nonzero = [(observed, prediction) for observed, prediction in zip(actual, predicted)
                if observed != 0]
@@ -52,80 +57,163 @@ def _metrics(actual: Sequence[float], predicted: Sequence[float]) -> dict[str, f
 
 def _residual_std(actual: Sequence[float], predicted: Sequence[float]) -> float:
     residuals = [observed - prediction for observed, prediction in zip(actual, predicted)]
-    return statistics.pstdev(residuals) if len(residuals) > 1 else max(1.0, _mean(actual) * 0.15)
+    return (statistics.pstdev(residuals) if len(residuals) > 1
+            else max(1.0, _mean(actual) * 0.15))
 
 
-def _daily_model(series: list[tuple[str, float]]) -> tuple[dict, dict]:
-    train_count = max(1, int(len(series) * 0.8))
-    train = series[:train_count]
-    validation = series[train_count:] or series[-1:]
-    values = [value for _, value in train]
-    global_mean = _mean(values)
-    weekday_values: dict[int, list[float]] = {weekday: [] for weekday in range(7)}
-    for stamp, value in train:
-        weekday_values[datetime.fromisoformat(stamp).weekday()].append(value)
-    weekday_means = {str(key): _mean(items) if items else global_mean
-                     for key, items in weekday_values.items()}
-    slope = _linear_slope(values[-30:])
-    candidate = []
-    baseline = []
-    actual = []
-    for offset, (stamp, value) in enumerate(validation, start=1):
-        weekday = datetime.fromisoformat(stamp).weekday()
-        candidate.append(max(0.0, weekday_means[str(weekday)] + slope * min(offset, 7)))
-        baseline.append(global_mean)
-        actual.append(value)
-    candidate_metrics = _metrics(actual, candidate)
-    baseline_metrics = _metrics(actual, baseline)
-    model = {
-        "kind": "daily_seasonal_trend",
-        "algorithm": "weekday seasonal mean plus capped linear trend",
-        "weekday_means": weekday_means,
-        "global_mean": global_mean,
-        "trend_per_day": slope,
-        "residual_std": _residual_std(actual, candidate),
+def _sma_value(series: Sequence[tuple[str, float]], window: int) -> float:
+    values = [value for _, value in series]
+    return _mean(values[-window:])
+
+
+def _hour_means(series: Sequence[tuple[str, float]]) -> dict[str, float]:
+    values: dict[int, list[float]] = {hour: [] for hour in range(24)}
+    all_values = [value for _, value in series]
+    global_mean = _mean(all_values)
+    for stamp, value in series:
+        values[datetime.fromisoformat(stamp).hour].append(value)
+    return {str(hour): _mean(items) if items else global_mean
+            for hour, items in values.items()}
+
+
+def _sma_artifact(name: str, series: Sequence[tuple[str, float]], window: int,
+                  generated_at: str, version: str) -> dict:
+    if not series:
+        raise ValueError(f"cannot build {name} SMA without observations")
+    value = _sma_value(series, window)
+    history = [item for _, item in series]
+    fitted = [_mean(history[max(0, index - window):index])
+              for index in range(1, len(history))]
+    actual = history[1:]
+    artifact = {
+        "kind": "sma",
+        "algorithm": f"simple moving average (window={window})",
+        "window": window,
+        "value": value,
+        "residual_std": _residual_std(actual, fitted),
         "data_through": series[-1][0],
         "point_count": len(series),
+        "generated_at": generated_at,
+        "version": version,
+        "simulated_data": True,
     }
-    return model, {"candidate": candidate_metrics, "baseline": baseline_metrics}
+    if name == "peak_predict":
+        artifact["hour_means"] = _hour_means(series)
+    return artifact
 
 
-def _hourly_model(series: list[tuple[str, float]]) -> tuple[dict, dict]:
-    train_count = max(1, int(len(series) * 0.8))
-    train = series[:train_count]
-    validation = series[train_count:] or series[-1:]
-    values = [value for _, value in train]
-    global_mean = _mean(values)
-    hour_values: dict[int, list[float]] = {hour: [] for hour in range(24)}
-    weekday_hour_values: dict[str, list[float]] = {}
-    for stamp, value in train:
-        moment = datetime.fromisoformat(stamp)
-        hour_values[moment.hour].append(value)
-        weekday_hour_values.setdefault(f"{moment.weekday()}-{moment.hour}", []).append(value)
-    hour_means = {str(hour): _mean(items) if items else global_mean
-                  for hour, items in hour_values.items()}
-    weekday_hour_means = {key: _mean(items) for key, items in weekday_hour_values.items()}
-    actual: list[float] = []
-    candidate: list[float] = []
-    baseline: list[float] = []
-    for stamp, value in validation:
-        moment = datetime.fromisoformat(stamp)
-        candidate.append(weekday_hour_means.get(
-            f"{moment.weekday()}-{moment.hour}", hour_means[str(moment.hour)]))
-        baseline.append(global_mean)
-        actual.append(value)
-    model = {
-        "kind": "hourly_seasonal",
-        "algorithm": "weekday-hour seasonal mean with hour fallback",
-        "hour_means": hour_means,
-        "weekday_hour_means": weekday_hour_means,
-        "global_mean": global_mean,
-        "residual_std": _residual_std(actual, candidate),
+def _fit_arima(values: Sequence[float], order: tuple[int, int, int]):
+    if ARIMA is None:
+        raise RuntimeError("statsmodels is not installed")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return ARIMA(list(values), order=order,
+                     enforce_stationarity=False,
+                     enforce_invertibility=False).fit()
+
+
+def _arima_artifact(name: str, series: Sequence[tuple[str, float]],
+                    order: tuple[int, int, int], generated_at: str,
+                    version: str) -> dict:
+    estimator = _fit_arima([value for _, value in series], order)
+    residuals = [float(value) for value in estimator.resid]
+    residual_std = (statistics.pstdev(residuals) if len(residuals) > 1
+                    else max(1.0, _mean([value for _, value in series]) * 0.15))
+    artifact = {
+        "kind": "arima",
+        "algorithm": f"ARIMA{order}",
+        "order": order,
+        "estimator": estimator,
+        "residual_std": residual_std,
         "data_through": series[-1][0],
         "point_count": len(series),
+        "generated_at": generated_at,
+        "version": version,
+        "simulated_data": True,
     }
-    return model, {"candidate": _metrics(actual, candidate),
-                   "baseline": _metrics(actual, baseline)}
+    if name == "peak_predict":
+        artifact["hour_means"] = _hour_means(series)
+    return artifact
+
+
+def _forecast_values(artifact: dict, steps: int) -> list[float]:
+    if steps <= 0:
+        return []
+    if artifact["kind"] == "arima":
+        return [max(0.0, float(value))
+                for value in artifact["estimator"].forecast(steps=steps)]
+    if artifact["kind"] == "sma":
+        return [max(0.0, float(artifact["value"]))] * steps
+    raise ValueError(f"unsupported model kind: {artifact['kind']}")
+
+
+def _candidate_accepted(candidate: dict[str, float | None],
+                        baseline: dict[str, float | None]) -> bool:
+    candidate_rmse = candidate["rmse"]
+    baseline_rmse = baseline["rmse"]
+    return (candidate_rmse is not None
+            and (baseline_rmse is None or candidate_rmse <= baseline_rmse * 1.10))
+
+
+def _build_model(name: str, partitions: dict[str, list[tuple[str, float]]],
+                 generated_at: str, version: str) -> tuple[dict, dict]:
+    train = partitions["train"]
+    validation = partitions["validation"]
+    test = partitions["test"]
+    if not train:
+        raise ValueError(f"{name} has no training observations")
+
+    is_daily = name == "demand_forecast"
+    order = (1, 1, 1) if is_daily else (2, 1, 1)
+    minimum_points = 14 if is_daily else 72
+    window = 7 if is_daily else 24
+    baseline_predictions = [_sma_value(train, window)] * len(validation)
+    baseline_metrics = _metrics([value for _, value in validation], baseline_predictions)
+    candidate_metrics = {"mae": None, "rmse": None, "mape": None}
+    candidate_error = ""
+    accepted = False
+
+    if not validation:
+        candidate_error = "validation partition is empty"
+    elif len(train) < minimum_points:
+        candidate_error = (f"insufficient training data: {len(train)} points; "
+                           f"ARIMA requires at least {minimum_points}")
+    elif ARIMA is None:
+        candidate_error = "statsmodels is not installed; using labelled SMA fallback"
+    else:
+        try:
+            validation_estimator = _fit_arima([value for _, value in train], order)
+            candidate_predictions = [max(0.0, float(value)) for value in
+                                     validation_estimator.forecast(steps=len(validation))]
+            candidate_metrics = _metrics([value for _, value in validation],
+                                         candidate_predictions)
+            accepted = _candidate_accepted(candidate_metrics, baseline_metrics)
+            if not accepted:
+                candidate_error = "candidate validation RMSE exceeds baseline tolerance"
+        except Exception as error:  # Fit failures must not destroy the last active model.
+            candidate_error = f"ARIMA fit failed: {error}"
+
+    development = train + validation
+    if accepted:
+        selected = _arima_artifact(name, development, order, generated_at, version)
+    else:
+        selected = _sma_artifact(name, development, window, generated_at, version)
+
+    test_predictions = _forecast_values(selected, len(test))
+    report = {
+        "candidate_accepted": accepted,
+        "candidate_error": candidate_error,
+        "candidate_algorithm": f"ARIMA{order}",
+        "selected_algorithm": selected["algorithm"],
+        "source_features": ("train_demand.csv" if is_daily else "train_peak.csv"),
+        "partition_counts": {key: len(value) for key, value in partitions.items()},
+        "validation_metrics": {
+            "candidate": candidate_metrics,
+            "baseline": baseline_metrics,
+        },
+        "test_metrics": _metrics([value for _, value in test], test_predictions),
+    }
+    return selected, report
 
 
 def _atomic_bytes(path: Path, data: bytes) -> None:
@@ -147,56 +235,58 @@ def _atomic_json(path: Path, value: dict) -> None:
     _atomic_bytes(path, (json.dumps(value, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
 
 
-def _accepted(metrics: dict) -> bool:
-    candidate = metrics["candidate"]["rmse"]
-    baseline = metrics["baseline"]["rmse"]
-    return candidate is not None and (baseline is None or candidate <= baseline * 1.10)
+def _model_summary(model: dict) -> dict:
+    return {key: value for key, value in model.items()
+            if key not in {"estimator", "hour_means"}}
 
 
-def _publish_model(models: Path, name: str, model: dict, metrics: dict,
+def _publish_model(models: Path, name: str, selected: dict, report: dict,
                    version: str) -> dict:
     versions = models / "versions"
     candidate_path = versions / f"{name}-{version}.pkl"
-    payload = pickle.dumps(model, protocol=pickle.HIGHEST_PROTOCOL)
+    payload = pickle.dumps(selected, protocol=pickle.HIGHEST_PROTOCOL)
     _atomic_bytes(candidate_path, payload)
     active_path = models / f"{name}.pkl"
-    accepted = _accepted(metrics) or not active_path.exists()
-    if accepted:
+    active_updated = report["candidate_accepted"] or not active_path.exists()
+    if active_updated:
         _atomic_bytes(active_path, payload)
+    with active_path.open("rb") as handle:
+        active_model = pickle.load(handle)
     old_versions = sorted(versions.glob(f"{name}-*.pkl"), reverse=True)
     for stale in old_versions[3:]:
         stale.unlink()
-    return {"accepted": accepted, "active_path": str(active_path),
-            "candidate_path": str(candidate_path)}
+    return {
+        "accepted": report["candidate_accepted"],
+        "active_updated": active_updated,
+        "active_model": _model_summary(active_model),
+        "active_path": str(active_path),
+        "candidate_path": str(candidate_path),
+    }
 
 
 def train_models(output_root: Path) -> dict:
     processed = output_root / "data" / "processed"
-    daily = _read_series(processed / "daily_kwh.csv", "date")
-    hourly = _read_series(processed / "hourly_kwh.csv", "timestamp")
-    if not daily or not hourly:
-        raise ValueError("processed daily/hourly data is empty")
-    daily_model, daily_metrics = _daily_model(daily)
-    hourly_model, hourly_metrics = _hourly_model(hourly)
+    daily = _read_partitioned_series(processed / "train_demand.csv", "date")
+    hourly = _read_partitioned_series(processed / "train_peak.csv", "timestamp")
+    if not daily["train"] or not hourly["train"]:
+        raise ValueError("processed daily/hourly training data is empty")
     generated_at = datetime.now(timezone.utc).isoformat()
-    version = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    daily_model.update({"generated_at": generated_at, "version": version,
-                        "simulated_data": True})
-    hourly_model.update({"generated_at": generated_at, "version": version,
-                         "simulated_data": True})
+    version = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    daily_model, daily_report = _build_model(
+        "demand_forecast", daily, generated_at, version)
+    hourly_model, hourly_report = _build_model(
+        "peak_predict", hourly, generated_at, version)
     models = output_root / "models"
     daily_publish = _publish_model(models, "demand_forecast", daily_model,
-                                   daily_metrics, version)
+                                   daily_report, version)
     hourly_publish = _publish_model(models, "peak_predict", hourly_model,
-                                    hourly_metrics, version)
+                                    hourly_report, version)
     metadata = {
         "generated_at": generated_at,
         "simulated_data": True,
         "models": {
-            "demand_forecast": {**daily_model, "metrics": daily_metrics,
-                                **daily_publish},
-            "peak_predict": {**hourly_model, "metrics": hourly_metrics,
-                             **hourly_publish},
+            "demand_forecast": {**daily_report, **daily_publish},
+            "peak_predict": {**hourly_report, **hourly_publish},
         },
     }
     _atomic_json(models / "model_meta.json", metadata)
@@ -208,8 +298,11 @@ def main() -> None:
     parser.add_argument("--output", type=Path, default=Path("analysis"))
     args = parser.parse_args()
     result = train_models(args.output)
-    print(json.dumps({name: details["accepted"]
-                      for name, details in result["models"].items()}, ensure_ascii=False))
+    print(json.dumps({name: {
+        "candidate_accepted": details["accepted"],
+        "active_updated": details["active_updated"],
+        "active_algorithm": details["active_model"]["algorithm"],
+    } for name, details in result["models"].items()}, ensure_ascii=False))
 
 
 if __name__ == "__main__":

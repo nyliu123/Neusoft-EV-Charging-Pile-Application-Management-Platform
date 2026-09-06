@@ -37,6 +37,37 @@ def _hourly_value(model: dict, moment: datetime) -> float:
         key, model["hour_means"].get(str(moment.hour), model["global_mean"]))))
 
 
+def _safe_value(value: object) -> float:
+    number = float(value)
+    return max(0.0, number) if math.isfinite(number) else 0.0
+
+
+def _forecast(model: dict, moments: list[datetime], daily: bool) -> list[tuple[float, float, float]]:
+    steps = len(moments)
+    if model["kind"] == "arima":
+        forecast = model["estimator"].get_forecast(steps=steps)
+        means = [_safe_value(value) for value in forecast.predicted_mean]
+        intervals = forecast.conf_int(alpha=0.05)
+        result = []
+        for index, value in enumerate(means):
+            row = intervals.iloc[index] if hasattr(intervals, "iloc") else intervals[index]
+            result.append((value, _safe_value(row[0]), max(value, _safe_value(row[1]))))
+        return result
+
+    sigma = max(0.0, float(model.get("residual_std", 0.0)))
+    if model["kind"] == "sma":
+        values = [_safe_value(model["value"])] * steps
+    elif daily and model["kind"] == "daily_seasonal_trend":
+        values = [_daily_value(model, moment, index + 1)
+                  for index, moment in enumerate(moments)]
+    elif not daily and model["kind"] == "hourly_seasonal":
+        values = [_hourly_value(model, moment) for moment in moments]
+    else:
+        raise ValueError(f"unsupported model kind: {model['kind']}")
+    return [(value, max(0.0, value - 1.96 * sigma), value + 1.96 * sigma)
+            for value in values]
+
+
 def generate_predictions(output_root: Path, now: datetime | None = None) -> dict[str, int]:
     models = output_root / "models"
     daily_model = _load_pickle(models / "demand_forecast.pkl")
@@ -44,18 +75,18 @@ def generate_predictions(output_root: Path, now: datetime | None = None) -> dict
     current = now.astimezone() if now is not None else datetime.now().astimezone()
     predictions = output_root / "predictions"
 
-    daily_sigma = max(0.0, float(daily_model.get("residual_std", 0.0)))
     daily_rows: list[dict] = []
     first_day = current.date() + timedelta(days=1)
-    for step in range(1, 8):
-        day = first_day + timedelta(days=step - 1)
-        moment = datetime.combine(day, datetime.min.time())
-        value = _daily_value(daily_model, moment, step)
+    daily_moments = [datetime.combine(first_day + timedelta(days=offset),
+                                      datetime.min.time())
+                     for offset in range(7)]
+    daily_forecast = _forecast(daily_model, daily_moments, daily=True)
+    for moment, (value, lower, upper) in zip(daily_moments, daily_forecast):
         daily_rows.append({
-            "date": day.isoformat(),
+            "date": moment.date().isoformat(),
             "predicted_kwh": round(value, 4),
-            "lower_bound": round(max(0.0, value - 1.96 * daily_sigma), 4),
-            "upper_bound": round(value + 1.96 * daily_sigma, 4),
+            "lower_bound": round(lower, 4),
+            "upper_bound": round(upper, 4),
             "confidence": 0.95,
             "model_version": daily_model.get("version", "unknown"),
             "simulated_data": 1,
@@ -63,15 +94,13 @@ def generate_predictions(output_root: Path, now: datetime | None = None) -> dict
     atomic_write_csv(predictions / "demand_next7.csv", list(daily_rows[0]), daily_rows)
 
     first_hour = current.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
-    hourly_sigma = max(0.0, float(hourly_model.get("residual_std", 0.0)))
-    provisional = [
-        (first_hour + timedelta(hours=offset),
-         _hourly_value(hourly_model, first_hour + timedelta(hours=offset)))
-        for offset in range(24)
-    ]
+    hourly_moments = [first_hour + timedelta(hours=offset) for offset in range(24)]
+    hourly_forecast = _forecast(hourly_model, hourly_moments, daily=False)
+    provisional = [(moment, values[0])
+                   for moment, values in zip(hourly_moments, hourly_forecast)]
     mean_prediction = sum(value for _, value in provisional) / len(provisional)
     hourly_rows: list[dict] = []
-    for stamp, value in provisional:
+    for (stamp, value), (_, lower, upper) in zip(provisional, hourly_forecast):
         if value > mean_prediction * 1.5:
             level = "peak"
         elif value < mean_prediction * 0.8:
@@ -83,8 +112,8 @@ def generate_predictions(output_root: Path, now: datetime | None = None) -> dict
             "hour": stamp.hour,
             "predicted_kwh": round(value, 4),
             "peak_level": level,
-            "lower_bound": round(max(0.0, value - 1.96 * hourly_sigma), 4),
-            "upper_bound": round(value + 1.96 * hourly_sigma, 4),
+            "lower_bound": round(lower, 4),
+            "upper_bound": round(upper, 4),
             "model_version": hourly_model.get("version", "unknown"),
             "simulated_data": 1,
         })

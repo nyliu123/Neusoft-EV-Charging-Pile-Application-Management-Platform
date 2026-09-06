@@ -8,7 +8,10 @@ Ubuntu 22.04 可先安装下列基础包：
 
 ```bash
 sudo apt update
-sudo apt install build-essential qt6-base-dev qt6-base-dev-tools qmake6 libqt6sql6-sqlite python3
+sudo apt install build-essential qt6-base-dev qt6-base-dev-tools qmake6 libqt6sql6-sqlite python3 python3-pip python3-venv
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r analysis/requirements.txt
 ```
 
 核对实际版本：
@@ -34,7 +37,7 @@ cd ..
 ./scripts/smoke-test.sh
 ```
 
-在三个终端分别运行 `build/bin/ev_server`、`build/bin/ev_user_client`、`build/bin/ev_admin_client`。若需要腾讯地图真实地址解析，在启动服务端前设置本机环境变量：
+在三个终端分别运行 `build/bin/ev_server`、`build/bin/ev_user_client`、`build/bin/ev_admin_client`。分析环境使用 `statsmodels` 训练 ARIMA；依赖缺失或样本不足时流水线会明确回退到 SMA。若需要腾讯地图真实地址解析，在启动服务端前设置本机环境变量：
 
 ```bash
 export TENCENT_MAP_API_KEY='你的本地Key'

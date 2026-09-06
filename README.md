@@ -24,7 +24,7 @@ make -j"$(nproc)"
 
 在 Qt Creator 中选择“文件 → 打开文件或项目”，打开仓库根目录下的 `ev-charging-platform.pro`，不要单独打开 `apps` 或 `src` 中的子项目。选择 Desktop Qt 6 Kit，并使用 Qt Creator 建议的影子构建目录。
 
-顶层工程使用标准 qmake `SUBDIRS` 结构，项目树中应显示 `common`、`network`、`data`、`services`、`server`、`user_client`、`admin_client` 和 `unit_tests` 八个子项目。若本机曾打开过旧版本，先关闭项目并删除本机生成的 `ev-charging-platform.pro.user*`，然后重新打开顶层工程，以免 Qt Creator 继续使用旧解析缓存。
+顶层工程使用标准 qmake `SUBDIRS` 结构，项目树中应显示 `common`、`network`、`data`、`services`、`adapters`、`server`、`user_client`、`admin_client` 和 `unit_tests` 九个子项目。若本机曾打开过旧版本，先关闭项目并删除本机生成的 `ev-charging-platform.pro.user*`，然后重新打开顶层工程，以免 Qt Creator 继续使用旧解析缓存。
 
 构建结果位于 `build/bin`：
 

@@ -7,6 +7,7 @@ import csv
 import math
 import os
 import sqlite3
+import statistics
 import tempfile
 from collections import defaultdict
 from datetime import date, datetime, timedelta
@@ -34,7 +35,7 @@ def atomic_write_csv(path: Path, fieldnames: Sequence[str], rows: Iterable[dict]
 def _split_label(index: int, count: int) -> str:
     if count < 3:
         return "train"
-    train_end = max(1, int(count * 0.8))
+    train_end = min(max(1, int(count * 0.8)), count - 2)
     validation_end = max(train_end + 1, int(count * 0.9))
     validation_end = min(validation_end, count - 1)
     if index < train_end:
@@ -46,6 +47,22 @@ def _split_label(index: int, count: int) -> str:
 
 def _mean(values: Sequence[float]) -> float | None:
     return sum(values) / len(values) if values else None
+
+
+def _standard_deviation(values: Sequence[float]) -> float | None:
+    return statistics.pstdev(values) if len(values) > 1 else None
+
+
+def _linear_slope(values: Sequence[float]) -> float | None:
+    if len(values) < 2:
+        return None
+    x_mean = (len(values) - 1) / 2.0
+    y_mean = sum(values) / len(values)
+    denominator = sum((index - x_mean) ** 2 for index in range(len(values)))
+    if denominator == 0:
+        return None
+    return sum((index - x_mean) * (value - y_mean)
+               for index, value in enumerate(values)) / denominator
 
 
 def _daily_series(connection: sqlite3.Connection) -> list[tuple[date, float]]:
@@ -98,16 +115,27 @@ def _daily_features(series: Sequence[tuple[date, float]]) -> list[dict]:
     rows: list[dict] = []
     for index, (day, value) in enumerate(series):
         history_7 = values[max(0, index - 7):index]
-        history_30 = values[max(0, index - 30):index]
+        history_14 = values[max(0, index - 14):index]
+        std_7 = _standard_deviation(history_7)
+        std_14 = _standard_deviation(history_14)
+        trend_7 = _linear_slope(history_7)
         rows.append({
             "date": day.isoformat(),
             "kwh": round(value, 4),
             "day_of_week": day.weekday(),
+            "month": day.month,
             "is_weekend": int(day.weekday() >= 5),
+            "is_workday": int(day.weekday() < 5),
             "lag_1d": "" if index < 1 else round(values[index - 1], 4),
+            "lag_2d": "" if index < 2 else round(values[index - 2], 4),
+            "lag_3d": "" if index < 3 else round(values[index - 3], 4),
             "lag_7d": "" if index < 7 else round(values[index - 7], 4),
+            "lag_14d": "" if index < 14 else round(values[index - 14], 4),
             "rolling_mean_7d": "" if not history_7 else round(_mean(history_7) or 0.0, 4),
-            "rolling_mean_30d": "" if not history_30 else round(_mean(history_30) or 0.0, 4),
+            "rolling_std_7d": "" if std_7 is None else round(std_7, 4),
+            "rolling_mean_14d": "" if not history_14 else round(_mean(history_14) or 0.0, 4),
+            "rolling_std_14d": "" if std_14 is None else round(std_14, 4),
+            "trend_7d": "" if trend_7 is None else round(trend_7, 6),
             "split": _split_label(index, len(series)),
         })
     return rows
@@ -148,29 +176,41 @@ def _station_hourly(connection: sqlite3.Connection) -> list[dict]:
         ORDER BY s.station_id
         """
     ).fetchall()
+    observation_window = connection.execute(
+        """
+        SELECT MIN(date(end_time)), MAX(date(end_time))
+        FROM orders
+        WHERE status = 'settled' AND end_time IS NOT NULL
+        """
+    ).fetchone()
+    observation_days = 1
+    if observation_window and observation_window[0] and observation_window[1]:
+        first_day = date.fromisoformat(observation_window[0])
+        last_day = date.fromisoformat(observation_window[1])
+        observation_days = (last_day - first_day).days + 1
     observations = connection.execute(
         """
-        SELECT station_id, CAST(strftime('%H', end_time) AS INTEGER), COUNT(*),
-               COUNT(DISTINCT date(end_time))
+        SELECT station_id, CAST(strftime('%H', end_time) AS INTEGER), COUNT(*)
         FROM orders
         WHERE status = 'settled' AND end_time IS NOT NULL
         GROUP BY station_id, CAST(strftime('%H', end_time) AS INTEGER)
         """
     ).fetchall()
-    counts: dict[tuple[int, int], tuple[int, int]] = {
-        (int(station_id), int(hour)): (int(sessions), max(1, int(days)))
-        for station_id, hour, sessions, days in observations
+    counts: dict[tuple[int, int], int] = {
+        (int(station_id), int(hour)): int(sessions)
+        for station_id, hour, sessions in observations
     }
     result: list[dict] = []
     for station_id, station_name, pile_count in stations:
         for hour in range(24):
-            sessions, observed_days = counts.get((int(station_id), hour), (0, 1))
+            sessions = counts.get((int(station_id), hour), 0)
             result.append({
                 "station_id": int(station_id),
                 "station_name": station_name,
                 "hour": hour,
                 "pile_count": int(pile_count),
-                "avg_sessions_per_day": round(sessions / observed_days, 6),
+                "observation_days": observation_days,
+                "avg_sessions_per_day": round(sessions / observation_days, 6),
             })
     return result
 
@@ -198,7 +238,9 @@ def build_features(database_path: Path, output_root: Path) -> dict[str, int]:
                       for stamp, value in hourly))
     atomic_write_csv(processed / "train_demand.csv", list(daily_rows[0]), daily_rows)
     atomic_write_csv(processed / "train_peak.csv", list(hourly_rows[0]), hourly_rows)
-    atomic_write_csv(processed / "station_hourly.csv", list(stations[0]), stations)
+    atomic_write_csv(processed / "station_hourly.csv",
+                     ["station_id", "station_name", "hour", "pile_count",
+                      "observation_days", "avg_sessions_per_day"], stations)
     return {"daily_points": len(daily), "hourly_points": len(hourly),
             "station_hour_rows": len(stations)}
 

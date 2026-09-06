@@ -135,6 +135,18 @@ int main(int argc, char *argv[])
     });
     QObject::connect(homeWidget, &UserHomeWidget::logoutRequested,
                      &client, &ev::PlatformClient::logout);
+    QObject::connect(homeWidget, &UserHomeWidget::navigationRequested, &window,
+                     [&window](const QJsonObject &station) {
+        window.statusBar()->showMessage(QStringLiteral("正在规划前往 %1 的路线...")
+            .arg(station.value(QStringLiteral("station_name")).toString()));
+    });
+    QObject::connect(homeWidget, &UserHomeWidget::pileSelected, &window,
+                     [&window](const QJsonObject &station, const QJsonObject &pile) {
+        QMessageBox::information(&window, QStringLiteral("已选择充电桩"),
+            QStringLiteral("已选择 %1 的 %2；可继续进入预约或充电流程。")
+                .arg(station.value(QStringLiteral("station_name")).toString(),
+                     pile.value(QStringLiteral("pile_number")).toString()));
+    });
     QObject::connect(&client, &ev::PlatformClient::logoutFinished, &window,
                      [&window, pages, loginPage, loginWidget, homeWidget](
                          bool success, const QString &message) {

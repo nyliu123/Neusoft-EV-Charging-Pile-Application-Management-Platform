@@ -79,6 +79,20 @@ bool UserApiClient::queryStationDetail(qint64 stationId, QObject *context,
                               context, std::move(callback));
 }
 
+bool UserApiClient::route(double fromLongitude, double fromLatitude,
+                          double toLongitude, double toLatitude,
+                          const QString &mode, QObject *context,
+                          Callback callback)
+{
+    return sendStationRequest(QStringLiteral("route"), {
+        {QStringLiteral("from_longitude"), fromLongitude},
+        {QStringLiteral("from_latitude"), fromLatitude},
+        {QStringLiteral("to_longitude"), toLongitude},
+        {QStringLiteral("to_latitude"), toLatitude},
+        {QStringLiteral("mode"), mode}
+    }, context, std::move(callback));
+}
+
 bool UserApiClient::sendUserRequest(const QString &type, const QJsonObject &params,
                                     QObject *context, Callback callback)
 {

@@ -76,6 +76,7 @@ config/app.ini
 # Analysis outputs (keep directory documentation only)
 __pycache__/
 *.pyc
+.venv/
 analysis/data/raw/
 analysis/data/processed/
 analysis/models/

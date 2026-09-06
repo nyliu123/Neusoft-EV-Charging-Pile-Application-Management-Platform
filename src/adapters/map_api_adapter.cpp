@@ -154,8 +154,13 @@ void MapApiAdapter::route(double fromLongitude, double fromLatitude,
             ErrorCode::InvalidInput, QStringLiteral("路线端点经纬度无效")));
         return;
     }
-    const QString normalizedMode = mode == QStringLiteral("walking")
-        ? QStringLiteral("walking") : QStringLiteral("driving");
+    const QString normalizedMode = mode.trimmed().toLower();
+    if (normalizedMode != QStringLiteral("walking")
+        && normalizedMode != QStringLiteral("driving")) {
+        callback(Result<RouteResult>::fail(
+            ErrorCode::InvalidInput, QStringLiteral("出行方式仅支持驾车或步行")));
+        return;
+    }
     if (apiKey_.isEmpty()) {
         callback(Result<RouteResult>::fail(
             ErrorCode::MapUnavailable, QStringLiteral("地图服务未配置")));

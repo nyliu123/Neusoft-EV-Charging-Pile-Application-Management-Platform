@@ -26,6 +26,7 @@ public:
     static bool isValidCoordinate(double longitude, double latitude);
     static double haversineKm(double firstLongitude, double firstLatitude,
                               double secondLongitude, double secondLatitude);
+    static double onlineRate(const StationDetailRecord &detail);
 
 private:
     StationRepository repository_;

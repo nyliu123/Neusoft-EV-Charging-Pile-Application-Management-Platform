@@ -19,6 +19,7 @@ OTHER_FILES += \
     resources/database/migrations/001_core.sql \
     scripts/smoke-test.sh \
     analysis/README.md \
+    analysis/requirements.txt \
     analysis/feature_engineering.py \
     analysis/train_models.py \
     analysis/predict.py \
