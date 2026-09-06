@@ -15,6 +15,7 @@ HEADERS += \
     admin_seeder.h \
     fee_calculator.h \
     session_manager.h \
+    station_service.h \
     user_service.h
 
 SOURCES += \
@@ -22,6 +23,7 @@ SOURCES += \
     admin_seeder.cpp \
     fee_calculator.cpp \
     session_manager.cpp \
+    station_service.cpp \
     user_service.cpp
 
 LIBS += -L$$PLATFORM_BUILD_ROOT/lib -lev_data -lev_common

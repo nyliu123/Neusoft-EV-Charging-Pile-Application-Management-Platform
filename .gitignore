@@ -74,6 +74,8 @@ config/app.ini
 *.sqlite3-*
 
 # Analysis outputs (keep directory documentation only)
+__pycache__/
+*.pyc
 analysis/data/raw/
 analysis/data/processed/
 analysis/models/

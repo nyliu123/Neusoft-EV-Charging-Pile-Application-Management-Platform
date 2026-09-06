@@ -9,6 +9,9 @@ include($$PLATFORM_ROOT/config/common.pri)
 INCLUDEPATH += $$PLATFORM_ROOT/src
 HEADERS += \
     phone_login_widget.h \
+    station_card.h \
+    station_detail_dialog.h \
+    station_list_widget.h \
     user_api_client.h \
     user_home_widget.h \
     user_info_widget.h \
@@ -16,6 +19,9 @@ HEADERS += \
 SOURCES += \
     main.cpp \
     phone_login_widget.cpp \
+    station_card.cpp \
+    station_detail_dialog.cpp \
+    station_list_widget.cpp \
     user_api_client.cpp \
     user_home_widget.cpp \
     user_info_widget.cpp \

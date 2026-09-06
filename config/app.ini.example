@@ -20,6 +20,6 @@ log_level=info
 [external]
 map_provider=tencent
 map_api_key=
+map_referer=EV-CHARGING-DEMO
 model_endpoint=
 model_api_key=
-

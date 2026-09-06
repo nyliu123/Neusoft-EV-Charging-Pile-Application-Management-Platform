@@ -18,6 +18,9 @@
 | `ev::DatabaseManager`                     | 数据   | `src/data/database_manager.h`           | 每线程 SQLite 连接与迁移入口           |
 | `ev::UserRepository`                      | 用户数据 | `src/data/user_repository.h`            | 用户查询、资料更新和余额事务             |
 | `ev::UserService`                         | 用户服务 | `src/services/user_service.h`           | UML-011～017 用户登录、注册与个人信息   |
+| `ev::StationRepository`                   | 站点数据 | `src/data/station_repository.h`         | 站点、设备只读查询与统计               |
+| `ev::StationService`                      | 站点服务 | `src/services/station_service.h`        | 需求22～26列表、距离排序与详情          |
+| `ev::MapApiAdapter`                       | 外部接口 | `src/adapters/map_api_adapter.h`        | 需求67腾讯地图地址、逆地址及路线适配    |
 | `ev::SessionManager`                      | 用户服务 | `src/services/session_manager.h`        | UML-013 服务端内存会话、续期与清理        |
 | `ev::AdminInfo` / `ev::AdminAuthService`  | 认证   | `src/services/admin_auth_service.h`     | 管理员身份认证服务                    |
 | `ev::AdminSeeder`                         | 认证   | `src/services/admin_seeder.h`           | 默认管理员账号初始化                   |
@@ -101,6 +104,20 @@
 
 服务端根据 `session_id` 反查用户，不信任客户端传入的 `user_id`。账号冻结或会话
 失效时客户端立即清理本地会话并返回登录页。充值金额全链路使用整数分。
+
+## 站点协议（StationRequest=0x20 / StationResponse=0x21）
+
+请求 `data` 统一为 `{ type, params, session_id }`，服务端只接受当前连接上有效的用户会话；响应结果位于 `data.result`。
+
+| type | params | result | 对应需求 |
+| ---- | ------ | ------ | -------- |
+| `geocode` | address | longitude / latitude / display_address / source / confidence | 22、23、67 |
+| `reverse_geocode` | longitude / latitude | address / source | 67 |
+| `route` | from_longitude / from_latitude / to_longitude / to_latitude / mode | distance_km / duration_minutes / polyline | 67（供导航模块调用） |
+| `station_list` | longitude / latitude（同时提供或同时省略） | stations，含价格、总桩数、空闲数；有位置时含直线距离 | 24、25 |
+| `station_detail` | station_id | station / piles / stats，未知状态绝不按空闲返回 | 26 |
+
+未配置地图 Key 时，适配器可对有限的预设区域返回明确标识的教学坐标；其他地址返回 `MAP_UNAVAILABLE`。客户端随后可不带经纬度查询文字列表，`distance_km` 必须缺省。
 
 ## 管理端数据协议（AdminQuery=0x60 / AdminAction=0x61 / AdminResponse=0x62）
 

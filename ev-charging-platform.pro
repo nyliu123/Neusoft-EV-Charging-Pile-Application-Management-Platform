@@ -14,10 +14,15 @@ OTHER_FILES += \
     config/app.ini.example \
     docs/02概要设计说明书第5组（最终版）.docx \
     docs/development/architecture.md \
+    docs/development/environment.md \
     docs/development/shared-identifiers.md \
     resources/database/migrations/001_core.sql \
     scripts/smoke-test.sh \
     analysis/README.md \
+    analysis/feature_engineering.py \
+    analysis/train_models.py \
+    analysis/predict.py \
+    analysis/run_pipeline.py \
     src/adapters/README.md \
     web/screen/README.md
 
@@ -26,6 +31,7 @@ SUBDIRS += \
     network \
     data \
     services \
+    adapters \
     server \
     user_client \
     admin_client \
@@ -42,9 +48,12 @@ data.depends = common
 services.subdir = src/services
 services.target = services
 services.depends = common data
+adapters.subdir = src/adapters
+adapters.target = adapters
+adapters.depends = common
 server.subdir = apps/server
 server.target = server
-server.depends = common network data services
+server.depends = common network data services adapters
 user_client.subdir = apps/user_client
 user_client.target = user_client
 user_client.depends = common network
@@ -53,4 +62,4 @@ admin_client.target = admin_client
 admin_client.depends = common network
 unit_tests.subdir = tests/unit
 unit_tests.target = unit_tests
-unit_tests.depends = common network services
+unit_tests.depends = common network services adapters

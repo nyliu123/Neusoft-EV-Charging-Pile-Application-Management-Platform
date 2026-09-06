@@ -1,10 +1,12 @@
 #pragma once
 
+#include <QJsonObject>
 #include <QWidget>
 
 class QLabel;
 class QPushButton;
 class UserInfoWidget;
+class StationListWidget;
 
 namespace ev {
 class UserApiClient;
@@ -21,9 +23,12 @@ public:
 
 signals:
     void logoutRequested();
+    void navigationRequested(const QJsonObject &station);
+    void pileSelected(const QJsonObject &station, const QJsonObject &pile);
 
 private:
     QLabel *successMessage_ = nullptr;
     UserInfoWidget *userInfoWidget_ = nullptr;
+    StationListWidget *stationListWidget_ = nullptr;
     QPushButton *logoutButton_ = nullptr;
 };
