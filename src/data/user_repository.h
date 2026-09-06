@@ -27,10 +27,18 @@ class UserRepository final {
 public:
     Result<std::optional<UserRecord>> findByPhone(QSqlDatabase &database,
                                                    const QString &phone) const;
+    Result<std::optional<UserRecord>> findById(QSqlDatabase &database,
+                                                qint64 userId) const;
     Result<UserCreationResult> createAutoRegisteredUser(QSqlDatabase &database,
                                                          const QString &phone,
                                                          const QString &nickname,
                                                          const QString &avatarPath) const;
+    Result<bool> updateNickname(QSqlDatabase &database, qint64 userId,
+                                const QString &nickname) const;
+    Result<bool> updateAvatarPath(QSqlDatabase &database, qint64 userId,
+                                  const QString &avatarPath) const;
+    Result<qint64> recharge(QSqlDatabase &database, qint64 userId,
+                            qint64 amountCent) const;
 };
 
 } // namespace ev

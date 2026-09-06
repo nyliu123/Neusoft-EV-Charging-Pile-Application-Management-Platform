@@ -9,12 +9,16 @@ include($$PLATFORM_ROOT/config/common.pri)
 INCLUDEPATH += $$PLATFORM_ROOT/src
 HEADERS += \
     phone_login_widget.h \
+    user_api_client.h \
     user_home_widget.h \
+    user_info_widget.h \
     user_session_state.h
 SOURCES += \
     main.cpp \
     phone_login_widget.cpp \
+    user_api_client.cpp \
     user_home_widget.cpp \
+    user_info_widget.cpp \
     user_session_state.cpp
 
 RESOURCES += user_client.qrc

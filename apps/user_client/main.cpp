@@ -1,4 +1,5 @@
 #include "phone_login_widget.h"
+#include "user_api_client.h"
 #include "user_home_widget.h"
 #include "user_session_state.h"
 #include "network/platform_client.h"
@@ -83,7 +84,14 @@ int main(int argc, char *argv[])
     auto *loginWidget = new PhoneLoginWidget(loginPage);
     loginLayout->addWidget(loginWidget);
     loginLayout->addStretch();
-    auto *homeWidget = new UserHomeWidget(pages);
+    auto *userApi = new ev::UserApiClient(&client, &window);
+    QObject::connect(userApi, &ev::UserApiClient::sessionExpired, &window,
+                     [] {
+        if (QWidget *modal = QApplication::activeModalWidget()) {
+            modal->close();
+        }
+    });
+    auto *homeWidget = new UserHomeWidget(userApi, pages);
     pages->addWidget(loginPage);
     pages->addWidget(homeWidget);
     layout->addWidget(pages, 1);

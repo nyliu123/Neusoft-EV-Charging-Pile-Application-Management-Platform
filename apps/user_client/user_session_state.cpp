@@ -27,6 +27,33 @@ bool UserSessionState::setUserInfo(const QJsonObject &userInfo)
     return true;
 }
 
+bool UserSessionState::updateUserInfo(const QJsonObject &userInfo)
+{
+    if (!isLoggedIn()) {
+        return false;
+    }
+    const qint64 returnedUserId = userInfo.value(QStringLiteral("user_id")).toInteger(userId_);
+    if (returnedUserId != userId_) {
+        return false;
+    }
+    if (userInfo.contains(QStringLiteral("nickname"))) {
+        nickname_ = userInfo.value(QStringLiteral("nickname")).toString();
+    }
+    if (userInfo.contains(QStringLiteral("avatar_path"))) {
+        avatarPath_ = userInfo.value(QStringLiteral("avatar_path")).toString();
+    }
+    if (userInfo.contains(QStringLiteral("balance_cent"))) {
+        balanceCent_ = userInfo.value(QStringLiteral("balance_cent")).toInteger();
+    } else if (userInfo.contains(QStringLiteral("balance"))) {
+        balanceCent_ = qRound64(userInfo.value(QStringLiteral("balance")).toDouble() * 100.0);
+    }
+    return true;
+}
+
+void UserSessionState::setNickname(const QString &nickname) { nickname_ = nickname; }
+void UserSessionState::setAvatarPath(const QString &avatarPath) { avatarPath_ = avatarPath; }
+void UserSessionState::setBalanceCent(qint64 balanceCent) { balanceCent_ = balanceCent; }
+
 void UserSessionState::clear()
 {
     loggedIn_ = false;

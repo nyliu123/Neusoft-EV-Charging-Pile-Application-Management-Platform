@@ -1,16 +1,14 @@
 #include "user_home_widget.h"
 
-#include "user_session_state.h"
+#include "user_info_widget.h"
 
-#include <QFileInfo>
-#include <QFont>
 #include <QLabel>
-#include <QPixmap>
 #include <QPushButton>
 #include <QTimer>
+#include <QHBoxLayout>
 #include <QVBoxLayout>
 
-UserHomeWidget::UserHomeWidget(QWidget *parent)
+UserHomeWidget::UserHomeWidget(ev::UserApiClient *api, QWidget *parent)
     : QWidget(parent)
 {
     auto *layout = new QVBoxLayout(this);
@@ -21,53 +19,22 @@ UserHomeWidget::UserHomeWidget(QWidget *parent)
     successMessage_->hide();
     layout->addWidget(successMessage_);
 
-    avatarLabel_ = new QLabel(this);
-    avatarLabel_->setFixedSize(72, 72);
-    avatarLabel_->setAlignment(Qt::AlignCenter);
-    layout->addWidget(avatarLabel_, 0, Qt::AlignLeft);
-
-    nicknameLabel_ = new QLabel(this);
-    QFont nicknameFont = nicknameLabel_->font();
-    nicknameFont.setPointSize(18);
-    nicknameFont.setBold(true);
-    nicknameLabel_->setFont(nicknameFont);
-    layout->addWidget(nicknameLabel_);
-
-    balanceLabel_ = new QLabel(this);
-    layout->addWidget(balanceLabel_);
+    auto *toolbar = new QHBoxLayout;
+    toolbar->addStretch();
     logoutButton_ = new QPushButton(QStringLiteral("退出登录"), this);
-    layout->addWidget(logoutButton_, 0, Qt::AlignLeft);
+    toolbar->addWidget(logoutButton_);
+    layout->addLayout(toolbar);
     connect(logoutButton_, &QPushButton::clicked, this, [this] {
         setLogoutInProgress(true);
         emit logoutRequested();
     });
-    layout->addWidget(new QLabel(QStringLiteral("首页业务组件将在后续分支中接入。"), this));
-    layout->addStretch();
+    userInfoWidget_ = new UserInfoWidget(api, this);
+    layout->addWidget(userInfoWidget_, 1);
 }
 
 void UserHomeWidget::refresh()
 {
-    const UserSessionState &session = UserSessionState::instance();
-    nicknameLabel_->setText(session.nickname().isEmpty()
-        ? QStringLiteral("充电用户") : session.nickname());
-    balanceLabel_->setText(QStringLiteral("钱包余额：¥%1")
-        .arg(static_cast<double>(session.balanceCent()) / 100.0, 0, 'f', 2));
-
-    const QString avatarPath = session.avatarPath();
-    QPixmap avatar;
-    if (!avatarPath.isEmpty() && QFileInfo::exists(avatarPath)) {
-        avatar.load(avatarPath);
-    }
-    if (avatar.isNull()) {
-        avatarLabel_->setText(QStringLiteral("默认头像"));
-        avatarLabel_->setStyleSheet(QStringLiteral(
-            "background: #d9d9d9; color: #555; border-radius: 36px;"));
-    } else {
-        avatarLabel_->setStyleSheet({});
-        avatarLabel_->setPixmap(avatar.scaled(avatarLabel_->size(),
-                                               Qt::KeepAspectRatioByExpanding,
-                                               Qt::SmoothTransformation));
-    }
+    userInfoWidget_->refreshFromSession();
 }
 
 void UserHomeWidget::showWelcome(bool isNewUser)

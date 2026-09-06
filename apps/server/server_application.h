@@ -32,14 +32,19 @@ private:
     void processLogin(QTcpSocket *socket, const Frame &frame);
     void processSessionHeartbeat(QTcpSocket *socket, const Frame &frame);
     void processLogout(QTcpSocket *socket, const Frame &frame);
+    void processUserRequest(QTcpSocket *socket, const Frame &frame);
     void processAdminQuery(QTcpSocket *socket, const Frame &frame);
     void processAdminAction(QTcpSocket *socket, const Frame &frame);
     void processAdminRequest(QTcpSocket *socket, const Frame &frame, bool isAction);
     void sendError(QTcpSocket *socket, const QString &requestId, const QString &message);
+    void sendUserResponse(QTcpSocket *socket, const QString &requestId,
+                          bool success, const QString &code, const QString &message,
+                          const QJsonObject &result = {});
 
     DatabaseManager databaseManager_;
     QSqlDatabase mainDatabase_;
     bool databaseReady_ = false;
+    QString avatarDirectory_;
     SessionManager sessionManager_;
     QTcpServer tcpServer_;
     QHash<QTcpSocket *, QByteArray> receiveBuffers_;

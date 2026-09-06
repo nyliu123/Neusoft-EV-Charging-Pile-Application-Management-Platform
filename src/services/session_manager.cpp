@@ -22,21 +22,26 @@ bool SessionManager::registerUserSession(const QString &sessionId, qint64 userId
 
 bool SessionManager::validateAndTouch(const QString &sessionId)
 {
+    return authenticatedUserId(sessionId) > 0;
+}
+
+qint64 SessionManager::authenticatedUserId(const QString &sessionId)
+{
     if (sessionId.isEmpty()) {
-        return false;
+        return 0;
     }
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
     const QMutexLocker locker(&mutex_);
     auto session = sessions_.find(sessionId);
     if (session == sessions_.end()) {
-        return false;
+        return 0;
     }
     if (timeoutMs_ >= 0 && now - session->lastSeenMs > timeoutMs_) {
         sessions_.erase(session);
-        return false;
+        return 0;
     }
     session->lastSeenMs = now;
-    return true;
+    return session->userId;
 }
 
 bool SessionManager::remove(const QString &sessionId)

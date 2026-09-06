@@ -8,6 +8,10 @@ public:
     static UserSessionState &instance();
 
     bool setUserInfo(const QJsonObject &userInfo);
+    bool updateUserInfo(const QJsonObject &userInfo);
+    void setNickname(const QString &nickname);
+    void setAvatarPath(const QString &avatarPath);
+    void setBalanceCent(qint64 balanceCent);
     void clear();
 
     bool isLoggedIn() const;
