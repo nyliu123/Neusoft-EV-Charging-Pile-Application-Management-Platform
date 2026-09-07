@@ -1,97 +1,118 @@
+#include <QApplication>
+#include <QMainWindow>
+#include <QWidget>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QPushButton>
+#include <QTableView>
+#include <QMessageBox>
+#include <QStandardItemModel>
+#include <QHeaderView>
+#include "addstationdialog.h"
+#include "stationdetaildialog.h" // 引入设备详情弹窗
 #include "network/platform_client.h"
 
-#include <QApplication>
-#include <QCommandLineOption>
-#include <QCommandLineParser>
-#include <QDebug>
-#include <QLabel>
-#include <QMainWindow>
-#include <QPushButton>
-#include <QStatusBar>
-#include <QTimer>
-#include <QVBoxLayout>
-#include <QWidget>
+class AdminMainWindow : public QMainWindow {
+public:
+    AdminMainWindow(ev::PlatformClient *client, QWidget *parent = nullptr)
+        : QMainWindow(parent), m_client(client), m_addDialog(nullptr)
+    {
+        setWindowTitle("充电站后台管理系统");
+        resize(900, 600);
+
+        QWidget *centralWidget = new QWidget(this);
+        QVBoxLayout *mainLayout = new QVBoxLayout(centralWidget);
+
+        // 1. 顶部操作区
+        QHBoxLayout *topLayout = new QHBoxLayout();
+        QPushButton *btnAddStation = new QPushButton("新增充电站", this);
+        btnAddStation->setMinimumHeight(35);
+        QPushButton *btnRefresh = new QPushButton("刷新列表", this);
+        btnRefresh->setMinimumHeight(35);
+
+        topLayout->addWidget(btnAddStation);
+        topLayout->addWidget(btnRefresh);
+        topLayout->addStretch();
+
+        // 2. 站点列表展示区
+        QTableView *stationTable = new QTableView(this);
+        stationTable->setAlternatingRowColors(true);
+        stationTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+        stationTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+        m_stationModel = new QStandardItemModel(0, 5, this);
+        m_stationModel->setHeaderData(0, Qt::Horizontal, "站点名称");
+        m_stationModel->setHeaderData(1, Qt::Horizontal, "地址");
+        m_stationModel->setHeaderData(2, Qt::Horizontal, "单价(元/度)");
+        m_stationModel->setHeaderData(3, Qt::Horizontal, "设备总数");
+        m_stationModel->setHeaderData(4, Qt::Horizontal, "空闲数");
+
+        stationTable->setModel(m_stationModel);
+        stationTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+
+        mainLayout->addLayout(topLayout);
+        mainLayout->addWidget(stationTable);
+        setCentralWidget(centralWidget);
+
+        // 3. 连接 UI 信号
+        connect(btnAddStation, &QPushButton::clicked, this, &AdminMainWindow::onAddStationClicked);
+        connect(btnRefresh, &QPushButton::clicked, this, &AdminMainWindow::onRefreshClicked);
+        connect(stationTable, &QTableView::doubleClicked, this, &AdminMainWindow::onStationDoubleClicked);
+
+        // 4. 连接网络层信号
+        connect(m_client, &ev::PlatformClient::addStationResult, this, &AdminMainWindow::handleAddStationResult);
+    }
+
+private:
+    void onAddStationClicked() {
+        if (!m_addDialog) {
+            m_addDialog = new AddStationDialog(this);
+            connect(m_addDialog, &AddStationDialog::stationSubmitted,
+                    m_client, &ev::PlatformClient::sendAddStationRequest);
+        }
+        m_addDialog->show();
+        m_addDialog->activateWindow();
+    }
+
+    void onRefreshClicked() {
+        m_stationModel->removeRows(0, m_stationModel->rowCount());
+        QList<QStandardItem*> row;
+        row << new QStandardItem("东大一区充电站")
+            << new QStandardItem("辽宁省沈阳市浑南区创新路195号")
+            << new QStandardItem("1.20")
+            << new QStandardItem("10")
+            << new QStandardItem("3");
+        m_stationModel->appendRow(row);
+    }
+
+    void onStationDoubleClicked(const QModelIndex &index) {
+        if (!m_stationModel) return;
+        QString stationName = m_stationModel->item(index.row(), 0)->text();
+        StationDetailDialog dialog(stationName, this);
+        dialog.exec();
+    }
+
+    void handleAddStationResult(bool success, const QString &message) {
+        if (!m_addDialog) return;
+        if (success) {
+            QMessageBox::information(this, "操作成功", "新增充电站成功！\n" + message);
+            m_addDialog->accept();
+            onRefreshClicked();
+        } else {
+            QMessageBox::warning(this, "操作失败", "新增失败：" + message);
+        }
+    }
+
+    ev::PlatformClient *m_client;
+    AddStationDialog *m_addDialog;
+    QStandardItemModel *m_stationModel;
+};
 
 int main(int argc, char *argv[])
 {
-    QApplication application(argc, argv);
-    QApplication::setApplicationName(QStringLiteral("ev_admin_client"));
-    QApplication::setApplicationVersion(QStringLiteral("0.1.0"));
-
-    QCommandLineParser parser;
-    parser.setApplicationDescription(QStringLiteral("EV charging platform admin client"));
-    parser.addHelpOption();
-    parser.addVersionOption();
-    QCommandLineOption hostOption(QStringLiteral("host"), QStringLiteral("Server address"),
-                                  QStringLiteral("address"), QStringLiteral("127.0.0.1"));
-    QCommandLineOption portOption({QStringLiteral("p"), QStringLiteral("port")},
-                                  QStringLiteral("Server TCP port"), QStringLiteral("port"),
-                                  QStringLiteral("8888"));
-    QCommandLineOption checkOption(QStringLiteral("check"),
-                                   QStringLiteral("Exit after a successful health check"));
-    parser.addOptions({hostOption, portOption, checkOption});
-    parser.process(application);
-
-    bool validPort = false;
-    const uint requestedPort = parser.value(portOption).toUInt(&validPort);
-    if (!validPort || requestedPort == 0 || requestedPort > 65535) {
-        parser.showHelp(2);
-    }
-
-    ev::PlatformClient client(QStringLiteral("admin_client"));
-    QObject::connect(&client, &ev::PlatformClient::stateChanged,
-                     [](ev::PlatformClient::State, const QString &detail) {
-        qInfo().noquote() << "admin client:" << detail;
-    });
-
-    if (parser.isSet(checkOption)) {
-        QObject::connect(&client, &ev::PlatformClient::healthCheckSucceeded,
-                         &application, [&application](const QString &version) {
-            qInfo().noquote() << "admin client health check passed; server" << version;
-            application.exit(0);
-        });
-        QTimer::singleShot(5000, &application, [&application, &client] {
-            if (client.state() != ev::PlatformClient::State::Ready) {
-                qCritical() << "admin client health check timed out";
-                application.exit(2);
-            }
-        });
-        client.connectToServer(parser.value(hostOption), static_cast<quint16>(requestedPort));
-        return application.exec();
-    }
-
-    QMainWindow window;
-    window.setWindowTitle(QStringLiteral("汽车充电管理平台 管理端"));
-    window.resize(1100, 720);
-
-    auto *central = new QWidget(&window);
-    auto *layout = new QVBoxLayout(central);
-    auto *title = new QLabel(QStringLiteral("运营管理中心"), central);
-    QFont titleFont = title->font();
-    titleFont.setPointSize(22);
-    titleFont.setBold(true);
-    title->setFont(titleFont);
-    layout->addWidget(title);
-    layout->addWidget(new QLabel(
-        QStringLiteral("管理端主干已就绪：经营看板、站点、设备、用户和订单页面将在功能分支接入。"),
-        central));
-    auto *connectionLabel = new QLabel(QStringLiteral("连接状态：正在连接"), central);
-    auto *retryButton = new QPushButton(QStringLiteral("重新连接"), central);
-    layout->addWidget(connectionLabel);
-    layout->addWidget(retryButton, 0, Qt::AlignLeft);
-    layout->addStretch();
-    window.setCentralWidget(central);
-    QObject::connect(&client, &ev::PlatformClient::stateChanged, &window,
-                     [&window, connectionLabel](ev::PlatformClient::State state,
-                                                const QString &detail) {
-        connectionLabel->setText(QStringLiteral("连接状态：%1").arg(detail));
-        window.statusBar()->showMessage(
-            state == ev::PlatformClient::State::Ready
-                ? QStringLiteral("服务端可用") : detail);
-    });
-    QObject::connect(retryButton, &QPushButton::clicked,
-                     &client, &ev::PlatformClient::reconnectNow);
-    window.show();
-    client.connectToServer(parser.value(hostOption), static_cast<quint16>(requestedPort));
-    return application.exec();
+    QApplication a(argc, argv);
+    ev::PlatformClient client("AdminClient");
+    AdminMainWindow w(&client);
+    w.show();
+    return a.exec();
 }

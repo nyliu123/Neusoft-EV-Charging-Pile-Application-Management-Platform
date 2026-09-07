@@ -28,17 +28,11 @@ PlatformClient::PlatformClient(QString clientName, QObject *parent)
     connect(&socket_, &QTcpSocket::errorOccurred, this,
             [this](QAbstractSocket::SocketError) {
         setState(State::Disconnected, socket_.errorString());
-        scheduleReconnect();
     });
     connect(&reconnectTimer_, &QTimer::timeout, this, &PlatformClient::reconnectNow);
 }
 
-PlatformClient::~PlatformClient()
-{
-    reconnectTimer_.stop();
-    socket_.disconnect(this);
-    socket_.abort();
-}
+PlatformClient::~PlatformClient() = default;
 
 void PlatformClient::connectToServer(QString host, quint16 port)
 {
@@ -50,8 +44,7 @@ void PlatformClient::connectToServer(QString host, quint16 port)
 
 void PlatformClient::reconnectNow()
 {
-    if (host_.isEmpty() || port_ == 0
-        || socket_.state() == QAbstractSocket::ConnectedState
+    if (socket_.state() == QAbstractSocket::ConnectedState
         || socket_.state() == QAbstractSocket::ConnectingState) {
         return;
     }
@@ -85,6 +78,26 @@ void PlatformClient::sendHealthCheck()
     socket_.write(FrameCodec::encode(static_cast<quint32>(MessageType::HealthRequest), payload));
 }
 
+// ======== 新增：发送新增站点请求 ========
+void PlatformClient::sendAddStationRequest(const QString &name, const QString &address, double longitude, double latitude, double price)
+{
+    if (state_ != State::Ready && state_ != State::Connected) {
+        emit addStationResult(false, QStringLiteral("网络未就绪，请检查服务端状态！"));
+        return;
+    }
+
+    QJsonObject payload {
+        {QStringLiteral("action"), QStringLiteral("add_station")},
+        {QStringLiteral("station_name"), name},
+        {QStringLiteral("address"), address},
+        {QStringLiteral("longitude"), longitude},
+        {QStringLiteral("latitude"), latitude},
+        {QStringLiteral("price"), price}
+    };
+    // 0x61 代表 AdminAction
+    socket_.write(FrameCodec::encode(0x61, payload));
+}
+
 void PlatformClient::readFrames()
 {
     receiveBuffer_.append(socket_.readAll());
@@ -104,6 +117,7 @@ void PlatformClient::readFrames()
                      result.frame.payload.value(QStringLiteral("message")).toString());
             continue;
         }
+
         if (result.frame.messageType == static_cast<quint32>(MessageType::HealthResponse)) {
             if (!result.frame.payload.value(QStringLiteral("success")).toBool()) {
                 setState(State::Connected,
@@ -114,6 +128,16 @@ void PlatformClient::readFrames()
             const QString version = data.value(QStringLiteral("server_version")).toString();
             setState(State::Ready, QStringLiteral("服务可用，协议握手成功"));
             emit healthCheckSucceeded(version);
+        }
+
+        // ======== 新增：处理业务响应 ========
+        if (result.frame.messageType == 0x62) { // 0x62 代表 AdminResponse
+            QString action = result.frame.payload.value(QStringLiteral("action")).toString();
+            if (action == "add_station_response") {
+                bool success = result.frame.payload.value(QStringLiteral("code")).toInt() == 0;
+                QString msg = result.frame.payload.value(QStringLiteral("message")).toString();
+                emit addStationResult(success, msg);
+            }
         }
     }
 }

@@ -27,9 +27,15 @@ public:
     void reconnectNow();
     State state() const;
 
+    // ======== 新增：业务发送接口 ========
+    void sendAddStationRequest(const QString &name, const QString &address, double longitude, double latitude, double price);
+
 signals:
     void stateChanged(ev::PlatformClient::State state, const QString &detail);
     void healthCheckSucceeded(const QString &serverVersion);
+
+    // ======== 新增：业务响应信号 ========
+    void addStationResult(bool success, const QString &message);
 
 private:
     void setState(State state, const QString &detail);
