@@ -487,6 +487,17 @@ void FoundationTests::stationQueriesSortByDistanceAndPreserveStatus()
     QCOMPARE(sorted.data.first().station.totalPiles, 4);
     QCOMPARE(sorted.data.first().station.idlePiles, 2);
 
+    const auto highTechSorted = service.listStations(
+        openResult.data, 121.530000, 38.861000);
+    const auto ganjingziSorted = service.listStations(
+        openResult.data, 121.525500, 38.953300);
+    QVERIFY(highTechSorted.success);
+    QVERIFY(ganjingziSorted.success);
+    QCOMPARE(highTechSorted.data.first().station.stationId, 3);
+    QCOMPARE(ganjingziSorted.data.first().station.stationId, 2);
+    QVERIFY(highTechSorted.data.first().station.stationId
+            != ganjingziSorted.data.first().station.stationId);
+
     const auto detail = service.stationDetail(openResult.data, 1);
     QVERIFY2(detail.success, qPrintable(detail.message));
     QCOMPARE(detail.data.piles.size(), 4);
@@ -512,6 +523,29 @@ void FoundationTests::mapAdapterValidatesInputsAndUsesTeachingFallback()
         QVERIFY(qAbs(result.data.latitude - 38.863650) < 0.000001);
     });
     QVERIFY(callbackCalled);
+
+    double highTechLongitude = 0.0;
+    double highTechLatitude = 0.0;
+    adapter.geocode(QStringLiteral("辽宁省大连市高新区"), [&](const auto &result) {
+        QVERIFY2(result.success, qPrintable(result.message));
+        highTechLongitude = result.data.longitude;
+        highTechLatitude = result.data.latitude;
+    });
+    double ganjingziLongitude = 0.0;
+    double ganjingziLatitude = 0.0;
+    adapter.geocode(QStringLiteral("辽宁省大连市甘井子区"), [&](const auto &result) {
+        QVERIFY2(result.success, qPrintable(result.message));
+        ganjingziLongitude = result.data.longitude;
+        ganjingziLatitude = result.data.latitude;
+    });
+    QVERIFY(qAbs(highTechLongitude - ganjingziLongitude) > 0.001
+            || qAbs(highTechLatitude - ganjingziLatitude) > 0.001);
+
+    adapter.geocode(QStringLiteral("凌水街道, 甘井子区, 大连市"), [&](const auto &result) {
+        QVERIFY2(result.success, qPrintable(result.message));
+        QCOMPARE(result.data.longitude, highTechLongitude);
+        QCOMPARE(result.data.latitude, highTechLatitude);
+    });
 
     adapter.geocode(QStringLiteral("  "), [](const auto &result) {
         QVERIFY(!result.success);

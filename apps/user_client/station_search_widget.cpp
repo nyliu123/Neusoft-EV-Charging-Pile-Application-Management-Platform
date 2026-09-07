@@ -49,7 +49,7 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
     areaBox_->addItem(QStringLiteral("选择预设区域"), QString());
     areaBox_->addItem(QStringLiteral("大连市甘井子区"), QStringLiteral("辽宁省大连市甘井子区"));
     areaBox_->addItem(QStringLiteral("大连市高新区"),
-                      QStringLiteral("凌水街道, 甘井子区, 大连市, 辽宁省"));
+                      QStringLiteral("辽宁省大连市高新区"));
     areaBox_->addItem(QStringLiteral("大连北站"), QStringLiteral("辽宁省大连市大连北站"));
     addressEdit_ = new QLineEdit(listPage_);
     addressEdit_->setPlaceholderText(QStringLiteral("或手动输入地址，例如：大连市软件园路8号"));
