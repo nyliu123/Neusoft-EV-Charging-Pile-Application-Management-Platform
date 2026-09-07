@@ -29,7 +29,7 @@ private slots:
     void feeUsesOrderSnapshotAndHalfUpRounding();
     void feeRejectsInvalidDiscount();
     void databaseCreatesCoreSchema();
-    void nationalStationSeedCoversEveryProvinceWithTenPiles();
+    void compactStationSeedUsesAZWithTenPiles();
     void phoneValidation_data();
     void phoneValidation();
     void phoneValidationMessages();
@@ -130,7 +130,7 @@ void FoundationTests::databaseCreatesCoreSchema()
     QCOMPARE(query.value(0).toInt(), 1);
 }
 
-void FoundationTests::nationalStationSeedCoversEveryProvinceWithTenPiles()
+void FoundationTests::compactStationSeedUsesAZWithTenPiles()
 {
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
@@ -146,7 +146,7 @@ void FoundationTests::nationalStationSeedCoversEveryProvinceWithTenPiles()
     QSqlQuery query(openResult.data);
     QVERIFY(query.exec(QStringLiteral("SELECT COUNT(*) FROM charging_stations")));
     QVERIFY(query.next());
-    QCOMPARE(query.value(0).toInt(), 291);
+    QCOMPARE(query.value(0).toInt(), 25);
 
     QVERIFY(query.exec(QStringLiteral(
         "SELECT COUNT(*) FROM ("
@@ -157,44 +157,43 @@ void FoundationTests::nationalStationSeedCoversEveryProvinceWithTenPiles()
     QVERIFY(query.next());
     QCOMPARE(query.value(0).toInt(), 0);
 
-    const QStringList provinces {
-        QStringLiteral("北京市"), QStringLiteral("天津市"),
-        QStringLiteral("河北省"), QStringLiteral("山西省"),
-        QStringLiteral("内蒙古自治区"), QStringLiteral("辽宁省"),
-        QStringLiteral("吉林省"), QStringLiteral("黑龙江省"),
-        QStringLiteral("上海市"), QStringLiteral("江苏省"),
-        QStringLiteral("浙江省"), QStringLiteral("安徽省"),
-        QStringLiteral("福建省"), QStringLiteral("江西省"),
-        QStringLiteral("山东省"), QStringLiteral("河南省"),
-        QStringLiteral("湖北省"), QStringLiteral("湖南省"),
-        QStringLiteral("广东省"), QStringLiteral("广西壮族自治区"),
-        QStringLiteral("海南省"), QStringLiteral("重庆市"),
-        QStringLiteral("四川省"), QStringLiteral("贵州省"),
-        QStringLiteral("云南省"), QStringLiteral("西藏自治区"),
-        QStringLiteral("陕西省"), QStringLiteral("甘肃省"),
-        QStringLiteral("青海省"), QStringLiteral("宁夏回族自治区"),
-        QStringLiteral("新疆维吾尔自治区"),
-        QStringLiteral("香港特别行政区"),
-        QStringLiteral("澳门特别行政区"),
-        QStringLiteral("台湾省")
-    };
-    query.prepare(QStringLiteral(
-        "SELECT COUNT(*) FROM charging_stations WHERE address LIKE ?"));
-    for (const QString &province : provinces) {
-        query.bindValue(0, province + QStringLiteral("%"));
+    QVERIFY(query.exec(QStringLiteral("SELECT COUNT(*) FROM charging_piles")));
+    QVERIFY(query.next());
+    QCOMPARE(query.value(0).toInt(), 250);
+
+    QVERIFY(query.exec(QStringLiteral(
+        "SELECT COUNT(*) FROM charging_piles "
+        "WHERE pile_number NOT GLOB '[A-Z]-[0-9][0-9]'")));
+    QVERIFY(query.next());
+    QCOMPARE(query.value(0).toInt(), 0);
+
+    QVERIFY(query.exec(QStringLiteral(
+        "SELECT COUNT(DISTINCT substr(pile_number, 1, 1)) FROM charging_piles")));
+    QVERIFY(query.next());
+    QCOMPARE(query.value(0).toInt(), 26);
+
+    for (QChar prefix = u'A'; prefix <= u'Z'; prefix = QChar(prefix.unicode() + 1)) {
+        query.prepare(QStringLiteral(
+            "SELECT COUNT(*) FROM charging_piles WHERE pile_number LIKE ?"));
+        query.addBindValue(QString(prefix) + QStringLiteral("-%"));
         QVERIFY2(query.exec(), qPrintable(query.lastError().text()));
         QVERIFY(query.next());
-        QVERIFY2(query.value(0).toInt() > 0, qPrintable(province));
+        QVERIFY2(query.value(0).toInt() > 0, qPrintable(QString(prefix)));
     }
 
-    query.bindValue(0, QStringLiteral("广东省%"));
-    QVERIFY(query.exec());
-    QVERIFY(query.next());
-    const int guangdongCount = query.value(0).toInt();
-    query.bindValue(0, QStringLiteral("西藏自治区%"));
-    QVERIFY(query.exec());
-    QVERIFY(query.next());
-    QVERIFY(guangdongCount > query.value(0).toInt());
+    const QList<QPair<int, QString>> originalPileNumbers {
+        {1, QStringLiteral("A-01")}, {2, QStringLiteral("A-02")},
+        {3, QStringLiteral("B-01")}, {4, QStringLiteral("B-02")},
+        {5, QStringLiteral("C-01")}, {9, QStringLiteral("D-01")}
+    };
+    for (const auto &expected : originalPileNumbers) {
+        query.prepare(QStringLiteral(
+            "SELECT pile_number FROM charging_piles WHERE pile_id=?"));
+        query.addBindValue(expected.first);
+        QVERIFY(query.exec());
+        QVERIFY(query.next());
+        QCOMPARE(query.value(0).toString(), expected.second);
+    }
 
     QVERIFY(query.exec(QStringLiteral(
         "INSERT INTO charging_stations "
@@ -207,6 +206,15 @@ void FoundationTests::nationalStationSeedCoversEveryProvinceWithTenPiles()
     QVERIFY(query.exec());
     QVERIFY(query.next());
     QCOMPARE(query.value(0).toInt(), 10);
+
+    query.prepare(QStringLiteral(
+        "SELECT MIN(pile_number), MAX(pile_number) "
+        "FROM charging_piles WHERE station_id=?"));
+    query.addBindValue(newStationId);
+    QVERIFY(query.exec());
+    QVERIFY(query.next());
+    QCOMPARE(query.value(0).toString(), QStringLiteral("AA-01"));
+    QCOMPARE(query.value(1).toString(), QStringLiteral("AA-10"));
 
     query.prepare(QStringLiteral(
         "INSERT INTO charging_piles "
@@ -230,20 +238,20 @@ void FoundationTests::stationSearchSortsAndReportsPileStats()
         openResult.data, true, 121.509605, 38.863650);
     QVERIFY2(stationsResult.success, qPrintable(stationsResult.message));
     const QJsonArray stations = stationsResult.data.value(QStringLiteral("stations")).toArray();
-    QVERIFY(stations.size() >= 31);
+    QCOMPARE(stations.size(), 25);
     QCOMPARE(stations.first().toObject().value(QStringLiteral("station_id")).toInteger(), 1);
     QCOMPARE(stations.first().toObject().value(QStringLiteral("distance_km")).toDouble(), 0.0);
     QCOMPARE(stations.first().toObject().value(QStringLiteral("total_piles")).toInt(), 10);
-    QCOMPARE(stations.first().toObject().value(QStringLiteral("idle_count")).toInt(), 7);
+    QCOMPARE(stations.first().toObject().value(QStringLiteral("idle_count")).toInt(), 3);
 
     const auto detailResult = service.queryPiles(openResult.data, 1);
     QVERIFY2(detailResult.success, qPrintable(detailResult.message));
     QCOMPARE(detailResult.data.value(QStringLiteral("piles")).toArray().size(), 10);
     const QJsonObject stats = detailResult.data.value(QStringLiteral("stats")).toObject();
-    QCOMPARE(stats.value(QStringLiteral("idle")).toInt(), 7);
-    QCOMPARE(stats.value(QStringLiteral("in_use")).toInt(), 2);
-    QCOMPARE(stats.value(QStringLiteral("fault")).toInt(), 1);
-    QCOMPARE(stats.value(QStringLiteral("online_rate")).toDouble(), 90.0);
+    QCOMPARE(stats.value(QStringLiteral("idle")).toInt(), 3);
+    QCOMPARE(stats.value(QStringLiteral("in_use")).toInt(), 3);
+    QCOMPARE(stats.value(QStringLiteral("fault")).toInt(), 3);
+    QCOMPARE(stats.value(QStringLiteral("online_rate")).toDouble(), 70.0);
 }
 
 void FoundationTests::phoneValidation_data()
@@ -563,7 +571,7 @@ void FoundationTests::stationQueriesSortByDistanceAndPreserveStatus()
     const ev::StationService service;
     const auto unsorted = service.listStations(openResult.data);
     QVERIFY2(unsorted.success, qPrintable(unsorted.message));
-    QVERIFY(unsorted.data.size() >= 31);
+    QCOMPARE(unsorted.data.size(), 25);
     QVERIFY(!unsorted.data.first().distanceKm.has_value());
 
     const auto sorted = service.listStations(openResult.data, 121.509605, 38.863650);
@@ -572,7 +580,7 @@ void FoundationTests::stationQueriesSortByDistanceAndPreserveStatus()
     QVERIFY(sorted.data.first().distanceKm.has_value());
     QVERIFY(*sorted.data.first().distanceKm < 0.001);
     QCOMPARE(sorted.data.first().station.totalPiles, 10);
-    QCOMPARE(sorted.data.first().station.idlePiles, 7);
+    QCOMPARE(sorted.data.first().station.idlePiles, 3);
 
     const auto highTechSorted = service.listStations(
         openResult.data, 121.530000, 38.861000);
@@ -589,10 +597,10 @@ void FoundationTests::stationQueriesSortByDistanceAndPreserveStatus()
     QVERIFY2(detail.success, qPrintable(detail.message));
     QCOMPARE(detail.data.piles.size(), 10);
     QCOMPARE(detail.data.piles.first().pileNumber, QStringLiteral("A-01"));
-    QVERIFY(qAbs(ev::StationService::onlineRate(detail.data) - 0.9) < 0.000001);
+    QVERIFY(qAbs(ev::StationService::onlineRate(detail.data) - 0.7) < 0.000001);
     const auto reservedDetail = service.stationDetail(openResult.data, 2);
     QVERIFY2(reservedDetail.success, qPrintable(reservedDetail.message));
-    QVERIFY(qAbs(ev::StationService::onlineRate(reservedDetail.data) - 0.9) < 0.000001);
+    QVERIFY(qAbs(ev::StationService::onlineRate(reservedDetail.data) - 0.7) < 0.000001);
     QVERIFY(!service.stationDetail(openResult.data, 0).success);
     QVERIFY(!service.listStations(openResult.data, 121.5, std::nullopt).success);
 }
