@@ -26,6 +26,7 @@ SUBDIRS += \
     network \
     data \
     services \
+    adapters \
     server \
     user_client \
     admin_client \
@@ -42,9 +43,12 @@ data.depends = common
 services.subdir = src/services
 services.target = services
 services.depends = common data
+adapters.subdir = src/adapters
+adapters.target = adapters
+adapters.depends = common
 server.subdir = apps/server
 server.target = server
-server.depends = common network data services
+server.depends = common network data services adapters
 user_client.subdir = apps/user_client
 user_client.target = user_client
 user_client.depends = common network
@@ -53,4 +57,4 @@ admin_client.target = admin_client
 admin_client.depends = common network
 unit_tests.subdir = tests/unit
 unit_tests.target = unit_tests
-unit_tests.depends = common network services
+unit_tests.depends = common network services adapters

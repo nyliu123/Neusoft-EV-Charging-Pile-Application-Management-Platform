@@ -1,6 +1,7 @@
 #include "server_application.h"
 
 #include "admin_handler.h"
+#include "adapters/map_api_adapter.h"
 #include "common/error_code.h"
 #include "common/protocol.h"
 #include "services/admin_auth_service.h"
@@ -13,6 +14,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QMimeDatabase>
 #include <QPointer>
@@ -26,7 +28,8 @@ namespace ev {
 ServerApplication::ServerApplication(QString databasePath, QObject *parent)
     : QObject(parent),
       databaseManager_(databasePath),
-      avatarDirectory_(QFileInfo(databasePath).absoluteDir().filePath(QStringLiteral("avatars")))
+      avatarDirectory_(QFileInfo(databasePath).absoluteDir().filePath(QStringLiteral("avatars"))),
+      mapApiAdapter_(std::make_unique<MapApiAdapter>(this))
 {
     connect(&tcpServer_, &QTcpServer::newConnection,
             this, &ServerApplication::acceptPendingConnections);
@@ -158,6 +161,10 @@ void ServerApplication::processFrame(QTcpSocket *socket, const Frame &frame)
         processUserRequest(socket, frame);
         return;
     }
+    if (msgType == MessageType::StationRequest) {
+        processStationRequest(socket, frame);
+        return;
+    }
     if (msgType == MessageType::AdminQuery) {
         processAdminQuery(socket, frame);
         return;
@@ -199,50 +206,6 @@ void ServerApplication::processUserRequest(QTcpSocket *socket, const Frame &fram
     const QString type = data.value(QStringLiteral("type")).toString();
     const QJsonObject params = data.value(QStringLiteral("params")).toObject();
     const UserService service;
-
-    if (type == QStringLiteral("geocode")) {
-        const QString address = params.value(QStringLiteral("address")).toString();
-        QPointer<QTcpSocket> guardedSocket(socket);
-        mapApi_.geocode(address,
-                        [this, guardedSocket, requestId](const Result<QPointF> &result) {
-            if (!guardedSocket) {
-                return;
-            }
-            sendUserResponse(guardedSocket, requestId, result.success,
-                             errorCodeName(result.code),
-                             result.success ? QStringLiteral("位置解析成功") : result.message,
-                             result.success
-                                 ? QJsonObject {
-                                     {QStringLiteral("longitude"), result.data.x()},
-                                     {QStringLiteral("latitude"), result.data.y()}
-                                   }
-                                 : QJsonObject {});
-        });
-        return;
-    }
-
-    const StationService stationService;
-    if (type == QStringLiteral("query_stations")) {
-        const bool hasLocation = params.contains(QStringLiteral("longitude"))
-            && params.contains(QStringLiteral("latitude"));
-        const auto result = stationService.queryStations(
-            mainDatabase_, hasLocation,
-            params.value(QStringLiteral("longitude")).toDouble(),
-            params.value(QStringLiteral("latitude")).toDouble());
-        sendUserResponse(socket, requestId, result.success, errorCodeName(result.code),
-                         result.success ? QStringLiteral("充电站查询成功") : result.message,
-                         result.success ? result.data : QJsonObject {});
-        return;
-    }
-
-    if (type == QStringLiteral("query_piles")) {
-        const auto result = stationService.queryPiles(
-            mainDatabase_, params.value(QStringLiteral("station_id")).toInteger());
-        sendUserResponse(socket, requestId, result.success, errorCodeName(result.code),
-                         result.success ? QStringLiteral("充电桩查询成功") : result.message,
-                         result.success ? result.data : QJsonObject {});
-        return;
-    }
 
     if (type == QStringLiteral("user_info")) {
         const auto result = service.queryUserInfo(mainDatabase_, userId);
@@ -339,6 +302,162 @@ void ServerApplication::processUserRequest(QTcpSocket *socket, const Frame &fram
                      QStringLiteral("不支持的用户操作"));
 }
 
+void ServerApplication::processStationRequest(QTcpSocket *socket, const Frame &frame)
+{
+    const QString requestId = frame.payload.value(QStringLiteral("request_id")).toString();
+    const auto requestedVersion = static_cast<quint32>(
+        frame.payload.value(QStringLiteral("protocol_version")).toInteger());
+    if (requestedVersion != ProtocolVersion) {
+        sendStationResponse(socket, requestId, false, QStringLiteral("PROTOCOL_ERROR"),
+                            QStringLiteral("unsupported protocol version"));
+        return;
+    }
+
+    const QJsonObject data = frame.payload.value(QStringLiteral("data")).toObject();
+    const QString sessionId = data.value(QStringLiteral("session_id")).toString();
+    if (!connectionSessions_.value(socket).contains(sessionId)
+        || sessionManager_.authenticatedUserId(sessionId) <= 0) {
+        connectionSessions_[socket].remove(sessionId);
+        sendStationResponse(socket, requestId, false, QStringLiteral("UNAUTHORIZED"),
+                            QStringLiteral("登录已过期，请重新登录"));
+        return;
+    }
+
+    const QString type = data.value(QStringLiteral("type")).toString();
+    const QJsonObject params = data.value(QStringLiteral("params")).toObject();
+    const StationService service;
+
+    if (type == QStringLiteral("geocode")) {
+        const QString address = params.value(QStringLiteral("address")).toString();
+        QPointer<QTcpSocket> socketGuard(socket);
+        mapApiAdapter_->geocode(address,
+            [this, socketGuard, requestId](Result<GeocodeResult> response) {
+                if (!socketGuard) {
+                    return;
+                }
+                if (!response.success) {
+                    sendStationResponse(socketGuard, requestId, false,
+                        errorCodeName(response.code), response.message);
+                    return;
+                }
+                sendStationResponse(socketGuard, requestId, true, QStringLiteral("OK"),
+                    QStringLiteral("位置解析成功"), QJsonObject {
+                        {QStringLiteral("longitude"), response.data.longitude},
+                        {QStringLiteral("latitude"), response.data.latitude},
+                        {QStringLiteral("display_address"), response.data.displayAddress},
+                        {QStringLiteral("source"), response.data.source},
+                        {QStringLiteral("confidence"), response.data.confidence}
+                    });
+            });
+        return;
+    }
+
+    if (type == QStringLiteral("station_list")) {
+        std::optional<double> longitude;
+        std::optional<double> latitude;
+        if (params.contains(QStringLiteral("longitude"))
+            || params.contains(QStringLiteral("latitude"))) {
+            if (!params.contains(QStringLiteral("longitude"))
+                || !params.contains(QStringLiteral("latitude"))
+                || !params.value(QStringLiteral("longitude")).isDouble()
+                || !params.value(QStringLiteral("latitude")).isDouble()) {
+                sendStationResponse(socket, requestId, false,
+                    QStringLiteral("INVALID_INPUT"), QStringLiteral("经纬度必须同时提供"));
+                return;
+            }
+            longitude = params.value(QStringLiteral("longitude")).toDouble();
+            latitude = params.value(QStringLiteral("latitude")).toDouble();
+        }
+        const auto response = service.listStations(mainDatabase_, longitude, latitude);
+        if (!response.success) {
+            sendStationResponse(socket, requestId, false, errorCodeName(response.code),
+                                response.message);
+            return;
+        }
+        QJsonArray stations;
+        for (const StationListItem &item : response.data) {
+            QJsonObject station {
+                {QStringLiteral("station_id"), item.station.stationId},
+                {QStringLiteral("station_name"), item.station.stationName},
+                {QStringLiteral("address"), item.station.address},
+                {QStringLiteral("price_per_kwh"), item.station.pricePerKwh},
+                {QStringLiteral("total_piles"), item.station.totalPiles},
+                {QStringLiteral("idle_count"), item.station.idlePiles}
+            };
+            if (item.station.hasLocation) {
+                station.insert(QStringLiteral("longitude"), item.station.longitude);
+                station.insert(QStringLiteral("latitude"), item.station.latitude);
+            }
+            if (item.distanceKm.has_value()) {
+                station.insert(QStringLiteral("distance_km"), *item.distanceKm);
+            }
+            stations.append(station);
+        }
+        sendStationResponse(socket, requestId, true, QStringLiteral("OK"), {},
+                            QJsonObject {{QStringLiteral("stations"), stations}});
+        return;
+    }
+
+    if (type == QStringLiteral("station_detail")) {
+        const qint64 stationId = params.value(QStringLiteral("station_id")).toInteger();
+        const auto response = service.stationDetail(mainDatabase_, stationId);
+        if (!response.success) {
+            sendStationResponse(socket, requestId, false, errorCodeName(response.code),
+                                response.message);
+            return;
+        }
+        const StationDetailRecord &detail = response.data;
+        int inUse = 0;
+        int reserved = 0;
+        int fault = 0;
+        QJsonArray piles;
+        for (const StationPileRecord &pile : detail.piles) {
+            if (pile.status == QStringLiteral("in_use")) {
+                ++inUse;
+            } else if (pile.status == QStringLiteral("reserved")) {
+                ++reserved;
+            } else if (pile.status == QStringLiteral("fault")) {
+                ++fault;
+            }
+            piles.append(QJsonObject {
+                {QStringLiteral("pile_id"), pile.pileId},
+                {QStringLiteral("pile_number"), pile.pileNumber},
+                {QStringLiteral("pile_type"), pile.pileType},
+                {QStringLiteral("power_kw"), pile.powerKw},
+                {QStringLiteral("status"), pile.status}
+            });
+        }
+        const int total = detail.station.totalPiles;
+        const double onlineRate = StationService::onlineRate(detail);
+        QJsonObject station {
+            {QStringLiteral("station_id"), detail.station.stationId},
+            {QStringLiteral("station_name"), detail.station.stationName},
+            {QStringLiteral("address"), detail.station.address},
+            {QStringLiteral("price_per_kwh"), detail.station.pricePerKwh}
+        };
+        if (detail.station.hasLocation) {
+            station.insert(QStringLiteral("longitude"), detail.station.longitude);
+            station.insert(QStringLiteral("latitude"), detail.station.latitude);
+        }
+        sendStationResponse(socket, requestId, true, QStringLiteral("OK"), {}, QJsonObject {
+            {QStringLiteral("station"), station},
+            {QStringLiteral("piles"), piles},
+            {QStringLiteral("stats"), QJsonObject {
+                {QStringLiteral("total"), total},
+                {QStringLiteral("idle"), detail.station.idlePiles},
+                {QStringLiteral("in_use"), inUse},
+                {QStringLiteral("reserved"), reserved},
+                {QStringLiteral("fault"), fault},
+                {QStringLiteral("online_rate"), onlineRate}
+            }}
+        });
+        return;
+    }
+
+    sendStationResponse(socket, requestId, false, QStringLiteral("INVALID_INPUT"),
+                        QStringLiteral("不支持的站点操作"));
+}
+
 void ServerApplication::sendUserResponse(QTcpSocket *socket, const QString &requestId,
                                          bool success, const QString &code,
                                          const QString &message, const QJsonObject &result)
@@ -352,6 +471,23 @@ void ServerApplication::sendUserResponse(QTcpSocket *socket, const QString &requ
         {QStringLiteral("data"), QJsonObject {{QStringLiteral("result"), result}}}
     };
     socket->write(FrameCodec::encode(static_cast<quint32>(MessageType::UserResponse), response));
+}
+
+void ServerApplication::sendStationResponse(QTcpSocket *socket, const QString &requestId,
+                                            bool success, const QString &code,
+                                            const QString &message,
+                                            const QJsonObject &result)
+{
+    const QJsonObject response {
+        {QStringLiteral("protocol_version"), static_cast<qint64>(ProtocolVersion)},
+        {QStringLiteral("request_id"), requestId},
+        {QStringLiteral("success"), success},
+        {QStringLiteral("code"), code},
+        {QStringLiteral("message"), message},
+        {QStringLiteral("data"), QJsonObject {{QStringLiteral("result"), result}}}
+    };
+    socket->write(FrameCodec::encode(
+        static_cast<quint32>(MessageType::StationResponse), response));
 }
 
 void ServerApplication::processLogin(QTcpSocket *socket, const Frame &frame)
