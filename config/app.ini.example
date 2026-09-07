@@ -18,8 +18,7 @@ worker_threads=20
 log_level=info
 
 [external]
-map_provider=tencent
+map_provider=openstreetmap
 map_api_key=
 model_endpoint=
 model_api_key=
-
