@@ -20,6 +20,11 @@ class PlatformClient;
 // matching AdminResponse (0x62) arrives. "result" is the "result" object
 // inside the response data. When the server reports an expired session,
 // sessionExpired() is emitted instead of invoking the callback.
+//
+// sendGeocode() reuses the user-side StationRequest (0x20) "geocode" type:
+// the server accepts any session registered in the SessionManager, so admin
+// sessions can resolve addresses through the same endpoint. The response
+// envelope of StationResponse (0x21) is identical to AdminResponse.
 class AdminApiClient final : public QObject {
     Q_OBJECT
 
@@ -40,6 +45,7 @@ public:
                    QObject *context, Callback callback);
     bool sendAction(const QString &type, const QJsonObject &params,
                     QObject *context, Callback callback);
+    bool sendGeocode(const QString &address, QObject *context, Callback callback);
 
 signals:
     void sessionExpired(const QString &message);

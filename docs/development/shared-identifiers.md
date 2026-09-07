@@ -176,6 +176,13 @@
 | `add_station`    | station_name / address / longitude / latitude / price_per_kwh | 校验后插入，返回 station_id      | UML-042 |
 | `set_user_status`| user_id / status（`frozen` 或 `normal`）              | 冻结会同时踢掉该用户全部在线会话        | UML-045 |
 
+### 管理端复用站点协议的 geocode
+
+管理端“新增充电站”（UML-042）的地址解析复用站点协议的 `StationRequest=0x20 / type="geocode"`，
+不新增消息编号：服务端 geocode 校验的是“会话绑定本连接 + SessionManager 有效”，管理员会话同样满足。
+管理端客户端 `ev::AdminApiClient::sendGeocode()` 发送该请求并按 `StationResponse=0x21`
+（信封与 AdminResponse 完全一致）解析；地理编码失败时表单自动解锁手动填写经纬度。
+
 ## 共享测试数据（003_seed_test_data.sql）
 
 `resources/database/migrations/003_seed_test_data.sql` 提供全组共享的演示数据，启动服务端时

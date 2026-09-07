@@ -62,6 +62,26 @@ inline QString userStatusText(const QString &status)
     return status;
 }
 
+inline QColor userStatusColor(const QString &status)
+{
+    if (status == QStringLiteral("normal")) {
+        return {0x2e, 0x7d, 0x32};
+    }
+    if (status == QStringLiteral("frozen")) {
+        return {0xc6, 0x28, 0x28};
+    }
+    return {0x75, 0x75, 0x75};
+}
+
+// "13800138000" -> "138****8000"
+inline QString maskPhone(const QString &phone)
+{
+    if (phone.size() == 11) {
+        return phone.left(3) + QStringLiteral("****") + phone.right(4);
+    }
+    return phone;
+}
+
 inline QString orderStatusText(const QString &status)
 {
     if (status == QStringLiteral("reserved")) {
@@ -74,12 +94,32 @@ inline QString orderStatusText(const QString &status)
         return QStringLiteral("待结算");
     }
     if (status == QStringLiteral("settled")) {
-        return QStringLiteral("已完成");
+        return QStringLiteral("已结算");
     }
     if (status == QStringLiteral("cancelled")) {
         return QStringLiteral("已取消");
     }
     return status;
+}
+
+inline QColor orderStatusColor(const QString &status)
+{
+    if (status == QStringLiteral("reserved")) {
+        return {0xf9, 0xa8, 0x25};
+    }
+    if (status == QStringLiteral("charging")) {
+        return {0x15, 0x65, 0xc0};
+    }
+    if (status == QStringLiteral("pending_settlement")) {
+        return {0xef, 0x6c, 0x00};
+    }
+    if (status == QStringLiteral("settled")) {
+        return {0x2e, 0x7d, 0x32};
+    }
+    if (status == QStringLiteral("cancelled")) {
+        return {0x9e, 0x9e, 0x9e};
+    }
+    return {0x75, 0x75, 0x75};
 }
 
 inline QString formatAmount(double value)
