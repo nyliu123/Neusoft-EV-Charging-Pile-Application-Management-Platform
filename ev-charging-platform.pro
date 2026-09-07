@@ -16,6 +16,7 @@ OTHER_FILES += \
     docs/development/architecture.md \
     docs/development/shared-identifiers.md \
     resources/database/migrations/001_core.sql \
+    resources/database/migrations/004_seed_national_stations.sql \
     scripts/smoke-test.sh \
     analysis/README.md \
     src/adapters/README.md \

@@ -17,20 +17,42 @@ namespace {
 
 QStringList sqlStatements(const QString &script)
 {
-    QString withoutComments;
+    QStringList statements;
+    QString current;
+    bool insideTrigger = false;
     const QStringList lines = script.split('\n');
     for (const QString &line : lines) {
-        if (!line.trimmed().startsWith(QStringLiteral("--"))) {
-            withoutComments.append(line);
-            withoutComments.append('\n');
+        const QString trimmed = line.trimmed();
+        if (trimmed.startsWith(QStringLiteral("--"))) {
+            continue;
+        }
+        if (current.trimmed().isEmpty()
+            && trimmed.startsWith(QStringLiteral("CREATE TRIGGER"),
+                                  Qt::CaseInsensitive)) {
+            insideTrigger = true;
+        }
+        current.append(line);
+        current.append('\n');
+        if (insideTrigger) {
+            if (trimmed.compare(QStringLiteral("END;"), Qt::CaseInsensitive) == 0) {
+                statements.append(current.trimmed());
+                current.clear();
+                insideTrigger = false;
+            }
+            continue;
+        }
+        qsizetype delimiter = current.indexOf(';');
+        while (delimiter >= 0) {
+            const QString statement = current.left(delimiter).trimmed();
+            if (!statement.isEmpty()) {
+                statements.append(statement);
+            }
+            current.remove(0, delimiter + 1);
+            delimiter = current.indexOf(';');
         }
     }
-
-    QStringList statements;
-    for (const QString &part : withoutComments.split(';')) {
-        if (!part.trimmed().isEmpty()) {
-            statements.append(part.trimmed());
-        }
+    if (!current.trimmed().isEmpty()) {
+        statements.append(current.trimmed());
     }
     return statements;
 }
@@ -40,7 +62,8 @@ const QStringList migrationScripts()
     return {
         QStringLiteral(":/database/migrations/001_core.sql"),
         QStringLiteral(":/database/migrations/002_seed_admin.sql"),
-        QStringLiteral(":/database/migrations/003_seed_test_data.sql")
+        QStringLiteral(":/database/migrations/003_seed_test_data.sql"),
+        QStringLiteral(":/database/migrations/004_seed_national_stations.sql")
     };
 }
 
