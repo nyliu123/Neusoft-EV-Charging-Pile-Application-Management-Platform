@@ -4,75 +4,214 @@
 #include "common/protocol.h"
 #include "network/platform_client.h"
 
-#include <QFormLayout>
+#include <QFont>
+#include <QGraphicsDropShadowEffect>
 #include <QHBoxLayout>
+#include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
-#include <QMessageBox>
+#include <QPaintEvent>
+#include <QPainter>
 #include <QPushButton>
 #include <QVBoxLayout>
+#include <QWidget>
 
 namespace ev {
+
+// ── Style helpers ───────────────────────────────────────────────────────────
+
+static const char *kInputStyle =
+    "QLineEdit {"
+    "  background: #f5f7fa;"
+    "  border: 1.5px solid #e4e7ed;"
+    "  border-radius: 6px;"
+    "  padding: 10px 12px;"
+    "  font-size: 14px;"
+    "  color: #303133;"
+    "  selection-background-color: #409eff;"
+    "}"
+    "QLineEdit:focus {"
+    "  border-color: #409eff;"
+    "  background: white;"
+    "}"
+    "QLineEdit::placeholder { color: #a8abb2; }";
+
+static const char *kLoginButtonStyle =
+    "QPushButton {"
+    "  background-color: #409eff;"
+    "  color: white;"
+    "  border: none;"
+    "  border-radius: 6px;"
+    "  font-size: 15px;"
+    "  font-weight: 600;"
+    "  padding: 11px 0;"
+    "}"
+    "QPushButton:hover { background-color: #66b1ff; }"
+    "QPushButton:pressed { background-color: #3a8ee6; }"
+    "QPushButton:disabled { background-color: #a0cfff; }";
+
+static const char *kToggleStyle =
+    "QPushButton {"
+    "  background: transparent;"
+    "  border: none;"
+    "  color: #909399;"
+    "  font-size: 13px;"
+    "  padding: 4px 8px;"
+    "}"
+    "QPushButton:hover { color: #409eff; }";
+
+// ── AdminLoginDialog ──────────────────────────────────────────────────────────
 
 AdminLoginDialog::AdminLoginDialog(PlatformClient *client, QWidget *parent)
     : QDialog(parent), client_(client)
 {
     setObjectName(QStringLiteral("adminLoginDialog"));
     setWindowTitle(QStringLiteral("管理员登录"));
-    setFixedSize(380, 280);
+    setFixedSize(440, 560);
     setModal(true);
+    // Transparent background so the gradient paintEvent shows through.
+    setAttribute(Qt::WA_StyledBackground, false);
 
-    auto *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(32, 28, 32, 24);
-    mainLayout->setSpacing(16);
+    auto *root = new QVBoxLayout(this);
+    root->setContentsMargins(0, 0, 0, 0);
+    root->setAlignment(Qt::AlignCenter);
 
-    // Title.
-    titleLabel_ = new QLabel(QStringLiteral("运营管理中心"), this);
-    titleLabel_->setProperty("uiClass", "dialogTitle");
+    // ── White card ──────────────────────────────────────────────────────
+    auto *card = new QWidget(this);
+    card->setFixedSize(360, 440);
+    card->setStyleSheet(QStringLiteral(
+        "QWidget { background: white; border-radius: 12px; }"));
+
+    auto *shadow = new QGraphicsDropShadowEffect(card);
+    shadow->setBlurRadius(30);
+    shadow->setOffset(0, 4);
+    shadow->setColor(QColor(0, 0, 0, 60));
+    card->setGraphicsEffect(shadow);
+
+    auto *cardLayout = new QVBoxLayout(card);
+    cardLayout->setContentsMargins(36, 36, 36, 28);
+    cardLayout->setSpacing(0);
+    cardLayout->setAlignment(Qt::AlignTop);
+
+    // ── Logo badge ──────────────────────────────────────────────────────
+    auto *logoLabel = new QLabel(card);
+    logoLabel->setText(QStringLiteral("EV"));
+    logoLabel->setFixedSize(56, 56);
+    logoLabel->setAlignment(Qt::AlignCenter);
+    QFont logoFont = logoLabel->font();
+    logoFont.setPointSize(18);
+    logoFont.setBold(true);
+    logoLabel->setFont(logoFont);
+    logoLabel->setStyleSheet(QStringLiteral(
+        "QLabel {"
+        "  background: qlineargradient(x1:0, y1:0, x2:1, y2:1,"
+        "    stop:0 #409eff, stop:1 #1976d2);"
+        "  color: white;"
+        "  border-radius: 28px;"
+        "}"));
+    auto *logoLayout = new QHBoxLayout();
+    logoLayout->setAlignment(Qt::AlignCenter);
+    logoLayout->addWidget(logoLabel);
+    cardLayout->addLayout(logoLayout);
+    cardLayout->addSpacing(18);
+
+    // ── Title ────────────────────────────────────────────────────────────
+    titleLabel_ = new QLabel(card);
+    titleLabel_->setText(QStringLiteral("充电桩运营管理平台"));
     titleLabel_->setAlignment(Qt::AlignCenter);
-    mainLayout->addWidget(titleLabel_);
+    QFont titleFont = titleLabel_->font();
+    titleFont.setPointSize(16);
+    titleFont.setBold(true);
+    titleLabel_->setFont(titleFont);
+    titleLabel_->setStyleSheet(QStringLiteral("color: #303133;"));
+    cardLayout->addWidget(titleLabel_);
 
-    auto *subTitle = new QLabel(QStringLiteral("电动汽车充电桩管理平台"), this);
-    subTitle->setAlignment(Qt::AlignCenter);
-    subTitle->setProperty("uiClass", "muted");
-    mainLayout->addWidget(subTitle);
+    subTitleLabel_ = new QLabel(QStringLiteral("Admin Console"), card);
+    subTitleLabel_->setAlignment(Qt::AlignCenter);
+    QFont subFont = subTitleLabel_->font();
+    subFont.setPointSize(10);
+    subTitleLabel_->setFont(subFont);
+    subTitleLabel_->setStyleSheet(QStringLiteral("color: #909399; letter-spacing: 2px;"));
+    cardLayout->addWidget(subTitleLabel_);
 
-    mainLayout->addSpacing(8);
+    cardLayout->addSpacing(24);
 
-    // Form fields.
-    auto *formLayout = new QFormLayout();
-    formLayout->setSpacing(10);
-
-    usernameEdit_ = new QLineEdit(this);
+    // ── Form fields ─────────────────────────────────────────────────────
+    usernameEdit_ = new QLineEdit(card);
     usernameEdit_->setPlaceholderText(QStringLiteral("请输入用户名"));
     usernameEdit_->setClearButtonEnabled(true);
-    formLayout->addRow(QStringLiteral("用户名："), usernameEdit_);
+    usernameEdit_->setMaxLength(50);
+    usernameEdit_->setStyleSheet(QString::fromLatin1(kInputStyle));
+    usernameEdit_->setMinimumHeight(42);
+    cardLayout->addWidget(usernameEdit_);
 
-    passwordEdit_ = new QLineEdit(this);
+    cardLayout->addSpacing(12);
+
+    // Password field with show/hide toggle button.
+    auto *passwordLayout = new QHBoxLayout();
+    passwordLayout->setContentsMargins(0, 0, 0, 0);
+    passwordLayout->setSpacing(0);
+
+    passwordEdit_ = new QLineEdit(card);
     passwordEdit_->setEchoMode(QLineEdit::Password);
     passwordEdit_->setPlaceholderText(QStringLiteral("请输入密码"));
-    formLayout->addRow(QStringLiteral("密　码："), passwordEdit_);
+    passwordEdit_->setMaxLength(255);
+    passwordEdit_->setStyleSheet(QString::fromLatin1(kInputStyle));
+    passwordEdit_->setMinimumHeight(42);
+    passwordLayout->addWidget(passwordEdit_);
 
-    mainLayout->addLayout(formLayout);
+    passwordToggle_ = new QPushButton(QStringLiteral("显示"), card);
+    passwordToggle_->setCursor(Qt::PointingHandCursor);
+    passwordToggle_->setFixedHeight(42);
+    passwordToggle_->setStyleSheet(QString::fromLatin1(kToggleStyle));
+    passwordLayout->addWidget(passwordToggle_);
 
-    // Error label.
-    errorLabel_ = new QLabel(this);
-    errorLabel_->setProperty("uiClass", "errorText");
+    cardLayout->addLayout(passwordLayout);
+
+    // ── Error label ──────────────────────────────────────────────────────
+    cardLayout->addSpacing(8);
+    errorLabel_ = new QLabel(card);
     errorLabel_->setWordWrap(true);
+    errorLabel_->setStyleSheet(QStringLiteral(
+        "color: #f56c6c; font-size: 12px; padding-left: 2px;"));
     errorLabel_->setVisible(false);
-    mainLayout->addWidget(errorLabel_);
+    cardLayout->addWidget(errorLabel_);
 
-    mainLayout->addStretch();
+    cardLayout->addSpacing(10);
 
-    // Login button.
-    loginButton_ = new QPushButton(QStringLiteral("登 录"), this);
-    loginButton_->setProperty("uiClass", "primary");
-    loginButton_->setDefault(true);
-    loginButton_->setMinimumHeight(36);
-    mainLayout->addWidget(loginButton_);
+    // ── Login button ─────────────────────────────────────────────────────
+    loginButton_ = new QPushButton(QStringLiteral("登 录"), card);
+    loginButton_->setCursor(Qt::PointingHandCursor);
+    loginButton_->setMinimumHeight(44);
+    loginButton_->setStyleSheet(QString::fromLatin1(kLoginButtonStyle));
+    cardLayout->addWidget(loginButton_);
 
-    // Connections.
-    connect(loginButton_, &QPushButton::clicked, this, &AdminLoginDialog::onLoginClicked);
+    cardLayout->addSpacing(16);
+
+    // ── Hint ─────────────────────────────────────────────────────────────
+    hintLabel_ = new QLabel(card);
+    hintLabel_->setText(QStringLiteral(
+        "默认账号：<b>admin</b>　密码：<b>admin123</b>"));
+    hintLabel_->setAlignment(Qt::AlignCenter);
+    hintLabel_->setTextFormat(Qt::RichText);
+    hintLabel_->setStyleSheet(QStringLiteral(
+        "color: #c0c4cc; font-size: 12px;"));
+    cardLayout->addWidget(hintLabel_);
+
+    cardLayout->addStretch();
+
+    root->addWidget(card, 0, Qt::AlignCenter);
+
+    // ── Connections ───────────────────────────────────────────────────────
+    connect(loginButton_, &QPushButton::clicked,
+            this, &AdminLoginDialog::onLoginClicked);
+    connect(passwordToggle_, &QPushButton::clicked, this, [this]() {
+        passwordVisible_ = !passwordVisible_;
+        passwordEdit_->setEchoMode(passwordVisible_
+            ? QLineEdit::Normal : QLineEdit::Password);
+        passwordToggle_->setText(passwordVisible_
+            ? QStringLiteral("隐藏") : QStringLiteral("显示"));
+    });
     connect(passwordEdit_, &QLineEdit::returnPressed,
             loginButton_, &QPushButton::click);
     connect(usernameEdit_, &QLineEdit::returnPressed,
@@ -106,19 +245,34 @@ AdminLoginDialog::AdminLoginDialog(PlatformClient *client, QWidget *parent)
     usernameEdit_->setFocus();
 }
 
+void AdminLoginDialog::paintEvent(QPaintEvent *)
+{
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+
+    // Dark tech-style gradient background.
+    QLinearGradient gradient(0, 0, 0, height());
+    gradient.setColorAt(0.0, QColor("#1a1a2e"));
+    gradient.setColorAt(0.5, QColor("#16213e"));
+    gradient.setColorAt(1.0, QColor("#0f3460"));
+    painter.fillRect(rect(), gradient);
+
+    // Subtle decorative circles (top-right and bottom-left).
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(64, 158, 255, 25));
+    painter.drawEllipse(QPoint(width() - 60, 80), 120, 120);
+    painter.setBrush(QColor(64, 158, 255, 15));
+    painter.drawEllipse(QPoint(40, height() - 40), 90, 90);
+}
+
 void AdminLoginDialog::onLoginClicked()
 {
+    clearError();
+
     const QString username = usernameEdit_->text().trimmed();
     const QString password = passwordEdit_->text();
 
-    if (username.isEmpty()) {
-        showError(QStringLiteral("请输入用户名"));
-        usernameEdit_->setFocus();
-        return;
-    }
-    if (password.isEmpty()) {
-        showError(QStringLiteral("请输入密码"));
-        passwordEdit_->setFocus();
+    if (!validateInput(username, password)) {
         return;
     }
 
@@ -128,7 +282,6 @@ void AdminLoginDialog::onLoginClicked()
     }
 
     setLoading(true);
-    errorLabel_->setVisible(false);
 
     const QJsonObject data {
         {QStringLiteral("username"), username},
@@ -163,14 +316,44 @@ void AdminLoginDialog::setLoading(bool loading)
     loginButton_->setEnabled(!loading);
     usernameEdit_->setEnabled(!loading);
     passwordEdit_->setEnabled(!loading);
+    passwordToggle_->setEnabled(!loading);
     loginButton_->setText(loading ? QStringLiteral("登录中...")
                                   : QStringLiteral("登 录"));
 }
 
 void AdminLoginDialog::showError(const QString &message)
 {
-    errorLabel_->setText(message);
+    errorLabel_->setText(QStringLiteral("⚠  %1").arg(message));
     errorLabel_->setVisible(true);
+}
+
+void AdminLoginDialog::clearError()
+{
+    errorLabel_->clear();
+    errorLabel_->setVisible(false);
+}
+
+bool AdminLoginDialog::validateInput(const QString &username, const QString &password)
+{
+    if (username.isEmpty()) {
+        showError(QStringLiteral("请输入用户名"));
+        usernameEdit_->setFocus();
+        return false;
+    }
+    if (password.isEmpty()) {
+        showError(QStringLiteral("请输入密码"));
+        passwordEdit_->setFocus();
+        return false;
+    }
+    if (username.length() > 50) {
+        showError(QStringLiteral("用户名长度不能超过 50 个字符"));
+        return false;
+    }
+    if (password.length() > 255) {
+        showError(QStringLiteral("密码长度不能超过 255 个字符"));
+        return false;
+    }
+    return true;
 }
 
 } // namespace ev
