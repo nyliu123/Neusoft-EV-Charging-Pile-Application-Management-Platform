@@ -1,24 +1,17 @@
-QT += core sql
+QT += core network
 QT -= gui
 
 TEMPLATE = lib
 CONFIG += staticlib
-TARGET = ev_data
+TARGET = ev_adapters
 
 PLATFORM_ROOT = $$clean_path($$PWD/../..)
 include($$PLATFORM_ROOT/config/common.pri)
 
 INCLUDEPATH += $$PLATFORM_ROOT/src
 
-HEADERS += \
-    database_manager.h \
-    station_repository.h \
-    user_repository.h
-SOURCES += \
-    database_manager.cpp \
-    station_repository.cpp \
-    user_repository.cpp
-RESOURCES += database.qrc
+HEADERS += map_api_adapter.h
+SOURCES += map_api_adapter.cpp
 
 LIBS += -L$$PLATFORM_BUILD_ROOT/lib -lev_common
 PRE_TARGETDEPS += $$PLATFORM_BUILD_ROOT/lib/libev_common.a

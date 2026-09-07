@@ -1,32 +1,8 @@
 #include "services/station_service.h"
 
 #include <QJsonArray>
-#include <QSqlError>
-#include <QSqlQuery>
-#include <QVariant>
-
+#include <QtMath>
 #include <algorithm>
-#include <cmath>
-
-namespace {
-
-double radians(double degrees)
-{
-    return degrees * 3.14159265358979323846 / 180.0;
-}
-
-double haversine(double latitude1, double longitude1,
-                 double latitude2, double longitude2)
-{
-    const double latitudeDelta = radians(latitude2 - latitude1);
-    const double longitudeDelta = radians(longitude2 - longitude1);
-    const double a = std::pow(std::sin(latitudeDelta / 2.0), 2.0)
-        + std::cos(radians(latitude1)) * std::cos(radians(latitude2))
-            * std::pow(std::sin(longitudeDelta / 2.0), 2.0);
-    return 6371.0 * 2.0 * std::atan2(std::sqrt(a), std::sqrt(1.0 - a));
-}
-
-} // namespace
 
 namespace ev {
 
@@ -35,139 +11,177 @@ Result<QJsonObject> StationService::queryStations(QSqlDatabase &database,
                                                    double longitude,
                                                    double latitude) const
 {
-    if (hasLocation && (longitude < -180.0 || longitude > 180.0
-                        || latitude < -90.0 || latitude > 90.0)) {
-        return Result<QJsonObject>::fail(ErrorCode::InvalidInput,
-                                         QStringLiteral("位置坐标无效"));
+    const auto response = hasLocation
+        ? listStations(database, longitude, latitude)
+        : listStations(database);
+    if (!response.success) {
+        return Result<QJsonObject>::fail(response.code, response.message);
     }
-    QSqlQuery query(database);
-    if (!query.exec(QStringLiteral(
-            "SELECT s.station_id, s.station_name, COALESCE(s.address, ''), "
-            "s.longitude, s.latitude, s.price_per_kwh, COUNT(p.pile_id), "
-            "COALESCE(SUM(CASE WHEN p.status='idle' THEN 1 ELSE 0 END), 0) "
-            "FROM charging_stations s LEFT JOIN charging_piles p "
-            "ON p.station_id=s.station_id GROUP BY s.station_id"))) {
-        return Result<QJsonObject>::fail(ErrorCode::StorageError,
-                                         QStringLiteral("充电站查询失败：%1")
-                                             .arg(query.lastError().text()));
-    }
-
-    QList<QJsonObject> stations;
-    while (query.next()) {
+    QJsonArray stations;
+    for (const StationListItem &item : response.data) {
         QJsonObject station {
-            {QStringLiteral("station_id"), query.value(0).toLongLong()},
-            {QStringLiteral("station_name"), query.value(1).toString()},
-            {QStringLiteral("address"), query.value(2).toString()},
-            {QStringLiteral("price_per_kwh"), query.value(5).toDouble()},
-            {QStringLiteral("total_piles"), query.value(6).toInt()},
-            {QStringLiteral("idle_count"), query.value(7).toInt()}
+            {QStringLiteral("station_id"), item.station.stationId},
+            {QStringLiteral("station_name"), item.station.stationName},
+            {QStringLiteral("address"), item.station.address},
+            {QStringLiteral("price_per_kwh"), item.station.pricePerKwh},
+            {QStringLiteral("total_piles"), item.station.totalPiles},
+            {QStringLiteral("idle_count"), item.station.idlePiles}
         };
-        const bool stationHasLocation = !query.value(3).isNull() && !query.value(4).isNull();
-        if (stationHasLocation) {
-            const double stationLongitude = query.value(3).toDouble();
-            const double stationLatitude = query.value(4).toDouble();
-            station.insert(QStringLiteral("longitude"), stationLongitude);
-            station.insert(QStringLiteral("latitude"), stationLatitude);
-            if (hasLocation) {
-                station.insert(QStringLiteral("distance_km"),
-                               haversine(latitude, longitude,
-                                         stationLatitude, stationLongitude));
-            } else {
-                station.insert(QStringLiteral("distance_km"), QJsonValue::Null);
-            }
-        } else {
-            station.insert(QStringLiteral("longitude"), QJsonValue::Null);
-            station.insert(QStringLiteral("latitude"), QJsonValue::Null);
-            station.insert(QStringLiteral("distance_km"), QJsonValue::Null);
-        }
+        station.insert(QStringLiteral("longitude"), item.station.hasLocation
+                           ? QJsonValue(item.station.longitude) : QJsonValue::Null);
+        station.insert(QStringLiteral("latitude"), item.station.hasLocation
+                           ? QJsonValue(item.station.latitude) : QJsonValue::Null);
+        station.insert(QStringLiteral("distance_km"), item.distanceKm.has_value()
+                           ? QJsonValue(*item.distanceKm) : QJsonValue::Null);
         stations.append(station);
     }
-    std::sort(stations.begin(), stations.end(), [hasLocation](const QJsonObject &left,
-                                                               const QJsonObject &right) {
-        const QJsonValue leftDistance = left.value(QStringLiteral("distance_km"));
-        const QJsonValue rightDistance = right.value(QStringLiteral("distance_km"));
-        if (hasLocation && leftDistance.isDouble() != rightDistance.isDouble()) {
-            return leftDistance.isDouble();
-        }
-        if (hasLocation && leftDistance.isDouble() && rightDistance.isDouble()
-            && std::abs(leftDistance.toDouble() - rightDistance.toDouble()) > 0.000001) {
-            return leftDistance.toDouble() < rightDistance.toDouble();
-        }
-        return left.value(QStringLiteral("station_id")).toInteger()
-            < right.value(QStringLiteral("station_id")).toInteger();
-    });
-    QJsonArray array;
-    for (const QJsonObject &station : stations) {
-        array.append(station);
-    }
-    return Result<QJsonObject>::ok(QJsonObject {{QStringLiteral("stations"), array}});
+    return Result<QJsonObject>::ok(
+        QJsonObject {{QStringLiteral("stations"), stations}});
 }
 
-Result<QJsonObject> StationService::queryPiles(QSqlDatabase &database, qint64 stationId) const
+Result<QJsonObject> StationService::queryPiles(QSqlDatabase &database,
+                                               qint64 stationId) const
 {
-    if (stationId <= 0) {
-        return Result<QJsonObject>::fail(ErrorCode::InvalidInput,
-                                         QStringLiteral("站点编号无效"));
+    const auto response = stationDetail(database, stationId);
+    if (!response.success) {
+        return Result<QJsonObject>::fail(response.code, response.message);
     }
-    QSqlQuery stationQuery(database);
-    stationQuery.prepare(QStringLiteral(
-        "SELECT station_name, COALESCE(address, ''), price_per_kwh "
-        "FROM charging_stations WHERE station_id=?"));
-    stationQuery.addBindValue(stationId);
-    if (!stationQuery.exec()) {
-        return Result<QJsonObject>::fail(ErrorCode::StorageError,
-                                         QStringLiteral("站点详情查询失败"));
-    }
-    if (!stationQuery.next()) {
-        return Result<QJsonObject>::fail(ErrorCode::NotFound,
-                                         QStringLiteral("充电站不存在"));
-    }
-    QJsonObject station {
-        {QStringLiteral("station_id"), stationId},
-        {QStringLiteral("station_name"), stationQuery.value(0).toString()},
-        {QStringLiteral("address"), stationQuery.value(1).toString()},
-        {QStringLiteral("price_per_kwh"), stationQuery.value(2).toDouble()}
-    };
-
-    QSqlQuery pileQuery(database);
-    pileQuery.prepare(QStringLiteral(
-        "SELECT pile_id, pile_number, pile_type, power_kw, status "
-        "FROM charging_piles WHERE station_id=? ORDER BY pile_number ASC"));
-    pileQuery.addBindValue(stationId);
-    if (!pileQuery.exec()) {
-        return Result<QJsonObject>::fail(ErrorCode::StorageError,
-                                         QStringLiteral("充电桩查询失败"));
-    }
+    const StationDetailRecord &detail = response.data;
     QJsonArray piles;
     int idle = 0;
     int inUse = 0;
+    int reserved = 0;
     int fault = 0;
-    while (pileQuery.next()) {
-        const QString status = pileQuery.value(4).toString();
-        idle += status == QStringLiteral("idle");
-        inUse += status == QStringLiteral("in_use");
-        fault += status == QStringLiteral("fault");
+    for (const StationPileRecord &pile : detail.piles) {
+        idle += pile.status == QStringLiteral("idle");
+        inUse += pile.status == QStringLiteral("in_use");
+        reserved += pile.status == QStringLiteral("reserved");
+        fault += pile.status == QStringLiteral("fault");
         piles.append(QJsonObject {
-            {QStringLiteral("pile_id"), pileQuery.value(0).toLongLong()},
-            {QStringLiteral("pile_number"), pileQuery.value(1).toString()},
-            {QStringLiteral("pile_type"), pileQuery.value(2).toString()},
-            {QStringLiteral("power_kw"), pileQuery.value(3).toDouble()},
-            {QStringLiteral("status"), status}
+            {QStringLiteral("pile_id"), pile.pileId},
+            {QStringLiteral("pile_number"), pile.pileNumber},
+            {QStringLiteral("pile_type"), pile.pileType},
+            {QStringLiteral("power_kw"), pile.powerKw},
+            {QStringLiteral("status"), pile.status}
         });
     }
-    const int total = piles.size();
-    const double onlineRate = total > 0 ? (idle + inUse) * 100.0 / total : 0.0;
+    QJsonObject station {
+        {QStringLiteral("station_id"), detail.station.stationId},
+        {QStringLiteral("station_name"), detail.station.stationName},
+        {QStringLiteral("address"), detail.station.address},
+        {QStringLiteral("price_per_kwh"), detail.station.pricePerKwh}
+    };
     return Result<QJsonObject>::ok(QJsonObject {
         {QStringLiteral("station"), station},
         {QStringLiteral("piles"), piles},
         {QStringLiteral("stats"), QJsonObject {
-             {QStringLiteral("total"), total},
-             {QStringLiteral("idle"), idle},
-             {QStringLiteral("in_use"), inUse},
-             {QStringLiteral("fault"), fault},
-             {QStringLiteral("online_rate"), onlineRate}
-         }}
+            {QStringLiteral("total"), detail.station.totalPiles},
+            {QStringLiteral("idle"), idle},
+            {QStringLiteral("in_use"), inUse},
+            {QStringLiteral("reserved"), reserved},
+            {QStringLiteral("fault"), fault},
+            {QStringLiteral("online_rate"), onlineRate(detail) * 100.0}
+        }}
     });
+}
+
+bool StationService::isValidCoordinate(double longitude, double latitude)
+{
+    return qIsFinite(longitude) && qIsFinite(latitude)
+        && longitude >= -180.0 && longitude <= 180.0
+        && latitude >= -90.0 && latitude <= 90.0;
+}
+
+double StationService::haversineKm(double firstLongitude, double firstLatitude,
+                                   double secondLongitude, double secondLatitude)
+{
+    constexpr double earthRadiusKm = 6371.0;
+    const double lat1 = qDegreesToRadians(firstLatitude);
+    const double lat2 = qDegreesToRadians(secondLatitude);
+    const double deltaLat = lat2 - lat1;
+    const double deltaLon = qDegreesToRadians(secondLongitude - firstLongitude);
+    const double sinLat = qSin(deltaLat / 2.0);
+    const double sinLon = qSin(deltaLon / 2.0);
+    const double a = sinLat * sinLat + qCos(lat1) * qCos(lat2) * sinLon * sinLon;
+    const double clamped = qBound(0.0, a, 1.0);
+    return earthRadiusKm * 2.0 * qAtan2(qSqrt(clamped), qSqrt(1.0 - clamped));
+}
+
+double StationService::onlineRate(const StationDetailRecord &detail)
+{
+    if (detail.station.totalPiles <= 0) {
+        return 0.0;
+    }
+    int online = 0;
+    for (const StationPileRecord &pile : detail.piles) {
+        if (pile.status == QStringLiteral("idle")
+            || pile.status == QStringLiteral("reserved")
+            || pile.status == QStringLiteral("in_use")) {
+            ++online;
+        }
+    }
+    return static_cast<double>(online) / detail.station.totalPiles;
+}
+
+Result<QVector<StationListItem>> StationService::listStations(
+    QSqlDatabase &database, std::optional<double> longitude,
+    std::optional<double> latitude) const
+{
+    if (longitude.has_value() != latitude.has_value()) {
+        return Result<QVector<StationListItem>>::fail(
+            ErrorCode::InvalidInput, QStringLiteral("经纬度必须同时提供"));
+    }
+    if (longitude.has_value() && !isValidCoordinate(*longitude, *latitude)) {
+        return Result<QVector<StationListItem>>::fail(
+            ErrorCode::InvalidInput, QStringLiteral("经纬度超出有效范围"));
+    }
+
+    const auto records = repository_.listStations(database);
+    if (!records.success) {
+        return Result<QVector<StationListItem>>::fail(records.code, records.message);
+    }
+
+    QVector<StationListItem> items;
+    items.reserve(records.data.size());
+    for (const StationRecord &station : records.data) {
+        StationListItem item;
+        item.station = station;
+        if (longitude.has_value() && station.hasLocation) {
+            item.distanceKm = haversineKm(*longitude, *latitude,
+                                          station.longitude, station.latitude);
+        }
+        items.append(item);
+    }
+    std::sort(items.begin(), items.end(), [](const StationListItem &left,
+                                             const StationListItem &right) {
+        if (left.distanceKm.has_value() != right.distanceKm.has_value()) {
+            return left.distanceKm.has_value();
+        }
+        if (left.distanceKm.has_value()
+            && !qFuzzyCompare(*left.distanceKm + 1.0, *right.distanceKm + 1.0)) {
+            return *left.distanceKm < *right.distanceKm;
+        }
+        return left.station.stationId < right.station.stationId;
+    });
+    return Result<QVector<StationListItem>>::ok(items);
+}
+
+Result<StationDetailRecord> StationService::stationDetail(
+    QSqlDatabase &database, qint64 stationId) const
+{
+    if (stationId <= 0) {
+        return Result<StationDetailRecord>::fail(
+            ErrorCode::InvalidInput, QStringLiteral("站点编号无效"));
+    }
+    const auto detail = repository_.findDetail(database, stationId);
+    if (!detail.success) {
+        return Result<StationDetailRecord>::fail(detail.code, detail.message);
+    }
+    if (!detail.data.has_value()) {
+        return Result<StationDetailRecord>::fail(
+            ErrorCode::NotFound, QStringLiteral("充电站不存在"));
+    }
+    return Result<StationDetailRecord>::ok(detail.data.value());
 }
 
 } // namespace ev

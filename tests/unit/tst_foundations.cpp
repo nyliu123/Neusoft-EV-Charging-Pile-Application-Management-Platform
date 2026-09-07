@@ -1,3 +1,4 @@
+#include "adapters/map_api_adapter.h"
 #include "common/password_hasher.h"
 #include "common/phone_validator.h"
 #include "common/protocol.h"
@@ -40,6 +41,8 @@ private slots:
     void userProfileOperationsStayConsistent();
     void stationSearchSortsAndReportsPileStats();
     void sessionLifecycle();
+    void stationQueriesSortByDistanceAndPreserveStatus();
+    void mapAdapterValidatesInputsAndUsesTeachingFallback();
 };
 
 void FoundationTests::frameRoundTrip()
@@ -458,6 +461,62 @@ void FoundationTests::sessionLifecycle()
     QCOMPARE(sessions.removeAll({QStringLiteral("session-c"),
                                  QStringLiteral("does-not-exist")}), 1);
     QCOMPARE(sessions.activeSessionCount(), 0);
+}
+
+void FoundationTests::stationQueriesSortByDistanceAndPreserveStatus()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ev::DatabaseManager manager(directory.filePath(QStringLiteral("stations.sqlite3")));
+    auto openResult = manager.openForCurrentThread();
+    QVERIFY2(openResult.success, qPrintable(openResult.message));
+    auto migrationResult = manager.migrate(openResult.data);
+    QVERIFY2(migrationResult.success, qPrintable(migrationResult.message));
+
+    const ev::StationService service;
+    const auto unsorted = service.listStations(openResult.data);
+    QVERIFY2(unsorted.success, qPrintable(unsorted.message));
+    QCOMPARE(unsorted.data.size(), 3);
+    QVERIFY(!unsorted.data.first().distanceKm.has_value());
+
+    const auto sorted = service.listStations(openResult.data, 121.509605, 38.863650);
+    QVERIFY2(sorted.success, qPrintable(sorted.message));
+    QCOMPARE(sorted.data.first().station.stationId, 1);
+    QVERIFY(sorted.data.first().distanceKm.has_value());
+    QVERIFY(*sorted.data.first().distanceKm < 0.001);
+    QCOMPARE(sorted.data.first().station.totalPiles, 4);
+    QCOMPARE(sorted.data.first().station.idlePiles, 2);
+
+    const auto detail = service.stationDetail(openResult.data, 1);
+    QVERIFY2(detail.success, qPrintable(detail.message));
+    QCOMPARE(detail.data.piles.size(), 4);
+    QCOMPARE(detail.data.piles.first().pileNumber, QStringLiteral("A-01"));
+    QVERIFY(qAbs(ev::StationService::onlineRate(detail.data) - 0.75) < 0.000001);
+    const auto reservedDetail = service.stationDetail(openResult.data, 2);
+    QVERIFY2(reservedDetail.success, qPrintable(reservedDetail.message));
+    QVERIFY(qAbs(ev::StationService::onlineRate(reservedDetail.data) - 0.75) < 0.000001);
+    QVERIFY(!service.stationDetail(openResult.data, 0).success);
+    QVERIFY(!service.listStations(openResult.data, 121.5, std::nullopt).success);
+}
+
+void FoundationTests::mapAdapterValidatesInputsAndUsesTeachingFallback()
+{
+    ev::MapApiAdapter adapter;
+
+    bool callbackCalled = false;
+    adapter.geocode(QStringLiteral("大连软件园"), [&](const auto &result) {
+        callbackCalled = true;
+        QVERIFY2(result.success, qPrintable(result.message));
+        QCOMPARE(result.data.source, QStringLiteral("服务端离线教学坐标"));
+        QVERIFY(qAbs(result.data.longitude - 121.509605) < 0.000001);
+        QVERIFY(qAbs(result.data.latitude - 38.863650) < 0.000001);
+    });
+    QVERIFY(callbackCalled);
+
+    adapter.geocode(QStringLiteral("  "), [](const auto &result) {
+        QVERIFY(!result.success);
+        QCOMPARE(result.code, ev::ErrorCode::InvalidInput);
+    });
 }
 
 QTEST_APPLESS_MAIN(FoundationTests)
