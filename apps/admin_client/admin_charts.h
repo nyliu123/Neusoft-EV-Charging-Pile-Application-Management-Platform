@@ -16,7 +16,7 @@ class StatCard final : public QFrame {
     Q_OBJECT
 
 public:
-    explicit StatCard(const QString &caption, const QColor &accent,
+    explicit StatCard(const QString &caption, const QString &tone,
                       QWidget *parent = nullptr);
 
     void setCaption(const QString &caption);

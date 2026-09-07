@@ -5,7 +5,6 @@
 #include "admin_pile_page.h"
 
 #include <QApplication>
-#include <QFont>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
@@ -40,15 +39,10 @@ void AdminMainWindow::setupUi()
 
     // Left navigation.
     nav_ = new QListWidget(central);
+    nav_->setObjectName(QStringLiteral("sidebarNavigation"));
     nav_->setFixedWidth(190);
     nav_->addItem(QStringLiteral("经营看板"));
     nav_->addItem(QStringLiteral("充电桩管理"));
-    nav_->setStyleSheet(QStringLiteral(
-        "QListWidget { background: #1e2a38; color: #cfd8dc; border: none;"
-        " outline: none; font-size: 14px; }"
-        "QListWidget::item { height: 52px; padding-left: 20px; }"
-        "QListWidget::item:hover { background: #263649; }"
-        "QListWidget::item:selected { background: #1976d2; color: white; }"));
     bodyLayout->addWidget(nav_);
 
     // Right side: header + page stack.
@@ -58,20 +52,13 @@ void AdminMainWindow::setupUi()
 
     auto *headerLayout = new QHBoxLayout();
     auto *headerTitle = new QLabel(QStringLiteral("运营管理端"), central);
-    QFont headerFont = headerTitle->font();
-    headerFont.setPointSize(14);
-    headerFont.setBold(true);
-    headerTitle->setFont(headerFont);
-    headerTitle->setStyleSheet(QStringLiteral("color: #263238;"));
+    headerTitle->setProperty("uiClass", "sectionTitle");
     headerLayout->addWidget(headerTitle);
     headerLayout->addStretch();
 
     logoutButton_ = new QPushButton(QStringLiteral("退出登录"), central);
+    logoutButton_->setProperty("uiClass", "danger");
     logoutButton_->setCursor(Qt::PointingHandCursor);
-    logoutButton_->setStyleSheet(QStringLiteral(
-        "QPushButton { background: white; color: #c62828; border: 1px solid #e0e6ed;"
-        " border-radius: 4px; padding: 5px 14px; }"
-        "QPushButton:hover { background: #ffebee; }"));
     headerLayout->addWidget(logoutButton_);
     rightLayout->addLayout(headerLayout);
 

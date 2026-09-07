@@ -5,11 +5,18 @@
 #include "common/protocol.h"
 #include "services/admin_auth_service.h"
 #include "services/admin_seeder.h"
+#include "services/station_service.h"
 #include "services/user_service.h"
 
 #include <QDebug>
 #include <QDateTime>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QJsonObject>
+#include <QMimeDatabase>
+#include <QPointer>
+#include <QSaveFile>
 #include <QTcpSocket>
 #include <QUuid>
 #include <utility>
@@ -17,7 +24,9 @@
 namespace ev {
 
 ServerApplication::ServerApplication(QString databasePath, QObject *parent)
-    : QObject(parent), databaseManager_(std::move(databasePath))
+    : QObject(parent),
+      databaseManager_(databasePath),
+      avatarDirectory_(QFileInfo(databasePath).absoluteDir().filePath(QStringLiteral("avatars")))
 {
     connect(&tcpServer_, &QTcpServer::newConnection,
             this, &ServerApplication::acceptPendingConnections);
@@ -145,6 +154,10 @@ void ServerApplication::processFrame(QTcpSocket *socket, const Frame &frame)
         processLogout(socket, frame);
         return;
     }
+    if (msgType == MessageType::UserRequest) {
+        processUserRequest(socket, frame);
+        return;
+    }
     if (msgType == MessageType::AdminQuery) {
         processAdminQuery(socket, frame);
         return;
@@ -155,6 +168,190 @@ void ServerApplication::processFrame(QTcpSocket *socket, const Frame &frame)
     }
 
     sendError(socket, requestId, QStringLiteral("message type is not implemented"));
+}
+
+void ServerApplication::processUserRequest(QTcpSocket *socket, const Frame &frame)
+{
+    const QString requestId = frame.payload.value(QStringLiteral("request_id")).toString();
+    const auto requestedVersion = static_cast<quint32>(
+        frame.payload.value(QStringLiteral("protocol_version")).toInteger());
+    if (requestedVersion != ProtocolVersion) {
+        sendUserResponse(socket, requestId, false, QStringLiteral("PROTOCOL_ERROR"),
+                         QStringLiteral("unsupported protocol version"));
+        return;
+    }
+
+    const QJsonObject data = frame.payload.value(QStringLiteral("data")).toObject();
+    const QString sessionId = data.value(QStringLiteral("session_id")).toString();
+    if (!connectionSessions_.value(socket).contains(sessionId)) {
+        sendUserResponse(socket, requestId, false, QStringLiteral("UNAUTHORIZED"),
+                         QStringLiteral("登录已过期，请重新登录"));
+        return;
+    }
+    const qint64 userId = sessionManager_.authenticatedUserId(sessionId);
+    if (userId <= 0) {
+        connectionSessions_[socket].remove(sessionId);
+        sendUserResponse(socket, requestId, false, QStringLiteral("UNAUTHORIZED"),
+                         QStringLiteral("登录已过期，请重新登录"));
+        return;
+    }
+
+    const QString type = data.value(QStringLiteral("type")).toString();
+    const QJsonObject params = data.value(QStringLiteral("params")).toObject();
+    const UserService service;
+
+    if (type == QStringLiteral("geocode")) {
+        const QString address = params.value(QStringLiteral("address")).toString();
+        QPointer<QTcpSocket> guardedSocket(socket);
+        mapApi_.geocode(address,
+                        [this, guardedSocket, requestId](const Result<QPointF> &result) {
+            if (!guardedSocket) {
+                return;
+            }
+            sendUserResponse(guardedSocket, requestId, result.success,
+                             errorCodeName(result.code),
+                             result.success ? QStringLiteral("位置解析成功") : result.message,
+                             result.success
+                                 ? QJsonObject {
+                                     {QStringLiteral("longitude"), result.data.x()},
+                                     {QStringLiteral("latitude"), result.data.y()}
+                                   }
+                                 : QJsonObject {});
+        });
+        return;
+    }
+
+    const StationService stationService;
+    if (type == QStringLiteral("query_stations")) {
+        const bool hasLocation = params.contains(QStringLiteral("longitude"))
+            && params.contains(QStringLiteral("latitude"));
+        const auto result = stationService.queryStations(
+            mainDatabase_, hasLocation,
+            params.value(QStringLiteral("longitude")).toDouble(),
+            params.value(QStringLiteral("latitude")).toDouble());
+        sendUserResponse(socket, requestId, result.success, errorCodeName(result.code),
+                         result.success ? QStringLiteral("充电站查询成功") : result.message,
+                         result.success ? result.data : QJsonObject {});
+        return;
+    }
+
+    if (type == QStringLiteral("query_piles")) {
+        const auto result = stationService.queryPiles(
+            mainDatabase_, params.value(QStringLiteral("station_id")).toInteger());
+        sendUserResponse(socket, requestId, result.success, errorCodeName(result.code),
+                         result.success ? QStringLiteral("充电桩查询成功") : result.message,
+                         result.success ? result.data : QJsonObject {});
+        return;
+    }
+
+    if (type == QStringLiteral("user_info")) {
+        const auto result = service.queryUserInfo(mainDatabase_, userId);
+        if (!result.success) {
+            if (result.code == ErrorCode::AccountFrozen) {
+                sessionManager_.remove(sessionId);
+                connectionSessions_[socket].remove(sessionId);
+            }
+            sendUserResponse(socket, requestId, false, errorCodeName(result.code), result.message);
+            return;
+        }
+        const UserRecord &user = result.data;
+        sendUserResponse(socket, requestId, true, QStringLiteral("OK"),
+                         QStringLiteral("个人信息已更新"), QJsonObject {
+            {QStringLiteral("user_id"), user.userId},
+            {QStringLiteral("nickname"), user.nickname},
+            {QStringLiteral("avatar_path"), user.avatarPath},
+            {QStringLiteral("balance_cent"), user.balanceCent}
+        });
+        return;
+    }
+
+    if (type == QStringLiteral("update_nickname")) {
+        const QString nickname = params.value(QStringLiteral("nickname")).toString().trimmed();
+        const auto result = service.updateNickname(mainDatabase_, userId, nickname);
+        if (result.code == ErrorCode::AccountFrozen) {
+            sessionManager_.remove(sessionId);
+            connectionSessions_[socket].remove(sessionId);
+        }
+        sendUserResponse(socket, requestId, result.success, errorCodeName(result.code),
+                         result.success ? QStringLiteral("昵称修改成功") : result.message,
+                         result.success ? QJsonObject {{QStringLiteral("nickname"), nickname}}
+                                        : QJsonObject {});
+        return;
+    }
+
+    if (type == QStringLiteral("update_avatar")) {
+        const QByteArray bytes = QByteArray::fromBase64(
+            params.value(QStringLiteral("file_data")).toString().toLatin1());
+        const QString mimeType = QMimeDatabase().mimeTypeForData(bytes).name();
+        if (bytes.size() < 4 || bytes.size() > 2 * 1024 * 1024
+            || mimeType != QStringLiteral("image/jpeg")) {
+            sendUserResponse(socket, requestId, false, QStringLiteral("INVALID_INPUT"),
+                             QStringLiteral("头像必须是有效的JPG图片，且不超过2MB"));
+            return;
+        }
+        QDir directory(avatarDirectory_);
+        if (!directory.exists() && !directory.mkpath(QStringLiteral("."))) {
+            sendUserResponse(socket, requestId, false, QStringLiteral("STORAGE_ERROR"),
+                             QStringLiteral("头像保存目录创建失败"));
+            return;
+        }
+        const QString avatarPath = directory.absoluteFilePath(
+            QStringLiteral("%1_%2.jpg").arg(userId).arg(QDateTime::currentMSecsSinceEpoch()));
+        QSaveFile file(avatarPath);
+        if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size()
+            || !file.commit()) {
+            sendUserResponse(socket, requestId, false, QStringLiteral("STORAGE_ERROR"),
+                             QStringLiteral("头像上传失败"));
+            return;
+        }
+        const auto result = service.updateAvatarPath(mainDatabase_, userId, avatarPath);
+        if (!result.success) {
+            QFile::remove(avatarPath);
+            if (result.code == ErrorCode::AccountFrozen) {
+                sessionManager_.remove(sessionId);
+                connectionSessions_[socket].remove(sessionId);
+            }
+            sendUserResponse(socket, requestId, false, errorCodeName(result.code), result.message);
+            return;
+        }
+        sendUserResponse(socket, requestId, true, QStringLiteral("OK"),
+                         QStringLiteral("头像更换成功"),
+                         QJsonObject {{QStringLiteral("avatar_path"), avatarPath}});
+        return;
+    }
+
+    if (type == QStringLiteral("recharge")) {
+        const qint64 amountCent = params.value(QStringLiteral("amount_cent")).toInteger();
+        const auto result = service.recharge(mainDatabase_, userId, amountCent);
+        if (result.code == ErrorCode::AccountFrozen) {
+            sessionManager_.remove(sessionId);
+            connectionSessions_[socket].remove(sessionId);
+        }
+        sendUserResponse(socket, requestId, result.success, errorCodeName(result.code),
+                         result.success ? QStringLiteral("充值成功") : result.message,
+                         result.success
+                             ? QJsonObject {{QStringLiteral("balance_cent"), result.data}}
+                             : QJsonObject {});
+        return;
+    }
+
+    sendUserResponse(socket, requestId, false, QStringLiteral("INVALID_INPUT"),
+                     QStringLiteral("不支持的用户操作"));
+}
+
+void ServerApplication::sendUserResponse(QTcpSocket *socket, const QString &requestId,
+                                         bool success, const QString &code,
+                                         const QString &message, const QJsonObject &result)
+{
+    const QJsonObject response {
+        {QStringLiteral("protocol_version"), static_cast<qint64>(ProtocolVersion)},
+        {QStringLiteral("request_id"), requestId},
+        {QStringLiteral("success"), success},
+        {QStringLiteral("code"), code},
+        {QStringLiteral("message"), message},
+        {QStringLiteral("data"), QJsonObject {{QStringLiteral("result"), result}}}
+    };
+    socket->write(FrameCodec::encode(static_cast<quint32>(MessageType::UserResponse), response));
 }
 
 void ServerApplication::processLogin(QTcpSocket *socket, const Frame &frame)

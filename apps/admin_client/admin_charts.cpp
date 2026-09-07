@@ -31,36 +31,29 @@ double niceMax(double value)
 
 } // namespace
 
-StatCard::StatCard(const QString &caption, const QColor &accent, QWidget *parent)
+StatCard::StatCard(const QString &caption, const QString &tone, QWidget *parent)
     : QFrame(parent)
 {
-    setStyleSheet(QStringLiteral(
-        "QFrame { background: white; border: 1px solid #e0e6ed; border-radius: 8px; }"));
+    setProperty("uiClass", "statCard");
 
     auto *layout = new QHBoxLayout(this);
     layout->setContentsMargins(16, 14, 16, 14);
     layout->setSpacing(12);
 
     auto *bar = new QFrame(this);
+    bar->setObjectName(QStringLiteral("statAccent"));
+    bar->setProperty("tone", tone);
     bar->setFixedWidth(4);
-    bar->setStyleSheet(QStringLiteral(
-        "background: %1; border: none; border-radius: 2px;").arg(accent.name()));
     layout->addWidget(bar);
 
     auto *textLayout = new QVBoxLayout();
     textLayout->setSpacing(6);
 
     captionLabel_ = new QLabel(caption, this);
-    captionLabel_->setStyleSheet(QStringLiteral(
-        "color: #757575; font-size: 13px; border: none; background: transparent;"));
+    captionLabel_->setProperty("uiClass", "muted");
 
     valueLabel_ = new QLabel(QStringLiteral("--"), this);
-    QFont valueFont = valueLabel_->font();
-    valueFont.setPointSize(20);
-    valueFont.setBold(true);
-    valueLabel_->setFont(valueFont);
-    valueLabel_->setStyleSheet(QStringLiteral(
-        "color: #212121; border: none; background: transparent;"));
+    valueLabel_->setProperty("uiClass", "statValue");
 
     textLayout->addWidget(captionLabel_);
     textLayout->addWidget(valueLabel_);

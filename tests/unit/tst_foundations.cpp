@@ -7,9 +7,11 @@
 #include "services/admin_seeder.h"
 #include "services/fee_calculator.h"
 #include "services/session_manager.h"
+#include "services/station_service.h"
 #include "services/user_service.h"
 
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QTemporaryDir>
@@ -35,6 +37,8 @@ private slots:
     void adminLoginSucceedsWithDefaultSeed();
     void existingUserLoginPaths();
     void automaticRegistrationCreatesDefaultsAndHandlesConflict();
+    void userProfileOperationsStayConsistent();
+    void stationSearchSortsAndReportsPileStats();
     void sessionLifecycle();
 };
 
@@ -120,6 +124,36 @@ void FoundationTests::databaseCreatesCoreSchema()
     QVERIFY(query.exec(QStringLiteral("PRAGMA foreign_keys")));
     QVERIFY(query.next());
     QCOMPARE(query.value(0).toInt(), 1);
+}
+
+void FoundationTests::stationSearchSortsAndReportsPileStats()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ev::DatabaseManager manager(directory.filePath(QStringLiteral("stations.sqlite3")));
+    auto openResult = manager.openForCurrentThread();
+    QVERIFY2(openResult.success, qPrintable(openResult.message));
+    QVERIFY(manager.migrate(openResult.data).success);
+
+    const ev::StationService service;
+    const auto stationsResult = service.queryStations(
+        openResult.data, true, 121.509605, 38.863650);
+    QVERIFY2(stationsResult.success, qPrintable(stationsResult.message));
+    const QJsonArray stations = stationsResult.data.value(QStringLiteral("stations")).toArray();
+    QCOMPARE(stations.size(), 3);
+    QCOMPARE(stations.first().toObject().value(QStringLiteral("station_id")).toInteger(), 1);
+    QCOMPARE(stations.first().toObject().value(QStringLiteral("distance_km")).toDouble(), 0.0);
+    QCOMPARE(stations.first().toObject().value(QStringLiteral("total_piles")).toInt(), 4);
+    QCOMPARE(stations.first().toObject().value(QStringLiteral("idle_count")).toInt(), 2);
+
+    const auto detailResult = service.queryPiles(openResult.data, 1);
+    QVERIFY2(detailResult.success, qPrintable(detailResult.message));
+    QCOMPARE(detailResult.data.value(QStringLiteral("piles")).toArray().size(), 4);
+    const QJsonObject stats = detailResult.data.value(QStringLiteral("stats")).toObject();
+    QCOMPARE(stats.value(QStringLiteral("idle")).toInt(), 2);
+    QCOMPARE(stats.value(QStringLiteral("in_use")).toInt(), 1);
+    QCOMPARE(stats.value(QStringLiteral("fault")).toInt(), 1);
+    QCOMPARE(stats.value(QStringLiteral("online_rate")).toDouble(), 75.0);
 }
 
 void FoundationTests::phoneValidation_data()
@@ -217,7 +251,8 @@ void FoundationTests::adminLoginSucceedsWithDefaultSeed()
     // Seed the default admin using AdminSeeder.
     auto seedResult = ev::AdminSeeder::seedIfNeeded(openResult.data);
     QVERIFY(seedResult.success);
-    QCOMPARE(seedResult.data, 1);
+    // 002_seed_admin.sql already creates the default account during migration.
+    QCOMPARE(seedResult.data, 0);
 
     // Second seed should be a no-op.
     auto seedResult2 = ev::AdminSeeder::seedIfNeeded(openResult.data);
@@ -260,7 +295,7 @@ void FoundationTests::existingUserLoginPaths()
     insert.prepare(QStringLiteral(
         "INSERT INTO users (phone, nickname, avatar_path, balance, status) "
         "VALUES (?, ?, ?, ?, ?)"));
-    insert.addBindValue(QStringLiteral("13800138000"));
+    insert.addBindValue(QStringLiteral("13100138000"));
     insert.addBindValue(QStringLiteral("测试用户"));
     insert.addBindValue(QStringLiteral("/tmp/avatar.png"));
     insert.addBindValue(12.34);
@@ -269,7 +304,7 @@ void FoundationTests::existingUserLoginPaths()
 
     insert.prepare(QStringLiteral(
         "INSERT INTO users (phone, nickname, balance, status) VALUES (?, ?, ?, ?)"));
-    insert.addBindValue(QStringLiteral("13900139000"));
+    insert.addBindValue(QStringLiteral("13200139000"));
     insert.addBindValue(QStringLiteral("冻结用户"));
     insert.addBindValue(0.0);
     insert.addBindValue(QStringLiteral("frozen"));
@@ -277,7 +312,7 @@ void FoundationTests::existingUserLoginPaths()
 
     const ev::UserService service;
     const auto success = service.loginExistingUser(openResult.data,
-                                                   QStringLiteral("13800138000"));
+                                                   QStringLiteral("13100138000"));
     QVERIFY2(success.success, qPrintable(success.message));
     QVERIFY(success.data.userId > 0);
     QCOMPARE(success.data.nickname, QStringLiteral("测试用户"));
@@ -285,13 +320,13 @@ void FoundationTests::existingUserLoginPaths()
     QVERIFY(!success.data.sessionId.isEmpty());
 
     const auto frozen = service.loginExistingUser(openResult.data,
-                                                  QStringLiteral("13900139000"));
+                                                  QStringLiteral("13200139000"));
     QVERIFY(!frozen.success);
     QCOMPARE(frozen.code, ev::ErrorCode::AccountFrozen);
     QCOMPARE(frozen.message, QStringLiteral("账号已被冻结，请联系管理员"));
 
     const auto missing = service.loginExistingUser(openResult.data,
-                                                   QStringLiteral("13700137000"));
+                                                   QStringLiteral("13300137000"));
     QVERIFY(!missing.success);
     QCOMPARE(missing.code, ev::ErrorCode::NotFound);
     QCOMPARE(missing.message, QStringLiteral("user_not_found"));
@@ -340,6 +375,63 @@ void FoundationTests::automaticRegistrationCreatesDefaultsAndHandlesConflict()
         "SELECT COUNT(*) FROM users WHERE phone = '13612345678'")));
     QVERIFY(query.next());
     QCOMPARE(query.value(0).toInt(), 1);
+}
+
+void FoundationTests::userProfileOperationsStayConsistent()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+
+    ev::DatabaseManager manager(directory.filePath(QStringLiteral("profile.sqlite3")));
+    auto openResult = manager.openForCurrentThread();
+    QVERIFY2(openResult.success, qPrintable(openResult.message));
+    auto migrationResult = manager.migrate(openResult.data);
+    QVERIFY2(migrationResult.success, qPrintable(migrationResult.message));
+
+    const ev::UserService service;
+    const auto created = service.registerAutomatically(openResult.data,
+                                                       QStringLiteral("13512345678"));
+    QVERIFY2(created.success, qPrintable(created.message));
+    const qint64 userId = created.data.userId;
+
+    const auto initial = service.queryUserInfo(openResult.data, userId);
+    QVERIFY(initial.success);
+    QCOMPARE(initial.data.nickname, QStringLiteral("用户5678"));
+    QCOMPARE(initial.data.balanceCent, 0);
+
+    const auto invalidNickname = service.updateNickname(
+        openResult.data, userId, QStringLiteral("bad nickname"));
+    QVERIFY(!invalidNickname.success);
+    QCOMPARE(invalidNickname.code, ev::ErrorCode::InvalidInput);
+
+    const auto nickname = service.updateNickname(
+        openResult.data, userId, QStringLiteral("新昵称_01"));
+    QVERIFY2(nickname.success, qPrintable(nickname.message));
+    const auto avatar = service.updateAvatarPath(
+        openResult.data, userId, QStringLiteral("/tmp/avatar-new.jpg"));
+    QVERIFY2(avatar.success, qPrintable(avatar.message));
+
+    QVERIFY(!service.recharge(openResult.data, userId, 0).success);
+    const auto firstRecharge = service.recharge(openResult.data, userId, 1);
+    QVERIFY2(firstRecharge.success, qPrintable(firstRecharge.message));
+    QCOMPARE(firstRecharge.data, 1);
+    const auto secondRecharge = service.recharge(openResult.data, userId, 12345);
+    QVERIFY2(secondRecharge.success, qPrintable(secondRecharge.message));
+    QCOMPARE(secondRecharge.data, 12346);
+
+    const auto updated = service.queryUserInfo(openResult.data, userId);
+    QVERIFY(updated.success);
+    QCOMPARE(updated.data.nickname, QStringLiteral("新昵称_01"));
+    QCOMPARE(updated.data.avatarPath, QStringLiteral("/tmp/avatar-new.jpg"));
+    QCOMPARE(updated.data.balanceCent, 12346);
+
+    QSqlQuery freeze(openResult.data);
+    freeze.prepare(QStringLiteral("UPDATE users SET status = 'frozen' WHERE user_id = ?"));
+    freeze.addBindValue(userId);
+    QVERIFY(freeze.exec());
+    const auto frozen = service.queryUserInfo(openResult.data, userId);
+    QVERIFY(!frozen.success);
+    QCOMPARE(frozen.code, ev::ErrorCode::AccountFrozen);
 }
 
 void FoundationTests::sessionLifecycle()

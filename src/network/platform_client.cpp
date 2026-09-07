@@ -155,6 +155,16 @@ void PlatformClient::logout()
     sessionResponseTimer_.start();
 }
 
+void PlatformClient::invalidateSession(const QString &message)
+{
+    if (sessionId_.isEmpty()) {
+        return;
+    }
+    clearUserSession();
+    emit sessionExpired(message.isEmpty()
+        ? QStringLiteral("登录已过期，请重新登录") : message);
+}
+
 void PlatformClient::setState(State state, const QString &detail)
 {
     state_ = state;

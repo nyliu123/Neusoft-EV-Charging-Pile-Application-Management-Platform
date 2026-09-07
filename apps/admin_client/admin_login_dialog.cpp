@@ -4,8 +4,6 @@
 #include "common/protocol.h"
 #include "network/platform_client.h"
 
-#include <QDialogButtonBox>
-#include <QFont>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -19,6 +17,7 @@ namespace ev {
 AdminLoginDialog::AdminLoginDialog(PlatformClient *client, QWidget *parent)
     : QDialog(parent), client_(client)
 {
+    setObjectName(QStringLiteral("adminLoginDialog"));
     setWindowTitle(QStringLiteral("管理员登录"));
     setFixedSize(380, 280);
     setModal(true);
@@ -29,16 +28,13 @@ AdminLoginDialog::AdminLoginDialog(PlatformClient *client, QWidget *parent)
 
     // Title.
     titleLabel_ = new QLabel(QStringLiteral("运营管理中心"), this);
-    QFont titleFont = titleLabel_->font();
-    titleFont.setPointSize(18);
-    titleFont.setBold(true);
-    titleLabel_->setFont(titleFont);
+    titleLabel_->setProperty("uiClass", "dialogTitle");
     titleLabel_->setAlignment(Qt::AlignCenter);
     mainLayout->addWidget(titleLabel_);
 
     auto *subTitle = new QLabel(QStringLiteral("电动汽车充电桩管理平台"), this);
     subTitle->setAlignment(Qt::AlignCenter);
-    subTitle->setStyleSheet(QStringLiteral("color: #888;"));
+    subTitle->setProperty("uiClass", "muted");
     mainLayout->addWidget(subTitle);
 
     mainLayout->addSpacing(8);
@@ -61,7 +57,7 @@ AdminLoginDialog::AdminLoginDialog(PlatformClient *client, QWidget *parent)
 
     // Error label.
     errorLabel_ = new QLabel(this);
-    errorLabel_->setStyleSheet(QStringLiteral("color: #e53935; font-size: 12px;"));
+    errorLabel_->setProperty("uiClass", "errorText");
     errorLabel_->setWordWrap(true);
     errorLabel_->setVisible(false);
     mainLayout->addWidget(errorLabel_);
@@ -70,21 +66,9 @@ AdminLoginDialog::AdminLoginDialog(PlatformClient *client, QWidget *parent)
 
     // Login button.
     loginButton_ = new QPushButton(QStringLiteral("登 录"), this);
+    loginButton_->setProperty("uiClass", "primary");
     loginButton_->setDefault(true);
     loginButton_->setMinimumHeight(36);
-    loginButton_->setStyleSheet(QStringLiteral(
-        "QPushButton {"
-        "    background-color: #1976d2;"
-        "    color: white;"
-        "    border: none;"
-        "    border-radius: 4px;"
-        "    font-size: 14px;"
-        "    font-weight: bold;"
-        "}"
-        "QPushButton:hover { background-color: #1565c0; }"
-        "QPushButton:pressed { background-color: #0d47a1; }"
-        "QPushButton:disabled { background-color: #90caf9; }"
-    ));
     mainLayout->addWidget(loginButton_);
 
     // Connections.

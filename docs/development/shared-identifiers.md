@@ -16,12 +16,13 @@
 | `ev::PlatformClient`                      | 通信   | `src/network/platform_client.h`         | 客户端连接、健康检查与重连、会话管理           |
 | `ev::FeeCalculator`                       | 充电   | `src/services/fee_calculator.h`         | 按订单快照计算整数分费用                 |
 | `ev::DatabaseManager`                     | 数据   | `src/data/database_manager.h`           | 每线程 SQLite 连接与迁移入口           |
-| `ev::UserRepository`                      | 用户数据 | `src/data/user_repository.h`            | 按手机号读取已有用户记录                 |
-| `ev::UserService`                         | 用户服务 | `src/services/user_service.h`           | UML-011 已有用户登录与 UML-012 自动注册 |
+| `ev::UserRepository`                      | 用户数据 | `src/data/user_repository.h`            | 用户查询、资料更新和余额事务             |
+| `ev::UserService`                         | 用户服务 | `src/services/user_service.h`           | UML-011～017 用户登录、注册与个人信息   |
 | `ev::SessionManager`                      | 用户服务 | `src/services/session_manager.h`        | UML-013 服务端内存会话、续期与清理        |
 | `ev::AdminInfo` / `ev::AdminAuthService`  | 认证   | `src/services/admin_auth_service.h`     | 管理员身份认证服务                    |
 | `ev::AdminSeeder`                         | 认证   | `src/services/admin_seeder.h`           | 默认管理员账号初始化                   |
 | `UserSessionState`                        | 用户端  | `apps/user_client/user_session_state.h` | 保存当前登录用户与会话标识                |
+| `ev::UserApiClient`                       | 用户端  | `apps/user_client/user_api_client.h`    | 关联用户请求与异步响应                  |
 | `ev::AdminSession`                        | 管理端  | `apps/admin_client/admin_session.h`     | 管理端登录会话信息                    |
 
 新增消息类型必须显式分配未使用编号，并同步更新客户端、服务端与协议测试；禁止依据枚举顺序隐式生成线上编号。
@@ -85,6 +86,21 @@
 - 用户名不存在与密码错误均返回 `UNAUTHORIZED`，避免用户枚举
 
 - `role` 字段：`admin` 表示管理员登录，不传或 `user` 表示普通用户登录
+
+## 用户信息协议（UserRequest=0x10 / UserResponse=0x11）
+
+用户登录后的个人信息业务复用一对消息类型，请求 `data` 统一为
+`{ type, params, session_id }`，响应统一为 `{ success, code, message, data: { result } }`。
+
+| type | params | result | 对应设计 |
+| ---- | ------ | ------ | -------- |
+| `user_info` | 无 | user_id / nickname / avatar_path / balance_cent | UML-014 |
+| `update_avatar` | file_data（Base64 JPG，最大2 MiB） | avatar_path | UML-015 |
+| `update_nickname` | nickname | nickname | UML-016 |
+| `recharge` | amount_cent（1～999999） | balance_cent | UML-017 |
+
+服务端根据 `session_id` 反查用户，不信任客户端传入的 `user_id`。账号冻结或会话
+失效时客户端立即清理本地会话并返回登录页。充值金额全链路使用整数分。
 
 ## 管理端数据协议（AdminQuery=0x60 / AdminAction=0x61 / AdminResponse=0x62）
 
@@ -153,4 +169,3 @@
 用户端与管理端联调请直接使用这批手机号。删除 sqlite 文件并重启服务端即可重置。
 
 **迁移编号占用：`003` 已被测试数据占用，组员新增迁移请从 `004` 开始。**
-

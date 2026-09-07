@@ -13,6 +13,7 @@ public:
 
     bool registerUserSession(const QString &sessionId, qint64 userId);
     bool validateAndTouch(const QString &sessionId);
+    qint64 authenticatedUserId(const QString &sessionId);
     bool remove(const QString &sessionId);
     int removeAll(const QSet<QString> &sessionIds);
     int removeByUserId(qint64 userId);

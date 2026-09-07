@@ -1,73 +1,54 @@
 #include "user_home_widget.h"
 
-#include "user_session_state.h"
+#include "user_info_widget.h"
+#include "station_search_widget.h"
 
-#include <QFileInfo>
-#include <QFont>
 #include <QLabel>
-#include <QPixmap>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QTimer>
+#include <QTabWidget>
+#include <QHBoxLayout>
 #include <QVBoxLayout>
 
-UserHomeWidget::UserHomeWidget(QWidget *parent)
+UserHomeWidget::UserHomeWidget(ev::UserApiClient *api, QWidget *parent)
     : QWidget(parent)
 {
     auto *layout = new QVBoxLayout(this);
 
     successMessage_ = new QLabel(this);
-    successMessage_->setStyleSheet(QStringLiteral(
-        "background: #e8f5e9; color: #1b5e20; padding: 8px;"));
+    successMessage_->setProperty("uiClass", "successBanner");
     successMessage_->hide();
     layout->addWidget(successMessage_);
 
-    avatarLabel_ = new QLabel(this);
-    avatarLabel_->setFixedSize(72, 72);
-    avatarLabel_->setAlignment(Qt::AlignCenter);
-    layout->addWidget(avatarLabel_, 0, Qt::AlignLeft);
-
-    nicknameLabel_ = new QLabel(this);
-    QFont nicknameFont = nicknameLabel_->font();
-    nicknameFont.setPointSize(18);
-    nicknameFont.setBold(true);
-    nicknameLabel_->setFont(nicknameFont);
-    layout->addWidget(nicknameLabel_);
-
-    balanceLabel_ = new QLabel(this);
-    layout->addWidget(balanceLabel_);
+    auto *toolbar = new QHBoxLayout;
+    toolbar->addStretch();
     logoutButton_ = new QPushButton(QStringLiteral("退出登录"), this);
-    layout->addWidget(logoutButton_, 0, Qt::AlignLeft);
+    logoutButton_->setProperty("uiClass", "danger");
+    toolbar->addWidget(logoutButton_);
+    layout->addLayout(toolbar);
     connect(logoutButton_, &QPushButton::clicked, this, [this] {
+        const auto answer = QMessageBox::question(this, QStringLiteral("退出登录"),
+            QStringLiteral("确定退出当前用户账号？"),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        if (answer != QMessageBox::Yes) {
+            return;
+        }
         setLogoutInProgress(true);
         emit logoutRequested();
     });
-    layout->addWidget(new QLabel(QStringLiteral("首页业务组件将在后续分支中接入。"), this));
-    layout->addStretch();
+    auto *tabs = new QTabWidget(this);
+    stationSearchWidget_ = new StationSearchWidget(api, tabs);
+    userInfoWidget_ = new UserInfoWidget(api, tabs);
+    tabs->addTab(stationSearchWidget_, QStringLiteral("找桩"));
+    tabs->addTab(userInfoWidget_, QStringLiteral("个人中心"));
+    layout->addWidget(tabs, 1);
 }
 
 void UserHomeWidget::refresh()
 {
-    const UserSessionState &session = UserSessionState::instance();
-    nicknameLabel_->setText(session.nickname().isEmpty()
-        ? QStringLiteral("充电用户") : session.nickname());
-    balanceLabel_->setText(QStringLiteral("钱包余额：¥%1")
-        .arg(static_cast<double>(session.balanceCent()) / 100.0, 0, 'f', 2));
-
-    const QString avatarPath = session.avatarPath();
-    QPixmap avatar;
-    if (!avatarPath.isEmpty() && QFileInfo::exists(avatarPath)) {
-        avatar.load(avatarPath);
-    }
-    if (avatar.isNull()) {
-        avatarLabel_->setText(QStringLiteral("默认头像"));
-        avatarLabel_->setStyleSheet(QStringLiteral(
-            "background: #d9d9d9; color: #555; border-radius: 36px;"));
-    } else {
-        avatarLabel_->setStyleSheet({});
-        avatarLabel_->setPixmap(avatar.scaled(avatarLabel_->size(),
-                                               Qt::KeepAspectRatioByExpanding,
-                                               Qt::SmoothTransformation));
-    }
+    stationSearchWidget_->refresh();
+    userInfoWidget_->refreshFromSession();
 }
 
 void UserHomeWidget::showWelcome(bool isNewUser)
