@@ -3,7 +3,9 @@
 #include "user_api_client.h"
 #include "client_ui/animated_combo_box.h"
 
+#include <QButtonGroup>
 #include <QComboBox>
+#include <QDesktopServices>
 #include <QHeaderView>
 #include <QHBoxLayout>
 #include <QJsonArray>
@@ -11,16 +13,34 @@
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QRadioButton>
 #include <QScrollArea>
 #include <QStackedWidget>
 #include <QTableWidget>
+#include <QUrl>
+#include <QUrlQuery>
 #include <QVBoxLayout>
+#include <QtMath>
 
 namespace {
 
 QString pileTypeText(const QString &type)
 {
     return type == QStringLiteral("fast") ? QStringLiteral("快充") : QStringLiteral("慢充");
+}
+
+double distanceKm(double fromLongitude, double fromLatitude,
+                  double toLongitude, double toLatitude)
+{
+    constexpr double earthRadiusKm = 6371.0;
+    const double latitudeDelta = qDegreesToRadians(toLatitude - fromLatitude);
+    const double longitudeDelta = qDegreesToRadians(toLongitude - fromLongitude);
+    const double fromLatitudeRadians = qDegreesToRadians(fromLatitude);
+    const double toLatitudeRadians = qDegreesToRadians(toLatitude);
+    const double a = qPow(qSin(latitudeDelta / 2.0), 2)
+        + qCos(fromLatitudeRadians) * qCos(toLatitudeRadians)
+            * qPow(qSin(longitudeDelta / 2.0), 2);
+    return earthRadiusKm * 2.0 * qAtan2(qSqrt(a), qSqrt(1.0 - a));
 }
 
 } // namespace
@@ -87,6 +107,30 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
     detailMeta_->setProperty("uiClass", "muted");
     detailMeta_->setWordWrap(true);
     detailLayout->addWidget(detailMeta_);
+
+    auto *navigationModes = new QHBoxLayout;
+    navigationModes->addWidget(new QLabel(QStringLiteral("出行方式："), detailPage_));
+    driveMode_ = new QRadioButton(QStringLiteral("驾车"), detailPage_);
+    walkMode_ = new QRadioButton(QStringLiteral("步行"), detailPage_);
+    driveMode_->setChecked(true);
+    auto *navigationModeGroup = new QButtonGroup(detailPage_);
+    navigationModeGroup->addButton(driveMode_);
+    navigationModeGroup->addButton(walkMode_);
+    navigationModes->addWidget(driveMode_);
+    navigationModes->addWidget(walkMode_);
+    navigationModes->addStretch();
+    navigationDistance_ = new QLabel(detailPage_);
+    navigationDuration_ = new QLabel(detailPage_);
+    navigationModes->addWidget(navigationDistance_);
+    navigationModes->addWidget(navigationDuration_);
+    detailLayout->addLayout(navigationModes);
+
+    navigationPreview_ = new QLabel(detailPage_);
+    navigationPreview_->setAlignment(Qt::AlignCenter);
+    navigationPreview_->setWordWrap(true);
+    navigationPreview_->setMinimumHeight(82);
+    detailLayout->addWidget(navigationPreview_);
+
     pileTable_ = new QTableWidget(detailPage_);
     pileTable_->setColumnCount(4);
     pileTable_->setHorizontalHeaderLabels({QStringLiteral("桩编号"), QStringLiteral("类型"),
@@ -107,6 +151,9 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
     backButton->setProperty("uiClass", "text");
     detailFooter->addWidget(backButton);
     detailFooter->addStretch();
+    startNavigationButton_ = new QPushButton(QStringLiteral("开始驾车导航"), detailPage_);
+    startNavigationButton_->setProperty("uiClass", "primary");
+    detailFooter->addWidget(startNavigationButton_);
     detailLayout->addLayout(detailFooter);
     pages_->addWidget(detailPage_);
 
@@ -121,6 +168,18 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
     connect(backButton, &QPushButton::clicked, this, [this] {
         pages_->setCurrentWidget(listPage_);
     });
+    connect(driveMode_, &QRadioButton::toggled, this, [this](bool checked) {
+        if (checked) {
+            updateNavigationPreview();
+        }
+    });
+    connect(walkMode_, &QRadioButton::toggled, this, [this](bool checked) {
+        if (checked) {
+            updateNavigationPreview();
+        }
+    });
+    connect(startNavigationButton_, &QPushButton::clicked,
+            this, &StationSearchWidget::startNavigation);
 }
 
 void StationSearchWidget::refresh()
@@ -128,6 +187,7 @@ void StationSearchWidget::refresh()
     pages_->setCurrentWidget(listPage_);
     areaBox_->setCurrentIndex(0);
     addressEdit_->clear();
+    hasOriginLocation_ = false;
     while (stationListLayout_->count() > 1) {
         QLayoutItem *item = stationListLayout_->takeAt(0);
         delete item->widget();
@@ -162,6 +222,9 @@ void StationSearchWidget::search()
 
 void StationSearchWidget::loadStations(bool hasLocation, double longitude, double latitude)
 {
+    hasOriginLocation_ = hasLocation;
+    originLongitude_ = longitude;
+    originLatitude_ = latitude;
     setBusy(true, hasLocation ? QStringLiteral("正在按距离查询充电站…")
                               : QStringLiteral("正在读取充电站列表…"));
     api_->queryStations(hasLocation, longitude, latitude, this,
@@ -232,8 +295,14 @@ void StationSearchWidget::renderStations(const QJsonObject &result, bool locatio
 void StationSearchWidget::showStationDetail(const QJsonObject &station)
 {
     pages_->setCurrentWidget(detailPage_);
-    detailTitle_->setText(station.value(QStringLiteral("station_name")).toString());
+    destinationName_ = station.value(QStringLiteral("station_name")).toString();
+    hasDestinationLocation_ = station.contains(QStringLiteral("longitude"))
+        && station.contains(QStringLiteral("latitude"));
+    destinationLongitude_ = station.value(QStringLiteral("longitude")).toDouble();
+    destinationLatitude_ = station.value(QStringLiteral("latitude")).toDouble();
+    detailTitle_->setText(destinationName_);
     detailMeta_->setText(QStringLiteral("正在读取站内充电桩…"));
+    updateNavigationPreview();
     pileTable_->setRowCount(0);
     api_->queryPiles(station.value(QStringLiteral("station_id")).toInteger(), this,
                      [this](bool success, const QJsonObject &result, const QString &message) {
@@ -249,6 +318,13 @@ void StationSearchWidget::showStationDetail(const QJsonObject &station)
 void StationSearchWidget::renderStationDetail(const QJsonObject &result)
 {
     const QJsonObject station = result.value(QStringLiteral("station")).toObject();
+    destinationName_ = station.value(QStringLiteral("station_name")).toString();
+    if (station.contains(QStringLiteral("longitude"))
+        && station.contains(QStringLiteral("latitude"))) {
+        hasDestinationLocation_ = true;
+        destinationLongitude_ = station.value(QStringLiteral("longitude")).toDouble();
+        destinationLatitude_ = station.value(QStringLiteral("latitude")).toDouble();
+    }
     detailTitle_->setText(station.value(QStringLiteral("station_name")).toString());
     detailMeta_->setText(QStringLiteral("%1  ·  ¥%2/度")
         .arg(station.value(QStringLiteral("address")).toString())
@@ -285,6 +361,61 @@ void StationSearchWidget::renderStationDetail(const QJsonObject &result)
                     .arg(pile.value(QStringLiteral("power_kw")).toDouble(), 0, 'f', 1));
         });
         pileTable_->setCellWidget(row, 3, buttonCell);
+    }
+    updateNavigationPreview();
+}
+
+void StationSearchWidget::updateNavigationPreview()
+{
+    const bool canNavigate = hasOriginLocation_ && hasDestinationLocation_;
+    startNavigationButton_->setEnabled(canNavigate);
+    if (!canNavigate) {
+        navigationPreview_->setText(QStringLiteral(
+            "导航起点不可用，请返回列表并通过地址定位后重试。"));
+        navigationPreview_->setStyleSheet(QStringLiteral(
+            "background:#f5f7fa; border:1px dashed #909399; border-radius:8px; color:#606266;"));
+        navigationDistance_->setText(QStringLiteral("距离：-- km"));
+        navigationDuration_->setText(QStringLiteral("预计耗时：--"));
+        return;
+    }
+
+    const bool walking = walkMode_->isChecked();
+    const double directDistance = distanceKm(originLongitude_, originLatitude_,
+                                             destinationLongitude_, destinationLatitude_);
+    // A small road-factor keeps the preview honest about being an estimate.
+    const double routeDistance = directDistance * (walking ? 1.15 : 1.25);
+    const int durationMinutes = qMax(1, qRound(routeDistance / (walking ? 4.8 : 30.0) * 60.0));
+    navigationDistance_->setText(QStringLiteral("预估距离：%1 km").arg(routeDistance, 0, 'f', 1));
+    navigationDuration_->setText(QStringLiteral("预计耗时：%1 分钟").arg(durationMinutes));
+    navigationPreview_->setText(QStringLiteral("起点：当前搜索位置\n终点：%1\n路线模式：%2")
+        .arg(destinationName_, walking ? QStringLiteral("步行") : QStringLiteral("驾车")));
+    navigationPreview_->setStyleSheet(walking
+        ? QStringLiteral("background:#fff3e0; border:1px dashed #ff9800; border-radius:8px; color:#e65100;")
+        : QStringLiteral("background:#e3f2fd; border:1px dashed #3f51b5; border-radius:8px; color:#303f9f;"));
+    startNavigationButton_->setText(walking
+        ? QStringLiteral("开始步行导航") : QStringLiteral("开始驾车导航"));
+}
+
+void StationSearchWidget::startNavigation()
+{
+    if (!hasOriginLocation_ || !hasDestinationLocation_) {
+        return;
+    }
+    const QString engine = walkMode_->isChecked()
+        ? QStringLiteral("graphhopper_foot") : QStringLiteral("graphhopper_car");
+    const QString route = QStringLiteral("%1,%2;%3,%4")
+        .arg(originLatitude_, 0, 'f', 6)
+        .arg(originLongitude_, 0, 'f', 6)
+        .arg(destinationLatitude_, 0, 'f', 6)
+        .arg(destinationLongitude_, 0, 'f', 6);
+    QUrl url(QStringLiteral("https://www.openstreetmap.org/directions"));
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("engine"), engine);
+    query.addQueryItem(QStringLiteral("route"), route);
+    url.setQuery(query);
+    if (!QDesktopServices::openUrl(url)) {
+        QMessageBox::warning(this, QStringLiteral("导航失败"),
+                             QStringLiteral("无法打开系统浏览器。"));
     }
 }
 
