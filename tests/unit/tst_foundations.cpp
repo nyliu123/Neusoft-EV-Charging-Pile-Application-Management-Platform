@@ -146,7 +146,7 @@ void FoundationTests::compactStationSeedUsesAZWithTenPiles()
     QSqlQuery query(openResult.data);
     QVERIFY(query.exec(QStringLiteral("SELECT COUNT(*) FROM charging_stations")));
     QVERIFY(query.next());
-    QCOMPARE(query.value(0).toInt(), 25);
+    QCOMPARE(query.value(0).toInt(), 26);
 
     QVERIFY(query.exec(QStringLiteral(
         "SELECT COUNT(*) FROM ("
@@ -159,7 +159,7 @@ void FoundationTests::compactStationSeedUsesAZWithTenPiles()
 
     QVERIFY(query.exec(QStringLiteral("SELECT COUNT(*) FROM charging_piles")));
     QVERIFY(query.next());
-    QCOMPARE(query.value(0).toInt(), 250);
+    QCOMPARE(query.value(0).toInt(), 260);
 
     QVERIFY(query.exec(QStringLiteral(
         "SELECT COUNT(*) FROM charging_piles "
@@ -178,13 +178,18 @@ void FoundationTests::compactStationSeedUsesAZWithTenPiles()
         query.addBindValue(QString(prefix) + QStringLiteral("-%"));
         QVERIFY2(query.exec(), qPrintable(query.lastError().text()));
         QVERIFY(query.next());
-        QVERIFY2(query.value(0).toInt() > 0, qPrintable(QString(prefix)));
+        QCOMPARE(query.value(0).toInt(), 10);
     }
+
+    QVERIFY(query.exec(QStringLiteral(
+        "SELECT COUNT(*) FROM charging_stations WHERE address LIKE '大连市%'")));
+    QVERIFY(query.next());
+    QCOMPARE(query.value(0).toInt(), 1);
 
     const QList<QPair<int, QString>> originalPileNumbers {
         {1, QStringLiteral("A-01")}, {2, QStringLiteral("A-02")},
-        {3, QStringLiteral("B-01")}, {4, QStringLiteral("B-02")},
-        {5, QStringLiteral("C-01")}, {9, QStringLiteral("D-01")}
+        {3, QStringLiteral("A-03")}, {4, QStringLiteral("A-04")},
+        {5, QStringLiteral("B-01")}, {9, QStringLiteral("C-01")}
     };
     for (const auto &expected : originalPileNumbers) {
         query.prepare(QStringLiteral(
@@ -238,7 +243,7 @@ void FoundationTests::stationSearchSortsAndReportsPileStats()
         openResult.data, true, 121.509605, 38.863650);
     QVERIFY2(stationsResult.success, qPrintable(stationsResult.message));
     const QJsonArray stations = stationsResult.data.value(QStringLiteral("stations")).toArray();
-    QCOMPARE(stations.size(), 25);
+    QCOMPARE(stations.size(), 26);
     QCOMPARE(stations.first().toObject().value(QStringLiteral("station_id")).toInteger(), 1);
     QCOMPARE(stations.first().toObject().value(QStringLiteral("distance_km")).toDouble(), 0.0);
     QCOMPARE(stations.first().toObject().value(QStringLiteral("total_piles")).toInt(), 10);
@@ -571,7 +576,7 @@ void FoundationTests::stationQueriesSortByDistanceAndPreserveStatus()
     const ev::StationService service;
     const auto unsorted = service.listStations(openResult.data);
     QVERIFY2(unsorted.success, qPrintable(unsorted.message));
-    QCOMPARE(unsorted.data.size(), 25);
+    QCOMPARE(unsorted.data.size(), 26);
     QVERIFY(!unsorted.data.first().distanceKm.has_value());
 
     const auto sorted = service.listStations(openResult.data, 121.509605, 38.863650);
@@ -588,10 +593,8 @@ void FoundationTests::stationQueriesSortByDistanceAndPreserveStatus()
         openResult.data, 121.525500, 38.953300);
     QVERIFY(highTechSorted.success);
     QVERIFY(ganjingziSorted.success);
-    QCOMPARE(highTechSorted.data.first().station.stationId, 3);
-    QCOMPARE(ganjingziSorted.data.first().station.stationId, 2);
-    QVERIFY(highTechSorted.data.first().station.stationId
-            != ganjingziSorted.data.first().station.stationId);
+    QCOMPARE(highTechSorted.data.first().station.stationId, 1);
+    QCOMPARE(ganjingziSorted.data.first().station.stationId, 1);
 
     const auto detail = service.stationDetail(openResult.data, 1);
     QVERIFY2(detail.success, qPrintable(detail.message));

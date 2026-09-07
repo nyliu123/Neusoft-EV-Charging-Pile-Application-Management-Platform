@@ -1,5 +1,6 @@
--- Compact nationwide teaching data: 25 stations, ten piles per station.
--- Existing Dalian stations keep A-D; the remaining 22 provinces use E-Z.
+-- Compact nationwide teaching data: 26 stations, ten piles per station.
+-- Dalian keeps A; three additional provincial-level stations use B-D; the
+-- remaining 22 province stations use E-Z.
 
 DROP TRIGGER IF EXISTS trg_station_create_ten_piles;
 DROP TRIGGER IF EXISTS trg_station_reject_eleventh_pile;
@@ -18,8 +19,18 @@ WHERE station_id IN (
 DELETE FROM charging_stations
 WHERE station_name GLOB '*示范站[0-9][0-9]';
 
--- Normalize the original piles without changing their primary keys, so existing
--- orders continue to reference the same pile records.
+-- Convert the other two original Dalian records into provincial-level stations.
+-- Keeping their primary keys also keeps the demonstration orders valid.
+UPDATE charging_stations
+SET station_name = '北京充电中心', address = '北京市朝阳区建国路',
+    longitude = 116.407387, latitude = 39.904179, price_per_kwh = 1.55
+WHERE station_id = 2;
+UPDATE charging_stations
+SET station_name = '上海充电中心', address = '上海市浦东新区世纪大道',
+    longitude = 121.473701, latitude = 31.230416, price_per_kwh = 1.55
+WHERE station_id = 3;
+
+-- Normalize the original piles without changing their primary keys.
 UPDATE charging_piles
 SET pile_number = 'TMP-' || pile_id
 WHERE station_id IN (1, 2, 3);
@@ -33,21 +44,20 @@ WITH ranked AS (
 UPDATE charging_piles
 SET pile_number = (
     SELECT CASE
-        WHEN ranked.station_id = 1 AND ranked.ordinal <= 2
-            THEN 'A-' || printf('%02d', ranked.ordinal)
         WHEN ranked.station_id = 1
-            THEN 'B-' || printf('%02d', ranked.ordinal - 2)
+            THEN 'A-' || printf('%02d', ranked.ordinal)
         WHEN ranked.station_id = 2
-            THEN 'C-' || printf('%02d', ranked.ordinal)
-        ELSE 'D-' || printf('%02d', ranked.ordinal)
+            THEN 'B-' || printf('%02d', ranked.ordinal)
+        ELSE 'C-' || printf('%02d', ranked.ordinal)
     END
     FROM ranked WHERE ranked.pile_id = charging_piles.pile_id
 )
 WHERE station_id IN (1, 2, 3);
 
--- One additional station for each province not already represented by Liaoning.
+-- D is assigned to Chongqing; E-Z remain the 22 province stations.
 INSERT OR IGNORE INTO charging_stations
     (station_id, station_name, address, longitude, latitude, price_per_kwh) VALUES
+    (26, '重庆充电中心',   '重庆市渝北区金开大道',           106.551556, 29.563009, 1.28),
     (4,  '石家庄充电中心', '河北省石家庄市长安区中山东路', 114.514860, 38.042307, 1.20),
     (5,  '太原充电中心',   '山西省太原市小店区长风街',     112.549248, 37.857014, 1.16),
     (6,  '长春充电中心',   '吉林省长春市南关区人民大街',   125.323544, 43.817071, 1.18),
@@ -71,43 +81,12 @@ INSERT OR IGNORE INTO charging_stations
     (24, '西宁充电中心',   '青海省西宁市城西区五四西路',   101.778228, 36.617144, 1.12),
     (25, '台北充电中心',   '台湾省台北市信义区市府路',     121.565418, 25.032969, 1.36);
 
--- Desired numbering for the three original stations.
-WITH RECURSIVE sequence(ordinal) AS (
-    VALUES(1) UNION ALL SELECT ordinal + 1 FROM sequence WHERE ordinal < 10
-), desired(station_id, ordinal, pile_number) AS (
-    SELECT 1, ordinal,
-           CASE WHEN ordinal <= 2
-                THEN 'A-' || printf('%02d', ordinal)
-                ELSE 'B-' || printf('%02d', ordinal - 2) END
-    FROM sequence
-    UNION ALL
-    SELECT 2, ordinal, 'C-' || printf('%02d', ordinal) FROM sequence
-    UNION ALL
-    SELECT 3, ordinal, 'D-' || printf('%02d', ordinal) FROM sequence
-)
-INSERT INTO charging_piles
-    (station_id, pile_number, pile_type, power_kw, status,
-     total_charge_count, total_charge_duration)
-SELECT desired.station_id, desired.pile_number,
-       CASE WHEN desired.ordinal <= 6 THEN 'fast' ELSE 'slow' END,
-       CASE WHEN desired.ordinal <= 6 THEN 120.0 ELSE 7.0 END,
-       CASE WHEN desired.ordinal <= 5 THEN 'idle'
-            WHEN desired.ordinal <= 7 THEN 'in_use'
-            WHEN desired.ordinal = 8 THEN 'reserved'
-            ELSE 'fault' END,
-       0, 0
-FROM desired
-WHERE NOT EXISTS (
-    SELECT 1 FROM charging_piles p
-    WHERE p.station_id = desired.station_id
-      AND p.pile_number = desired.pile_number
-);
-
--- E-Z are assigned once, in station order, with ten numbered piles each.
+-- Every current station owns one letter and ten numbered piles.
 WITH RECURSIVE sequence(ordinal) AS (
     VALUES(1) UNION ALL SELECT ordinal + 1 FROM sequence WHERE ordinal < 10
 ), station_letters(station_id, prefix) AS (
-    VALUES (4,'E'), (5,'F'), (6,'G'), (7,'H'), (8,'I'), (9,'J'),
+    VALUES (1,'A'), (2,'B'), (3,'C'), (26,'D'),
+           (4,'E'), (5,'F'), (6,'G'), (7,'H'), (8,'I'), (9,'J'),
            (10,'K'), (11,'L'), (12,'M'), (13,'N'), (14,'O'), (15,'P'),
            (16,'Q'), (17,'R'), (18,'S'), (19,'T'), (20,'U'), (21,'V'),
            (22,'W'), (23,'X'), (24,'Y'), (25,'Z')
@@ -146,10 +125,10 @@ BEGIN
          total_charge_count, total_charge_duration)
     SELECT NEW.station_id,
            CASE
-               WHEN NEW.station_id + 1 <= 26
-                   THEN char(64 + NEW.station_id + 1)
-               ELSE char(64 + ((NEW.station_id + 1 - 1) / 26))
-                    || char(65 + ((NEW.station_id + 1 - 1) % 26))
+               WHEN NEW.station_id <= 26
+                   THEN char(64 + NEW.station_id)
+               ELSE char(64 + ((NEW.station_id - 1) / 26))
+                    || char(65 + ((NEW.station_id - 1) % 26))
            END || '-' || printf('%02d', sequence.ordinal),
            CASE WHEN sequence.ordinal <= 6 THEN 'fast' ELSE 'slow' END,
            CASE WHEN sequence.ordinal <= 6 THEN 120.0 ELSE 7.0 END,
