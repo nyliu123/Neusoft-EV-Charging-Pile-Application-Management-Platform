@@ -1,6 +1,7 @@
 #pragma once
 
 #include "data/database_manager.h"
+#include "adapters/map_api_adapter.h"
 #include "network/frame_codec.h"
 #include "services/session_manager.h"
 
@@ -46,6 +47,7 @@ private:
     bool databaseReady_ = false;
     QString avatarDirectory_;
     SessionManager sessionManager_;
+    MapApiAdapter mapApi_;
     QTcpServer tcpServer_;
     QHash<QTcpSocket *, QByteArray> receiveBuffers_;
     QHash<QTcpSocket *, QSet<QString>> connectionSessions_;

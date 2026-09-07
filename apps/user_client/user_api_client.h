@@ -24,6 +24,10 @@ public:
     bool updateNickname(const QString &nickname, QObject *context, Callback callback);
     bool updateAvatar(const QByteArray &jpegData, QObject *context, Callback callback);
     bool recharge(qint64 amountCent, QObject *context, Callback callback);
+    bool geocode(const QString &address, QObject *context, Callback callback);
+    bool queryStations(bool hasLocation, double longitude, double latitude,
+                       QObject *context, Callback callback);
+    bool queryPiles(qint64 stationId, QObject *context, Callback callback);
 
 signals:
     void sessionExpired(const QString &message);

@@ -9,17 +9,23 @@ include($$PLATFORM_ROOT/config/common.pri)
 INCLUDEPATH += $$PLATFORM_ROOT/src
 HEADERS += \
     phone_login_widget.h \
+    station_search_widget.h \
     user_api_client.h \
     user_home_widget.h \
     user_info_widget.h \
-    user_session_state.h
+    user_session_state.h \
+    $$PLATFORM_ROOT/src/client_ui/animated_combo_box.h \
+    $$PLATFORM_ROOT/src/client_ui/client_style.h
 SOURCES += \
     main.cpp \
     phone_login_widget.cpp \
+    station_search_widget.cpp \
     user_api_client.cpp \
     user_home_widget.cpp \
     user_info_widget.cpp \
-    user_session_state.cpp
+    user_session_state.cpp \
+    $$PLATFORM_ROOT/src/client_ui/animated_combo_box.cpp \
+    $$PLATFORM_ROOT/src/client_ui/client_style.cpp
 
 RESOURCES += user_client.qrc
 

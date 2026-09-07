@@ -6,7 +6,6 @@
 #include <QBuffer>
 #include <QDialog>
 #include <QFileDialog>
-#include <QFileInfo>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QImage>
@@ -17,6 +16,7 @@
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QRegularExpressionValidator>
+#include <QStyle>
 #include <QVBoxLayout>
 
 namespace {
@@ -24,8 +24,14 @@ namespace {
 QFrame *createCard(QWidget *parent)
 {
     auto *card = new QFrame(parent);
-    card->setProperty("class", "card");
+    card->setProperty("uiClass", "card");
     return card;
+}
+
+void refreshStyle(QWidget *widget)
+{
+    widget->style()->unpolish(widget);
+    widget->style()->polish(widget);
 }
 
 qint64 parseAmountCent(const QString &text, bool *ok)
@@ -53,13 +59,6 @@ UserInfoWidget::UserInfoWidget(ev::UserApiClient *api, QWidget *parent)
     : QWidget(parent), api_(api)
 {
     setObjectName(QStringLiteral("userInfoRoot"));
-    setStyleSheet(QStringLiteral(
-        "QWidget#userInfoRoot { background:#F5F6FA; }"
-        "QFrame[class=card] { background:white; border:1px solid #ECEEF3; border-radius:18px; }"
-        "QPushButton { border:none; }"
-        "QPushButton[class=action] { background:#F2F6FF; color:#1677FF; border-radius:10px; padding:8px 15px; }"
-        "QPushButton[class=primary] { background:#1677FF; color:white; border-radius:10px; padding:9px 18px; }"
-        "QPushButton:disabled { background:#E4E7ED; color:#9AA0AA; }"));
 
     auto *mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(28, 22, 28, 22);
@@ -67,11 +66,11 @@ UserInfoWidget::UserInfoWidget(ev::UserApiClient *api, QWidget *parent)
 
     auto *header = new QHBoxLayout;
     auto *title = new QLabel(QStringLiteral("个人信息"), this);
-    title->setStyleSheet(QStringLiteral("font-size:26px; font-weight:700;"));
+    title->setProperty("uiClass", "pageTitle");
     userIdLabel_ = new QLabel(this);
-    userIdLabel_->setStyleSheet(QStringLiteral("color:#969CA6;"));
+    userIdLabel_->setProperty("uiClass", "muted");
     refreshButton_ = new QPushButton(QStringLiteral("刷新"), this);
-    refreshButton_->setProperty("class", "action");
+    refreshButton_->setProperty("uiClass", "secondary");
     header->addWidget(title);
     header->addSpacing(10);
     header->addWidget(userIdLabel_);
@@ -84,24 +83,25 @@ UserInfoWidget::UserInfoWidget(ev::UserApiClient *api, QWidget *parent)
     profileLayout->setContentsMargins(26, 24, 26, 24);
     profileLayout->setSpacing(20);
     avatarLabel_ = new QLabel(profileCard);
+    avatarLabel_->setObjectName(QStringLiteral("profileAvatar"));
     avatarLabel_->setFixedSize(96, 96);
     avatarLabel_->setAlignment(Qt::AlignCenter);
     profileLayout->addWidget(avatarLabel_);
     auto *profileText = new QVBoxLayout;
     auto *nameRow = new QHBoxLayout;
     nicknameLabel_ = new QLabel(profileCard);
-    nicknameLabel_->setStyleSheet(QStringLiteral("font-size:24px; font-weight:700;"));
+    nicknameLabel_->setProperty("uiClass", "profileName");
     editNicknameButton_ = new QPushButton(QStringLiteral("编辑昵称"), profileCard);
-    editNicknameButton_->setProperty("class", "action");
+    editNicknameButton_->setProperty("uiClass", "secondary");
     nameRow->addWidget(nicknameLabel_);
     nameRow->addWidget(editNicknameButton_);
     nameRow->addStretch();
     profileText->addLayout(nameRow);
     auto *hint = new QLabel(QStringLiteral("头像与昵称修改后会同步到服务端"), profileCard);
-    hint->setStyleSheet(QStringLiteral("color:#8D939D;"));
+    hint->setProperty("uiClass", "muted");
     profileText->addWidget(hint);
     changeAvatarButton_ = new QPushButton(QStringLiteral("更换头像"), profileCard);
-    changeAvatarButton_->setProperty("class", "action");
+    changeAvatarButton_->setProperty("uiClass", "secondary");
     changeAvatarButton_->setMaximumWidth(120);
     profileText->addWidget(changeAvatarButton_);
     profileLayout->addLayout(profileText);
@@ -112,11 +112,11 @@ UserInfoWidget::UserInfoWidget(ev::UserApiClient *api, QWidget *parent)
     auto *walletLayout = new QHBoxLayout(walletCard);
     walletLayout->setContentsMargins(26, 20, 26, 20);
     auto *walletTitle = new QLabel(QStringLiteral("钱包余额"), walletCard);
-    walletTitle->setStyleSheet(QStringLiteral("font-size:16px; font-weight:600;"));
+    walletTitle->setProperty("uiClass", "sectionTitle");
     balanceLabel_ = new QLabel(walletCard);
-    balanceLabel_->setStyleSheet(QStringLiteral("font-size:23px; font-weight:700;"));
+    balanceLabel_->setProperty("uiClass", "balanceValue");
     rechargeButton_ = new QPushButton(QStringLiteral("充值"), walletCard);
-    rechargeButton_->setProperty("class", "primary");
+    rechargeButton_->setProperty("uiClass", "primary");
     walletLayout->addWidget(walletTitle);
     walletLayout->addStretch();
     walletLayout->addWidget(balanceLabel_);
@@ -130,7 +130,7 @@ UserInfoWidget::UserInfoWidget(ev::UserApiClient *api, QWidget *parent)
     auto *operationHint = new QLabel(
         QStringLiteral("首屏使用登录缓存；如需获取服务端最新数据，请点击刷新。"), operationCard);
     operationHint->setWordWrap(true);
-    operationHint->setStyleSheet(QStringLiteral("color:#737985;"));
+    operationHint->setProperty("uiClass", "muted");
     operationLayout->addWidget(operationHint);
     mainLayout->addWidget(operationCard);
     mainLayout->addStretch();
@@ -160,14 +160,14 @@ void UserInfoWidget::refreshFromSession()
     if (avatar.isNull()) {
         avatarLabel_->setPixmap({});
         avatarLabel_->setText(QStringLiteral("默认头像"));
-        avatarLabel_->setStyleSheet(QStringLiteral(
-            "background:#D9DCE2; color:#555; border-radius:48px;"));
+        avatarLabel_->setProperty("empty", true);
     } else {
         avatarLabel_->setText({});
-        avatarLabel_->setStyleSheet(QStringLiteral("border-radius:48px;"));
+        avatarLabel_->setProperty("empty", false);
         avatarLabel_->setPixmap(avatar.scaled(avatarLabel_->size(),
             Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation));
     }
+    refreshStyle(avatarLabel_);
     setBusy(false);
 }
 
@@ -239,10 +239,12 @@ void UserInfoWidget::editNickname()
     edit->setValidator(new QRegularExpressionValidator(
         QRegularExpression(QStringLiteral("^[A-Za-z0-9_\\x{4E00}-\\x{9FFF}]{0,20}$")), edit));
     auto *errorLabel = new QLabel(&dialog);
-    errorLabel->setStyleSheet(QStringLiteral("color:#E5484D;"));
+    errorLabel->setProperty("uiClass", "errorText");
     auto *buttons = new QHBoxLayout;
     auto *cancel = new QPushButton(QStringLiteral("取消"), &dialog);
+    cancel->setProperty("uiClass", "secondary");
     auto *save = new QPushButton(QStringLiteral("保存"), &dialog);
+    save->setProperty("uiClass", "primary");
     buttons->addStretch();
     buttons->addWidget(cancel);
     buttons->addWidget(save);
@@ -289,10 +291,12 @@ void UserInfoWidget::recharge()
     auto *edit = new QLineEdit(&dialog);
     edit->setPlaceholderText(QStringLiteral("例如 100 或 100.50"));
     auto *errorLabel = new QLabel(&dialog);
-    errorLabel->setStyleSheet(QStringLiteral("color:#E5484D;"));
+    errorLabel->setProperty("uiClass", "errorText");
     auto *buttons = new QHBoxLayout;
     auto *cancel = new QPushButton(QStringLiteral("取消"), &dialog);
+    cancel->setProperty("uiClass", "secondary");
     auto *confirm = new QPushButton(QStringLiteral("确认充值"), &dialog);
+    confirm->setProperty("uiClass", "primary");
     buttons->addStretch();
     buttons->addWidget(cancel);
     buttons->addWidget(confirm);

@@ -5,6 +5,7 @@
 #include "common/protocol.h"
 #include "services/admin_auth_service.h"
 #include "services/admin_seeder.h"
+#include "services/station_service.h"
 #include "services/user_service.h"
 
 #include <QDebug>
@@ -14,6 +15,7 @@
 #include <QFileInfo>
 #include <QJsonObject>
 #include <QMimeDatabase>
+#include <QPointer>
 #include <QSaveFile>
 #include <QTcpSocket>
 #include <QUuid>
@@ -197,6 +199,50 @@ void ServerApplication::processUserRequest(QTcpSocket *socket, const Frame &fram
     const QString type = data.value(QStringLiteral("type")).toString();
     const QJsonObject params = data.value(QStringLiteral("params")).toObject();
     const UserService service;
+
+    if (type == QStringLiteral("geocode")) {
+        const QString address = params.value(QStringLiteral("address")).toString();
+        QPointer<QTcpSocket> guardedSocket(socket);
+        mapApi_.geocode(address,
+                        [this, guardedSocket, requestId](const Result<QPointF> &result) {
+            if (!guardedSocket) {
+                return;
+            }
+            sendUserResponse(guardedSocket, requestId, result.success,
+                             errorCodeName(result.code),
+                             result.success ? QStringLiteral("位置解析成功") : result.message,
+                             result.success
+                                 ? QJsonObject {
+                                     {QStringLiteral("longitude"), result.data.x()},
+                                     {QStringLiteral("latitude"), result.data.y()}
+                                   }
+                                 : QJsonObject {});
+        });
+        return;
+    }
+
+    const StationService stationService;
+    if (type == QStringLiteral("query_stations")) {
+        const bool hasLocation = params.contains(QStringLiteral("longitude"))
+            && params.contains(QStringLiteral("latitude"));
+        const auto result = stationService.queryStations(
+            mainDatabase_, hasLocation,
+            params.value(QStringLiteral("longitude")).toDouble(),
+            params.value(QStringLiteral("latitude")).toDouble());
+        sendUserResponse(socket, requestId, result.success, errorCodeName(result.code),
+                         result.success ? QStringLiteral("充电站查询成功") : result.message,
+                         result.success ? result.data : QJsonObject {});
+        return;
+    }
+
+    if (type == QStringLiteral("query_piles")) {
+        const auto result = stationService.queryPiles(
+            mainDatabase_, params.value(QStringLiteral("station_id")).toInteger());
+        sendUserResponse(socket, requestId, result.success, errorCodeName(result.code),
+                         result.success ? QStringLiteral("充电桩查询成功") : result.message,
+                         result.success ? result.data : QJsonObject {});
+        return;
+    }
 
     if (type == QStringLiteral("user_info")) {
         const auto result = service.queryUserInfo(mainDatabase_, userId);

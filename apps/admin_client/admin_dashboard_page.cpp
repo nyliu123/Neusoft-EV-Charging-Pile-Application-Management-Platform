@@ -4,7 +4,6 @@
 #include "admin_charts.h"
 #include "admin_format.h"
 
-#include <QFont>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QJsonArray>
@@ -20,18 +19,13 @@ namespace {
 QWidget *chartCard(const QString &title, QWidget *chart, QWidget *parent)
 {
     auto *card = new QFrame(parent);
-    card->setStyleSheet(QStringLiteral(
-        "QFrame { background: white; border: 1px solid #e0e6ed; border-radius: 8px; }"));
+    card->setProperty("uiClass", "card");
     auto *layout = new QVBoxLayout(card);
     layout->setContentsMargins(16, 12, 16, 16);
     layout->setSpacing(8);
 
     auto *label = new QLabel(title, card);
-    QFont labelFont = label->font();
-    labelFont.setBold(true);
-    label->setFont(labelFont);
-    label->setStyleSheet(QStringLiteral(
-        "color: #424242; border: none; background: transparent;"));
+    label->setProperty("uiClass", "cardTitle");
     layout->addWidget(label);
     layout->addWidget(chart, 1);
     return card;
@@ -49,31 +43,25 @@ AdminDashboardPage::AdminDashboardPage(AdminApiClient *api, QWidget *parent)
     // Header.
     auto *headerLayout = new QHBoxLayout();
     auto *titleLabel = new QLabel(QStringLiteral("经营看板"), this);
-    QFont titleFont = titleLabel->font();
-    titleFont.setPointSize(16);
-    titleFont.setBold(true);
-    titleLabel->setFont(titleFont);
+    titleLabel->setProperty("uiClass", "pageTitle");
     headerLayout->addWidget(titleLabel);
     headerLayout->addStretch();
 
     refreshButton_ = new QPushButton(QStringLiteral("刷新"), this);
+    refreshButton_->setProperty("uiClass", "secondary");
     headerLayout->addWidget(refreshButton_);
     rootLayout->addLayout(headerLayout);
 
     // Fault warning bar (UML-037).
     faultBar_ = new QWidget(this);
-    faultBar_->setStyleSheet(QStringLiteral(
-        "background: #fff3e0; border: 1px solid #ffe0b2; border-radius: 6px;"));
+    faultBar_->setObjectName(QStringLiteral("faultBanner"));
     auto *faultLayout = new QHBoxLayout(faultBar_);
     faultLayout->setContentsMargins(12, 6, 12, 6);
     faultWarningLabel_ = new QLabel(faultBar_);
-    faultWarningLabel_->setStyleSheet(QStringLiteral(
-        "color: #e65100; border: none; background: transparent;"));
     faultJumpButton_ = new QPushButton(QStringLiteral("前往处理"), faultBar_);
     faultJumpButton_->setFlat(true);
+    faultJumpButton_->setProperty("uiClass", "text");
     faultJumpButton_->setCursor(Qt::PointingHandCursor);
-    faultJumpButton_->setStyleSheet(QStringLiteral(
-        "color: #1565c0; border: none; text-decoration: underline;"));
     faultLayout->addWidget(faultWarningLabel_);
     faultLayout->addStretch();
     faultLayout->addWidget(faultJumpButton_);
@@ -83,10 +71,10 @@ AdminDashboardPage::AdminDashboardPage(AdminApiClient *api, QWidget *parent)
     // Stat cards row (UML-035).
     auto *cardsLayout = new QHBoxLayout();
     cardsLayout->setSpacing(16);
-    kwhCard_ = new StatCard(QStringLiteral("累计充电量（度）"), QColor(0x19, 0x76, 0xd2), this);
-    revenueCard_ = new StatCard(QStringLiteral("累计营收（元）"), QColor(0x2e, 0x7d, 0x32), this);
-    userCard_ = new StatCard(QStringLiteral("注册用户数"), QColor(0xf9, 0xa8, 0x25), this);
-    orderCard_ = new StatCard(QStringLiteral("累计充电次数"), QColor(0x6a, 0x1b, 0x9a), this);
+    kwhCard_ = new StatCard(QStringLiteral("累计充电量（度）"), QStringLiteral("blue"), this);
+    revenueCard_ = new StatCard(QStringLiteral("累计营收（元）"), QStringLiteral("green"), this);
+    userCard_ = new StatCard(QStringLiteral("注册用户数"), QStringLiteral("amber"), this);
+    orderCard_ = new StatCard(QStringLiteral("累计充电次数"), QStringLiteral("violet"), this);
     cardsLayout->addWidget(kwhCard_, 1);
     cardsLayout->addWidget(revenueCard_, 1);
     cardsLayout->addWidget(userCard_, 1);
@@ -103,7 +91,7 @@ AdminDashboardPage::AdminDashboardPage(AdminApiClient *api, QWidget *parent)
 
     // Error line.
     errorLabel_ = new QLabel(this);
-    errorLabel_->setStyleSheet(QStringLiteral("color: #c62828; font-size: 12px;"));
+    errorLabel_->setProperty("uiClass", "errorText");
     errorLabel_->setWordWrap(true);
     errorLabel_->setVisible(false);
     rootLayout->addWidget(errorLabel_);
@@ -180,7 +168,7 @@ void AdminDashboardPage::applyStats(bool ok, const QJsonObject &result,
         const QString status = entry.value(QStringLiteral("status")).toString();
         const int count = entry.value(QStringLiteral("count")).toInt();
         slices.append({entry.value(QStringLiteral("label")).toString(),
-                       count, pileStatusColor(status)});
+                       static_cast<double>(count), pileStatusColor(status)});
         if (status == QStringLiteral("fault")) {
             faultCount = count;
         }

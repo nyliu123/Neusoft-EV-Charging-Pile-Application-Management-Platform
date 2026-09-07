@@ -2,16 +2,16 @@
 #include "user_api_client.h"
 #include "user_home_widget.h"
 #include "user_session_state.h"
+#include "client_ui/client_style.h"
 #include "network/platform_client.h"
 
 #include <QApplication>
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QDebug>
-#include <QLabel>
+#include <QFile>
 #include <QMainWindow>
 #include <QMessageBox>
-#include <QPushButton>
 #include <QStatusBar>
 #include <QStackedWidget>
 #include <QTimer>
@@ -20,9 +20,17 @@
 
 int main(int argc, char *argv[])
 {
+    ev::configureClientInputMethod();
     QApplication application(argc, argv);
     QApplication::setApplicationName(QStringLiteral("ev_user_client"));
     QApplication::setApplicationVersion(QStringLiteral("0.1.0"));
+    ev::installClientStyle(application);
+    QFile styleFile(QStringLiteral(":/styles/client.qss"));
+    if (styleFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        application.setStyleSheet(QString::fromUtf8(styleFile.readAll()));
+    } else {
+        qWarning() << "cannot load global client stylesheet";
+    }
 
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("EV charging platform user client"));
@@ -67,22 +75,20 @@ int main(int argc, char *argv[])
     }
 
     QMainWindow window;
+    window.setObjectName(QStringLiteral("userClientWindow"));
     window.setWindowTitle(QStringLiteral("汽车充电管理平台 用户端"));
-    window.resize(1000, 680);
+    window.resize(460, 380);
 
     auto *central = new QWidget(&window);
+    central->setObjectName(QStringLiteral("userClientShell"));
     auto *layout = new QVBoxLayout(central);
-    auto *title = new QLabel(QStringLiteral("汽车充电管理平台"), central);
-    QFont titleFont = title->font();
-    titleFont.setPointSize(22);
-    titleFont.setBold(true);
-    title->setFont(titleFont);
-    layout->addWidget(title);
+    layout->setContentsMargins(0, 0, 0, 0);
     auto *pages = new QStackedWidget(central);
     auto *loginPage = new QWidget(pages);
     auto *loginLayout = new QVBoxLayout(loginPage);
+    loginLayout->addStretch();
     auto *loginWidget = new PhoneLoginWidget(loginPage);
-    loginLayout->addWidget(loginWidget);
+    loginLayout->addWidget(loginWidget, 0, Qt::AlignCenter);
     loginLayout->addStretch();
     auto *userApi = new ev::UserApiClient(&client, &window);
     QObject::connect(userApi, &ev::UserApiClient::sessionExpired, &window,
@@ -96,22 +102,13 @@ int main(int argc, char *argv[])
     pages->addWidget(homeWidget);
     layout->addWidget(pages, 1);
 
-    auto *connectionLabel = new QLabel(QStringLiteral("连接状态：正在连接"), central);
-    auto *retryButton = new QPushButton(QStringLiteral("重新连接"), central);
-    layout->addWidget(connectionLabel);
-    layout->addWidget(retryButton, 0, Qt::AlignLeft);
-    layout->addStretch();
     window.setCentralWidget(central);
     QObject::connect(&client, &ev::PlatformClient::stateChanged, &window,
-                     [&window, connectionLabel](ev::PlatformClient::State state,
-                                                const QString &detail) {
-        connectionLabel->setText(QStringLiteral("连接状态：%1").arg(detail));
+                     [&window](ev::PlatformClient::State state, const QString &detail) {
         window.statusBar()->showMessage(
             state == ev::PlatformClient::State::Ready
                 ? QStringLiteral("服务端可用") : detail);
     });
-    QObject::connect(retryButton, &QPushButton::clicked,
-                     &client, &ev::PlatformClient::reconnectNow);
     QObject::connect(loginWidget, &PhoneLoginWidget::phoneAccepted,
                      &client, &ev::PlatformClient::login);
     QObject::connect(&client, &ev::PlatformClient::loginFailed, &window,
@@ -127,6 +124,7 @@ int main(int argc, char *argv[])
         }
         homeWidget->refresh();
         pages->setCurrentWidget(homeWidget);
+        window.resize(1000, 680);
         homeWidget->showWelcome(isNewUser);
         window.statusBar()->showMessage(
             isNewUser ? QStringLiteral("注册成功，欢迎加入！")
@@ -148,13 +146,15 @@ int main(int argc, char *argv[])
         UserSessionState::instance().clear();
         loginWidget->resetForLogin();
         pages->setCurrentWidget(loginPage);
+        window.resize(460, 380);
         window.statusBar()->showMessage(QStringLiteral("已退出登录"), 3000);
     });
     QObject::connect(&client, &ev::PlatformClient::sessionExpired, &window,
-                     [pages, loginPage, loginWidget, homeWidget](const QString &message) {
+                     [&window, pages, loginPage, loginWidget, homeWidget](const QString &message) {
         UserSessionState::instance().clear();
         homeWidget->setLogoutInProgress(false);
         pages->setCurrentWidget(loginPage);
+        window.resize(460, 380);
         loginWidget->showLoginError(message.isEmpty()
             ? QStringLiteral("登录已过期，请重新登录") : message);
     });

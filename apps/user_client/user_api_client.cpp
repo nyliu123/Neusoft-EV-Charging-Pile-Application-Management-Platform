@@ -49,6 +49,32 @@ bool UserApiClient::recharge(qint64 amountCent, QObject *context, Callback callb
                        context, std::move(callback));
 }
 
+bool UserApiClient::geocode(const QString &address, QObject *context, Callback callback)
+{
+    return sendRequest(QStringLiteral("geocode"),
+                       {{QStringLiteral("address"), address}},
+                       context, std::move(callback));
+}
+
+bool UserApiClient::queryStations(bool hasLocation, double longitude, double latitude,
+                                  QObject *context, Callback callback)
+{
+    QJsonObject params;
+    if (hasLocation) {
+        params.insert(QStringLiteral("longitude"), longitude);
+        params.insert(QStringLiteral("latitude"), latitude);
+    }
+    return sendRequest(QStringLiteral("query_stations"), params,
+                       context, std::move(callback));
+}
+
+bool UserApiClient::queryPiles(qint64 stationId, QObject *context, Callback callback)
+{
+    return sendRequest(QStringLiteral("query_piles"),
+                       {{QStringLiteral("station_id"), stationId}},
+                       context, std::move(callback));
+}
+
 bool UserApiClient::sendRequest(const QString &type, const QJsonObject &params,
                                 QObject *context, Callback callback)
 {

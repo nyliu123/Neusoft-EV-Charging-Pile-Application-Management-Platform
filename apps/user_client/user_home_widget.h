@@ -4,6 +4,7 @@
 
 class QLabel;
 class QPushButton;
+class StationSearchWidget;
 class UserInfoWidget;
 
 namespace ev {
@@ -24,6 +25,7 @@ signals:
 
 private:
     QLabel *successMessage_ = nullptr;
+    StationSearchWidget *stationSearchWidget_ = nullptr;
     UserInfoWidget *userInfoWidget_ = nullptr;
     QPushButton *logoutButton_ = nullptr;
 };

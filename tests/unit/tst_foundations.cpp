@@ -7,9 +7,11 @@
 #include "services/admin_seeder.h"
 #include "services/fee_calculator.h"
 #include "services/session_manager.h"
+#include "services/station_service.h"
 #include "services/user_service.h"
 
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QTemporaryDir>
@@ -36,6 +38,7 @@ private slots:
     void existingUserLoginPaths();
     void automaticRegistrationCreatesDefaultsAndHandlesConflict();
     void userProfileOperationsStayConsistent();
+    void stationSearchSortsAndReportsPileStats();
     void sessionLifecycle();
 };
 
@@ -121,6 +124,36 @@ void FoundationTests::databaseCreatesCoreSchema()
     QVERIFY(query.exec(QStringLiteral("PRAGMA foreign_keys")));
     QVERIFY(query.next());
     QCOMPARE(query.value(0).toInt(), 1);
+}
+
+void FoundationTests::stationSearchSortsAndReportsPileStats()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ev::DatabaseManager manager(directory.filePath(QStringLiteral("stations.sqlite3")));
+    auto openResult = manager.openForCurrentThread();
+    QVERIFY2(openResult.success, qPrintable(openResult.message));
+    QVERIFY(manager.migrate(openResult.data).success);
+
+    const ev::StationService service;
+    const auto stationsResult = service.queryStations(
+        openResult.data, true, 121.509605, 38.863650);
+    QVERIFY2(stationsResult.success, qPrintable(stationsResult.message));
+    const QJsonArray stations = stationsResult.data.value(QStringLiteral("stations")).toArray();
+    QCOMPARE(stations.size(), 3);
+    QCOMPARE(stations.first().toObject().value(QStringLiteral("station_id")).toInteger(), 1);
+    QCOMPARE(stations.first().toObject().value(QStringLiteral("distance_km")).toDouble(), 0.0);
+    QCOMPARE(stations.first().toObject().value(QStringLiteral("total_piles")).toInt(), 4);
+    QCOMPARE(stations.first().toObject().value(QStringLiteral("idle_count")).toInt(), 2);
+
+    const auto detailResult = service.queryPiles(openResult.data, 1);
+    QVERIFY2(detailResult.success, qPrintable(detailResult.message));
+    QCOMPARE(detailResult.data.value(QStringLiteral("piles")).toArray().size(), 4);
+    const QJsonObject stats = detailResult.data.value(QStringLiteral("stats")).toObject();
+    QCOMPARE(stats.value(QStringLiteral("idle")).toInt(), 2);
+    QCOMPARE(stats.value(QStringLiteral("in_use")).toInt(), 1);
+    QCOMPARE(stats.value(QStringLiteral("fault")).toInt(), 1);
+    QCOMPARE(stats.value(QStringLiteral("online_rate")).toDouble(), 75.0);
 }
 
 void FoundationTests::phoneValidation_data()

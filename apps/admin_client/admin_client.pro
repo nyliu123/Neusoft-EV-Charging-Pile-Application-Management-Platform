@@ -17,7 +17,9 @@ HEADERS += \
     admin_login_dialog.h \
     admin_main_window.h \
     admin_pile_page.h \
-    admin_session.h
+    admin_session.h \
+    $$PLATFORM_ROOT/src/client_ui/animated_combo_box.h \
+    $$PLATFORM_ROOT/src/client_ui/client_style.h
 
 SOURCES += \
     admin_api_client.cpp \
@@ -26,7 +28,11 @@ SOURCES += \
     admin_login_dialog.cpp \
     admin_main_window.cpp \
     admin_pile_page.cpp \
-    main.cpp
+    main.cpp \
+    $$PLATFORM_ROOT/src/client_ui/animated_combo_box.cpp \
+    $$PLATFORM_ROOT/src/client_ui/client_style.cpp
+
+RESOURCES += admin_client.qrc
 
 LIBS += -L$$PLATFORM_BUILD_ROOT/lib -lev_network -lev_common
 PRE_TARGETDEPS += \

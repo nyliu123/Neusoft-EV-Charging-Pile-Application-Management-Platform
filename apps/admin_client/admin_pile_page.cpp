@@ -1,10 +1,10 @@
 #include "admin_pile_page.h"
+#include "client_ui/animated_combo_box.h"
 
 #include "admin_api_client.h"
 #include "admin_format.h"
 
 #include <QComboBox>
-#include <QFont>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QJsonArray>
@@ -13,6 +13,7 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSignalBlocker>
+#include <QStyle>
 #include <QTableWidget>
 #include <QVBoxLayout>
 
@@ -42,20 +43,21 @@ AdminPilePage::AdminPilePage(AdminApiClient *api, QWidget *parent)
     auto *headerLayout = new QHBoxLayout();
     headerLayout->setSpacing(10);
     auto *titleLabel = new QLabel(QStringLiteral("充电桩管理"), this);
-    QFont titleFont = titleLabel->font();
-    titleFont.setPointSize(16);
-    titleFont.setBold(true);
-    titleLabel->setFont(titleFont);
+    titleLabel->setProperty("uiClass", "pageTitle");
     headerLayout->addWidget(titleLabel);
     headerLayout->addStretch();
 
-    headerLayout->addWidget(new QLabel(QStringLiteral("站点："), this));
-    stationBox_ = new QComboBox(this);
+    auto *stationLabel = new QLabel(QStringLiteral("站点："), this);
+    stationLabel->setProperty("uiClass", "formLabel");
+    headerLayout->addWidget(stationLabel);
+    stationBox_ = new ev::AnimatedComboBox(this);
     stationBox_->setMinimumWidth(180);
     headerLayout->addWidget(stationBox_);
 
-    headerLayout->addWidget(new QLabel(QStringLiteral("状态："), this));
-    statusBox_ = new QComboBox(this);
+    auto *filterStatusLabel = new QLabel(QStringLiteral("状态："), this);
+    filterStatusLabel->setProperty("uiClass", "formLabel");
+    headerLayout->addWidget(filterStatusLabel);
+    statusBox_ = new ev::AnimatedComboBox(this);
     statusBox_->addItem(QStringLiteral("全部状态"), QString());
     statusBox_->addItem(QStringLiteral("空闲"), QStringLiteral("idle"));
     statusBox_->addItem(QStringLiteral("已预约"), QStringLiteral("reserved"));
@@ -64,6 +66,7 @@ AdminPilePage::AdminPilePage(AdminApiClient *api, QWidget *parent)
     headerLayout->addWidget(statusBox_);
 
     refreshButton_ = new QPushButton(QStringLiteral("刷新"), this);
+    refreshButton_->setProperty("uiClass", "secondary");
     headerLayout->addWidget(refreshButton_);
     rootLayout->addLayout(headerLayout);
 
@@ -84,10 +87,6 @@ AdminPilePage::AdminPilePage(AdminApiClient *api, QWidget *parent)
     table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table_->setAlternatingRowColors(true);
-    table_->setStyleSheet(QStringLiteral(
-        "QTableWidget { border: 1px solid #e0e6ed; gridline-color: #eef1f4; }"
-        "QHeaderView::section { background: #f5f7fa; border: none;"
-        " border-bottom: 1px solid #e0e6ed; padding: 6px; }"));
     table_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     table_->horizontalHeader()->setSectionResizeMode(kColumnType, QHeaderView::ResizeToContents);
     table_->horizontalHeader()->setSectionResizeMode(kColumnPower, QHeaderView::ResizeToContents);
@@ -96,7 +95,7 @@ AdminPilePage::AdminPilePage(AdminApiClient *api, QWidget *parent)
     rootLayout->addWidget(table_, 1);
 
     statusLabel_ = new QLabel(this);
-    statusLabel_->setStyleSheet(QStringLiteral("color: #757575; font-size: 12px;"));
+    statusLabel_->setProperty("tone", "muted");
     rootLayout->addWidget(statusLabel_);
 
     connect(refreshButton_, &QPushButton::clicked, this, &AdminPilePage::reloadAll);
@@ -185,9 +184,6 @@ void AdminPilePage::fillTable(const QJsonArray &piles)
 
         auto *statusItem = new QTableWidgetItem(pileStatusText(status));
         statusItem->setForeground(pileStatusColor(status));
-        QFont statusFont = statusItem->font();
-        statusFont.setBold(true);
-        statusItem->setFont(statusFont);
         table_->setItem(row, kColumnStatus, statusItem);
 
         table_->setItem(row, kColumnCount, new QTableWidgetItem(
@@ -200,6 +196,7 @@ void AdminPilePage::fillTable(const QJsonArray &piles)
                 pile.value(QStringLiteral("pile_id")).toInteger();
             const QString pileNumber = pile.value(QStringLiteral("pile_number")).toString();
             auto *restartButton = new QPushButton(QStringLiteral("远程重启"), table_);
+            restartButton->setProperty("uiClass", "secondary");
             restartButton->setCursor(Qt::PointingHandCursor);
             connect(restartButton, &QPushButton::clicked, this, [this, pileId, pileNumber] {
                 requestRestart(pileId, pileNumber);
@@ -234,9 +231,9 @@ void AdminPilePage::requestRestart(long long pileId, const QString &pileNumber)
 void AdminPilePage::setStatusText(const QString &text, bool isError)
 {
     statusLabel_->setText(text);
-    statusLabel_->setStyleSheet(isError
-        ? QStringLiteral("color: #c62828; font-size: 12px;")
-        : QStringLiteral("color: #757575; font-size: 12px;"));
+    statusLabel_->setProperty("tone", isError ? "error" : "muted");
+    statusLabel_->style()->unpolish(statusLabel_);
+    statusLabel_->style()->polish(statusLabel_);
 }
 
 } // namespace ev
