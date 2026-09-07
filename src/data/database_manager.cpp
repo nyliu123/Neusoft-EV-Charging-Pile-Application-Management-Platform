@@ -13,62 +13,6 @@ void initializeDatabaseResources()
     Q_INIT_RESOURCE(database);
 }
 
-namespace {
-
-QStringList sqlStatements(const QString &script)
-{
-    QStringList statements;
-    QString current;
-    bool insideTrigger = false;
-    const QStringList lines = script.split('\n');
-    for (const QString &line : lines) {
-        const QString trimmed = line.trimmed();
-        if (trimmed.startsWith(QStringLiteral("--"))) {
-            continue;
-        }
-        if (current.trimmed().isEmpty()
-            && trimmed.startsWith(QStringLiteral("CREATE TRIGGER"),
-                                  Qt::CaseInsensitive)) {
-            insideTrigger = true;
-        }
-        current.append(line);
-        current.append('\n');
-        if (insideTrigger) {
-            if (trimmed.compare(QStringLiteral("END;"), Qt::CaseInsensitive) == 0) {
-                statements.append(current.trimmed());
-                current.clear();
-                insideTrigger = false;
-            }
-            continue;
-        }
-        qsizetype delimiter = current.indexOf(';');
-        while (delimiter >= 0) {
-            const QString statement = current.left(delimiter).trimmed();
-            if (!statement.isEmpty()) {
-                statements.append(statement);
-            }
-            current.remove(0, delimiter + 1);
-            delimiter = current.indexOf(';');
-        }
-    }
-    if (!current.trimmed().isEmpty()) {
-        statements.append(current.trimmed());
-    }
-    return statements;
-}
-
-const QStringList migrationScripts()
-{
-    return {
-        QStringLiteral(":/database/migrations/001_core.sql"),
-        QStringLiteral(":/database/migrations/002_seed_admin.sql"),
-        QStringLiteral(":/database/migrations/003_seed_test_data.sql"),
-        QStringLiteral(":/database/migrations/004_seed_national_stations.sql")
-    };
-}
-
-} // namespace
-
 namespace ev {
 
 DatabaseManager::DatabaseManager(QString databasePath, int busyTimeoutMs)
@@ -89,6 +33,17 @@ Result<QSqlDatabase> DatabaseManager::openForCurrentThread() const
     if (!QDir().mkpath(databaseFile.absolutePath())) {
         return Result<QSqlDatabase>::fail(ErrorCode::StorageError,
                                           QStringLiteral("cannot create database directory"));
+    }
+    if (!databaseFile.exists()) {
+        if (!QFile::copy(QStringLiteral(":/database/template/ev_charging.sqlite3"),
+                         databaseFile.absoluteFilePath())) {
+            return Result<QSqlDatabase>::fail(
+                ErrorCode::StorageError,
+                QStringLiteral("cannot create database from bundled template"));
+        }
+        QFile::setPermissions(databaseFile.absoluteFilePath(),
+                              QFileDevice::ReadOwner | QFileDevice::WriteOwner
+                                  | QFileDevice::ReadGroup | QFileDevice::ReadOther);
     }
 
     const QString name = connectionName();
@@ -119,36 +74,22 @@ Result<QSqlDatabase> DatabaseManager::openForCurrentThread() const
 Result<int> DatabaseManager::migrate(QSqlDatabase &database) const
 {
     QSqlQuery query(database);
-    int executed = 0;
-
-    for (const QString &scriptPath : migrationScripts()) {
-        QFile migration(scriptPath);
-        if (!migration.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            return Result<int>::fail(ErrorCode::StorageError,
-                QStringLiteral("migration script not found: %1").arg(scriptPath));
-        }
-
-        if (!database.transaction()) {
-            return Result<int>::fail(ErrorCode::StorageError, database.lastError().text());
-        }
-
-        const QString script = QString::fromUtf8(migration.readAll());
-        for (const QString &statement : sqlStatements(script)) {
-            if (!query.exec(statement)) {
-                database.rollback();
-                return Result<int>::fail(ErrorCode::StorageError,
-                    QStringLiteral("%1: %2").arg(scriptPath, query.lastError().text()));
-            }
-            ++executed;
-        }
-
-        if (!database.commit()) {
-            database.rollback();
-            return Result<int>::fail(ErrorCode::StorageError, database.lastError().text());
+    const QStringList requiredTables {
+        QStringLiteral("users"), QStringLiteral("admins"),
+        QStringLiteral("charging_stations"), QStringLiteral("charging_piles"),
+        QStringLiteral("orders")
+    };
+    for (const QString &table : requiredTables) {
+        query.prepare(QStringLiteral(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?"));
+        query.addBindValue(table);
+        if (!query.exec() || !query.next()) {
+            return Result<int>::fail(
+                ErrorCode::StorageError,
+                QStringLiteral("database template is missing table: %1").arg(table));
         }
     }
-
-    return Result<int>::ok(executed);
+    return Result<int>::ok(0);
 }
 
 } // namespace ev

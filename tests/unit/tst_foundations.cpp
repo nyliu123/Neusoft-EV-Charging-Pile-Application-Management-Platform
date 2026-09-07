@@ -29,7 +29,7 @@ private slots:
     void feeUsesOrderSnapshotAndHalfUpRounding();
     void feeRejectsInvalidDiscount();
     void databaseCreatesCoreSchema();
-    void compactStationSeedUsesAZWithTenPiles();
+    void databaseTemplateHasCompactStationData();
     void phoneValidation_data();
     void phoneValidation();
     void phoneValidationMessages();
@@ -130,7 +130,7 @@ void FoundationTests::databaseCreatesCoreSchema()
     QCOMPARE(query.value(0).toInt(), 1);
 }
 
-void FoundationTests::compactStationSeedUsesAZWithTenPiles()
+void FoundationTests::databaseTemplateHasCompactStationData()
 {
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
@@ -163,33 +163,20 @@ void FoundationTests::compactStationSeedUsesAZWithTenPiles()
 
     QVERIFY(query.exec(QStringLiteral(
         "SELECT COUNT(*) FROM charging_piles "
-        "WHERE pile_number NOT GLOB '[A-Z]-[0-9][0-9]'")));
+        "WHERE pile_number NOT GLOB '[A-Z]-[0-9][0-9]' "
+        "AND pile_number NOT GLOB '[A-Z][A-Z]-[0-9][0-9]'")));
     QVERIFY(query.next());
     QCOMPARE(query.value(0).toInt(), 0);
 
     QVERIFY(query.exec(QStringLiteral(
-        "SELECT COUNT(DISTINCT substr(pile_number, 1, 1)) FROM charging_piles")));
-    QVERIFY(query.next());
-    QCOMPARE(query.value(0).toInt(), 26);
-
-    for (QChar prefix = u'A'; prefix <= u'Z'; prefix = QChar(prefix.unicode() + 1)) {
-        query.prepare(QStringLiteral(
-            "SELECT COUNT(*) FROM charging_piles WHERE pile_number LIKE ?"));
-        query.addBindValue(QString(prefix) + QStringLiteral("-%"));
-        QVERIFY2(query.exec(), qPrintable(query.lastError().text()));
-        QVERIFY(query.next());
-        QCOMPARE(query.value(0).toInt(), 10);
-    }
-
-    QVERIFY(query.exec(QStringLiteral(
         "SELECT COUNT(*) FROM charging_stations WHERE address LIKE '大连市%'")));
     QVERIFY(query.next());
-    QCOMPARE(query.value(0).toInt(), 1);
+    QCOMPARE(query.value(0).toInt(), 3);
 
     const QList<QPair<int, QString>> originalPileNumbers {
         {1, QStringLiteral("A-01")}, {2, QStringLiteral("A-02")},
-        {3, QStringLiteral("A-03")}, {4, QStringLiteral("A-04")},
-        {5, QStringLiteral("B-01")}, {9, QStringLiteral("C-01")}
+        {3, QStringLiteral("B-01")}, {4, QStringLiteral("B-02")},
+        {5, QStringLiteral("C-01")}, {9, QStringLiteral("D-01")}
     };
     for (const auto &expected : originalPileNumbers) {
         query.prepare(QStringLiteral(
@@ -218,8 +205,13 @@ void FoundationTests::compactStationSeedUsesAZWithTenPiles()
     query.addBindValue(newStationId);
     QVERIFY(query.exec());
     QVERIFY(query.next());
-    QCOMPARE(query.value(0).toString(), QStringLiteral("AA-01"));
-    QCOMPARE(query.value(1).toString(), QStringLiteral("AA-10"));
+    const qint64 stationOrdinal = newStationId + 1;
+    const QString prefix = stationOrdinal <= 26
+        ? QString(QChar(static_cast<int>(64 + stationOrdinal)))
+        : QString(QChar(static_cast<int>(64 + ((stationOrdinal - 1) / 26))))
+            + QString(QChar(static_cast<int>(65 + ((stationOrdinal - 1) % 26))));
+    QCOMPARE(query.value(0).toString(), prefix + QStringLiteral("-01"));
+    QCOMPARE(query.value(1).toString(), prefix + QStringLiteral("-10"));
 
     query.prepare(QStringLiteral(
         "INSERT INTO charging_piles "
@@ -247,16 +239,17 @@ void FoundationTests::stationSearchSortsAndReportsPileStats()
     QCOMPARE(stations.first().toObject().value(QStringLiteral("station_id")).toInteger(), 1);
     QCOMPARE(stations.first().toObject().value(QStringLiteral("distance_km")).toDouble(), 0.0);
     QCOMPARE(stations.first().toObject().value(QStringLiteral("total_piles")).toInt(), 10);
-    QCOMPARE(stations.first().toObject().value(QStringLiteral("idle_count")).toInt(), 3);
+    QCOMPARE(stations.first().toObject().value(QStringLiteral("idle_count")).toInt(), 7);
 
     const auto detailResult = service.queryPiles(openResult.data, 1);
     QVERIFY2(detailResult.success, qPrintable(detailResult.message));
     QCOMPARE(detailResult.data.value(QStringLiteral("piles")).toArray().size(), 10);
     const QJsonObject stats = detailResult.data.value(QStringLiteral("stats")).toObject();
-    QCOMPARE(stats.value(QStringLiteral("idle")).toInt(), 3);
-    QCOMPARE(stats.value(QStringLiteral("in_use")).toInt(), 3);
-    QCOMPARE(stats.value(QStringLiteral("fault")).toInt(), 3);
-    QCOMPARE(stats.value(QStringLiteral("online_rate")).toDouble(), 70.0);
+    QCOMPARE(stats.value(QStringLiteral("idle")).toInt(), 7);
+    QCOMPARE(stats.value(QStringLiteral("in_use")).toInt(), 2);
+    QCOMPARE(stats.value(QStringLiteral("reserved")).toInt(), 0);
+    QCOMPARE(stats.value(QStringLiteral("fault")).toInt(), 1);
+    QCOMPARE(stats.value(QStringLiteral("online_rate")).toDouble(), 90.0);
 }
 
 void FoundationTests::phoneValidation_data()
@@ -354,7 +347,7 @@ void FoundationTests::adminLoginSucceedsWithDefaultSeed()
     // Seed the default admin using AdminSeeder.
     auto seedResult = ev::AdminSeeder::seedIfNeeded(openResult.data);
     QVERIFY(seedResult.success);
-    // 002_seed_admin.sql already creates the default account during migration.
+    // The bundled database template already contains the default account.
     QCOMPARE(seedResult.data, 0);
 
     // Second seed should be a no-op.
@@ -585,7 +578,7 @@ void FoundationTests::stationQueriesSortByDistanceAndPreserveStatus()
     QVERIFY(sorted.data.first().distanceKm.has_value());
     QVERIFY(*sorted.data.first().distanceKm < 0.001);
     QCOMPARE(sorted.data.first().station.totalPiles, 10);
-    QCOMPARE(sorted.data.first().station.idlePiles, 3);
+    QCOMPARE(sorted.data.first().station.idlePiles, 7);
 
     const auto highTechSorted = service.listStations(
         openResult.data, 121.530000, 38.861000);
@@ -593,17 +586,17 @@ void FoundationTests::stationQueriesSortByDistanceAndPreserveStatus()
         openResult.data, 121.525500, 38.953300);
     QVERIFY(highTechSorted.success);
     QVERIFY(ganjingziSorted.success);
-    QCOMPARE(highTechSorted.data.first().station.stationId, 1);
-    QCOMPARE(ganjingziSorted.data.first().station.stationId, 1);
+    QCOMPARE(highTechSorted.data.first().station.stationId, 3);
+    QCOMPARE(ganjingziSorted.data.first().station.stationId, 2);
 
     const auto detail = service.stationDetail(openResult.data, 1);
     QVERIFY2(detail.success, qPrintable(detail.message));
     QCOMPARE(detail.data.piles.size(), 10);
     QCOMPARE(detail.data.piles.first().pileNumber, QStringLiteral("A-01"));
-    QVERIFY(qAbs(ev::StationService::onlineRate(detail.data) - 0.7) < 0.000001);
+    QVERIFY(qAbs(ev::StationService::onlineRate(detail.data) - 0.9) < 0.000001);
     const auto reservedDetail = service.stationDetail(openResult.data, 2);
     QVERIFY2(reservedDetail.success, qPrintable(reservedDetail.message));
-    QVERIFY(qAbs(ev::StationService::onlineRate(reservedDetail.data) - 0.7) < 0.000001);
+    QVERIFY(qAbs(ev::StationService::onlineRate(reservedDetail.data) - 0.9) < 0.000001);
     QVERIFY(!service.stationDetail(openResult.data, 0).success);
     QVERIFY(!service.listStations(openResult.data, 121.5, std::nullopt).success);
 }

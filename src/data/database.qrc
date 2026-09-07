@@ -1,8 +1,5 @@
 <RCC>
     <qresource prefix="/database">
-        <file alias="migrations/001_core.sql">../../resources/database/migrations/001_core.sql</file>
-        <file alias="migrations/002_seed_admin.sql">../../resources/database/migrations/002_seed_admin.sql</file>
-        <file alias="migrations/003_seed_test_data.sql">../../resources/database/migrations/003_seed_test_data.sql</file>
-        <file alias="migrations/004_seed_national_stations.sql">../../resources/database/migrations/004_seed_national_stations.sql</file>
+        <file alias="template/ev_charging.sqlite3">../../data/ev_charging.sqlite3</file>
     </qresource>
 </RCC>

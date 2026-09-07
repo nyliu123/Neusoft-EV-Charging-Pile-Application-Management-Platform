@@ -12,11 +12,10 @@ OTHER_FILES += \
     .gitmessage \
     config/common.pri \
     config/app.ini.example \
+    data/ev_charging.sqlite3 \
     docs/02概要设计说明书第5组（最终版）.docx \
     docs/development/architecture.md \
     docs/development/shared-identifiers.md \
-    resources/database/migrations/001_core.sql \
-    resources/database/migrations/004_seed_national_stations.sql \
     scripts/smoke-test.sh \
     analysis/README.md \
     src/adapters/README.md \
