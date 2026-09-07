@@ -14,6 +14,13 @@ class AdminApiClient;
 
 // UML-038/039: full pile list with station/status filters and remote restart
 // for fault piles.
+//
+// UI design follows Ant Design Pro / Element Admin conventions:
+//   - Filter bar with station + status dropdowns
+//   - Data table with coloured status cells
+//   - "远程重启" button appears only on fault rows
+//   - Async loading overlay disables controls during requests
+//   - Restart confirmation dialog + button disabling during restart
 class AdminPilePage final : public QWidget {
     Q_OBJECT
 
@@ -29,7 +36,8 @@ private:
     void loadStations();
     void loadPiles();
     void fillTable(const QJsonArray &piles);
-    void requestRestart(long long pileId, const QString &pileNumber);
+    void requestRestart(long long pileId, const QString &pileNumber, int row);
+    void setLoading(bool loading, const QString &message);
     void setStatusText(const QString &text, bool isError);
 
     AdminApiClient *api_ = nullptr;
@@ -39,6 +47,7 @@ private:
     QPushButton *refreshButton_ = nullptr;
     QTableWidget *table_ = nullptr;
     QLabel *statusLabel_ = nullptr;
+    QLabel *loadingOverlay_ = nullptr;
 };
 
 } // namespace ev
