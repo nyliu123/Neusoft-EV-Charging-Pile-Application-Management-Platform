@@ -16,6 +16,7 @@
 #include <QRadioButton>
 #include <QScrollArea>
 #include <QStackedWidget>
+#include <QStringList>
 #include <QTableWidget>
 #include <QUrl>
 #include <QUrlQuery>
@@ -59,18 +60,31 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
     title->setProperty("uiClass", "pageTitle");
     listPageLayout->addWidget(title);
     auto *description = new QLabel(
-        QStringLiteral("选择预设区域或输入地址。距离为直线距离，仅供找桩参考。位置数据 © OpenStreetMap contributors。"),
+        QStringLiteral("选择站点所在省份或输入地址。距离为直线距离，仅供找桩参考。位置数据 © OpenStreetMap contributors。"),
         listPage_);
     description->setProperty("uiClass", "muted");
     listPageLayout->addWidget(description);
 
     auto *searchRow = new QHBoxLayout;
     areaBox_ = new ev::AnimatedComboBox(listPage_);
-    areaBox_->addItem(QStringLiteral("选择预设区域"), QString());
-    areaBox_->addItem(QStringLiteral("大连市甘井子区"), QStringLiteral("辽宁省大连市甘井子区"));
-    areaBox_->addItem(QStringLiteral("大连市高新区"),
-                      QStringLiteral("辽宁省大连市高新区"));
-    areaBox_->addItem(QStringLiteral("大连北站"), QStringLiteral("辽宁省大连市大连北站"));
+    areaBox_->addItem(QStringLiteral("选择站点所在省份"), QString());
+    const QStringList stationProvinces {
+        QStringLiteral("辽宁省"), QStringLiteral("北京市"),
+        QStringLiteral("河北省"), QStringLiteral("山西省"),
+        QStringLiteral("吉林省"), QStringLiteral("黑龙江省"),
+        QStringLiteral("江苏省"), QStringLiteral("浙江省"),
+        QStringLiteral("安徽省"), QStringLiteral("福建省"),
+        QStringLiteral("江西省"), QStringLiteral("山东省"),
+        QStringLiteral("河南省"), QStringLiteral("湖北省"),
+        QStringLiteral("湖南省"), QStringLiteral("广东省"),
+        QStringLiteral("海南省"), QStringLiteral("四川省"),
+        QStringLiteral("贵州省"), QStringLiteral("云南省"),
+        QStringLiteral("陕西省"), QStringLiteral("甘肃省"),
+        QStringLiteral("青海省"), QStringLiteral("台湾省")
+    };
+    for (const QString &province : stationProvinces) {
+        areaBox_->addItem(province, province);
+    }
     addressEdit_ = new QLineEdit(listPage_);
     addressEdit_->setPlaceholderText(QStringLiteral("或手动输入地址，例如：大连市软件园路8号"));
     addressEdit_->setClearButtonEnabled(true);
