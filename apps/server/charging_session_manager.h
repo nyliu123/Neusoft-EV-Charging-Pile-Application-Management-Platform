@@ -40,6 +40,7 @@ private:
     struct Session {
         double powerKw = 0.0;
         double pricePerKwh = 0.0;
+        int discountBps = 10000;
         QDateTime startTime;
         QPointer<QTcpSocket> socket;
     };

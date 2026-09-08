@@ -8,6 +8,10 @@
 
 本分支 `feature/apple-ui` 提供更现代的轻充界面：用户端顶部胶囊导航、充电主题横幅、自适应站点网格，管理端浮动侧栏和分层指标卡片。保留内嵌地图与站点评价等原有功能，见 [现代 UI 说明](docs/development/modern-ui.md)。前一版 Apple 界面保留在提交 `fb9aebf`，说明见 [Apple UI 说明](docs/development/apple-ui.md)；莱茵版本独立保留在 `feature/rhine-lab-ui` 分支。
 
+## 会员与 AI 咨询
+
+本分支已接入 VIP/SVIP 的 12 种套餐、模拟钱包购买、自动续费授权/取消、预约优惠快照、后台套餐与发布知识管理。入口位于用户端“个人中心”和管理端侧栏。AI 咨询需要在服务端设置 `EV_AI_API_KEY`；未设置不会伪造答案，也不影响其余会员功能。默认演示价格、规则、配置和测试见 [会员模块说明](docs/development/membership.md)。
+
 ## 环境要求
 
 - Ubuntu 22.04 或更高版本

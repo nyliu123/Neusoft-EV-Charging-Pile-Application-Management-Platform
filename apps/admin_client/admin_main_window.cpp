@@ -8,6 +8,7 @@
 #include "admin_station_detail_page.h"
 #include "admin_station_page.h"
 #include "admin_user_page.h"
+#include "admin_membership_page.h"
 
 #include <QApplication>
 #include <QHBoxLayout>
@@ -65,6 +66,8 @@ void AdminMainWindow::setupUi()
     new QListWidgetItem(appSymbolIcon(AppSymbol::Station), QStringLiteral("充电站管理"), nav_);
     new QListWidgetItem(appSymbolIcon(AppSymbol::Person), QStringLiteral("用户管理"), nav_);
     new QListWidgetItem(appSymbolIcon(AppSymbol::Receipt), QStringLiteral("订单管理"), nav_);
+    new QListWidgetItem(appSymbolIcon(AppSymbol::Person), QStringLiteral("会员套餐"), nav_);
+    new QListWidgetItem(appSymbolIcon(AppSymbol::Receipt), QStringLiteral("咨询知识库"), nav_);
     sidebarLayout->addWidget(nav_, 1);
     auto *railFooter = new QLabel(QStringLiteral("轻充管理端\n电动汽车充电服务平台"), sidebar);
     railFooter->setObjectName(QStringLiteral("terminalSidebarFooter"));
@@ -111,6 +114,8 @@ void AdminMainWindow::setupUi()
 
     orderPage_ = new AdminOrderPage(&api_, this);
     stack_->addWidget(orderPage_);
+    membershipPage_ = new AdminMembershipPage(&api_,this);stack_->addWidget(membershipPage_);
+    knowledgePage_ = new AdminKnowledgePage(&api_,this);stack_->addWidget(knowledgePage_);
 
     // Station detail (UML-041): stacked but not present in the navigation.
     stationDetailPage_ = new AdminStationDetailPage(&api_, this);
@@ -201,6 +206,10 @@ void AdminMainWindow::refreshCurrentPage()
         userPage_->reload();
     } else if (current == orderPage_) {
         orderPage_->reloadAll();
+    } else if (current == membershipPage_) {
+        membershipPage_->reload();
+    } else if (current == knowledgePage_) {
+        knowledgePage_->reload();
     } else if (current == stationDetailPage_) {
         stationDetailPage_->reload();
     }

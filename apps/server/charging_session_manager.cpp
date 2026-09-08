@@ -26,6 +26,7 @@ void ChargingSessionManager::ensureSession(const OrderRecord &order, double powe
     Session session;
     session.powerKw = powerKw;
     session.pricePerKwh = order.pricePerKwh;
+    session.discountBps = order.discountBps;
     session.startTime = ChargeService::parseDbDateTime(order.startTime);
     session.socket = socket;
     sessions_.insert(order.orderId, session);
@@ -63,7 +64,7 @@ void ChargingSessionManager::tick()
         const Session &session = it.value();
 
         const auto snapshot = ChargeService::computeChargeData(
-            session.startTime, session.powerKw, session.pricePerKwh);
+            session.startTime, session.powerKw, session.pricePerKwh, session.discountBps);
         if (!snapshot.success) {
             qWarning().noquote() << "charge simulation compute failed for order"
                                  << orderId << ":" << snapshot.message;
@@ -73,7 +74,7 @@ void ChargingSessionManager::tick()
         // Persist intermediate values so the admin order page shows live
         // data for charging orders (optional write per UML-029).
         const auto stored = orderRepository_.updateChargeData(
-            database_, orderId, snapshot.data.kwh, snapshot.data.feeCent);
+            database_, orderId, snapshot.data.kwh, snapshot.data.feeCent, snapshot.data.grossFeeCent);
         if (!stored.success) {
             qWarning().noquote() << "charge data persist failed for order"
                                  << orderId << ":" << stored.message;
@@ -87,6 +88,8 @@ void ChargingSessionManager::tick()
             {QStringLiteral("order_id"), orderId},
             {QStringLiteral("charge_amount_kwh"), snapshot.data.kwh},
             {QStringLiteral("current_fee_cent"), snapshot.data.feeCent},
+            {"gross_fee_cent",snapshot.data.grossFeeCent},
+            {"discount_fee_cent",snapshot.data.grossFeeCent-snapshot.data.feeCent},
             {QStringLiteral("progress"), snapshot.data.progressPercent}
         };
         session.socket->write(FrameCodec::encode(

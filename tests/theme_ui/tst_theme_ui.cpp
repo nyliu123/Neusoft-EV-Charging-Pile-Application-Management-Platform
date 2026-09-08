@@ -1,6 +1,8 @@
 #include "admin_login_dialog.h"
 #include "admin_main_window.h"
 #include "admin_dashboard_page.h"
+#include "admin_membership_page.h"
+#include "membership_dialog.h"
 #include "phone_login_widget.h"
 #include "station_search_widget.h"
 #include "user_home_widget.h"
@@ -12,9 +14,16 @@
 #include "network/frame_codec.h"
 #include "network/platform_client.h"
 #include <QDir>
+#include <QCheckBox>
+#include <QComboBox>
+#include <QDialogButtonBox>
+#include <QDoubleSpinBox>
 #include <QFile>
 #include <QJsonArray>
 #include <QLineEdit>
+#include <QLabel>
+#include <QJsonDocument>
+#include <QRegularExpression>
 #include <QListWidget>
 #include <QMessageBox>
 #include <QProgressBar>
@@ -23,6 +32,9 @@
 #include <QTableWidget>
 #include <QTcpServer>
 #include <QTcpSocket>
+#include <QSettings>
+#include <QTemporaryDir>
+#include <QTimer>
 #include <QtTest>
 
 // A deterministic protocol fixture. No map network, real accounts, or production data.
@@ -35,10 +47,22 @@ public:
     bool posted = false;
     QString postedContent;
     int postedRating = 0;
+    QJsonArray plans, articles;
+    QJsonObject memberState{{"valid",false},{"level","NORMAL"},{"discount_bps",10000}};
+    QHash<QString,QJsonObject> lastParams;
+    bool consultFailure=false;
     QJsonObject user {{"user_id", 1}, {"nickname", QStringLiteral("测试用户")},
                       {"balance", 128.50}, {"session_id", "theme-user"}};
     ThemeFixture()
     {
+        int id=0;
+        for(const auto &level:QStringList{"VIP","SVIP"})for(int recurring:{0,1})for(int months:{1,3,12}){
+            plans.append(QJsonObject{{"plan_id",++id},{"version",1},{"level",level},{"months",months},{"recurring",recurring},
+                {"price_cent",months*(level=="VIP"?(recurring?1200:1500):(recurring?2500:3000))},{"discount_bps",level=="VIP"?9000:8000},{"active",1}});
+        }
+        articles.append(QJsonObject{{"article_id",1},{"draft_version",1},{"published_version",1},{"active",1},
+            {"title",QStringLiteral("充电操作")},{"keywords",QStringLiteral("充电,预约,开始")},
+            {"content",QStringLiteral("先预约空闲充电桩，再开始模拟充电。结束后从模拟钱包结算。")},{"source",QStringLiteral("项目教学说明：充电流程")}});
         stations = {
             QJsonObject{{"station_id", 1}, {"station_name", QStringLiteral("软件园能源站")},
                 {"address", QStringLiteral("大连市高新区 · 软件园路 8 号")}, {"distance_km", 1.28},
@@ -71,6 +95,8 @@ public:
         using ev::MessageType;
         const auto data = payload.value("data").toObject();
         const QString query = data.value("type").toString();
+        const auto params = data.value("params").toObject();
+        lastParams.insert(query,params);
         requests.append(query);
         quint32 responseType = type + 1;
         QJsonObject responseData, result;
@@ -83,7 +109,34 @@ public:
         }
         const QJsonObject pile {{"pile_id", 1}, {"pile_number", "EV-A01"},
             {"pile_type", "fast"}, {"power_kw", 60.0}, {"status", "idle"}};
-        if (query == "geocode") result = {{"longitude", 121.53}, {"latitude", 38.87}};
+        if(query=="plans" || query=="membership_plans")result={{"plans",plans}};
+        else if(query=="status")result=memberState;
+        else if(query=="purchase"){
+            const auto p=plans[params.value("plan_id").toInt()-1].toObject();
+            const auto now=QDateTime::currentSecsSinceEpoch();
+            memberState={{"valid",true},{"level",p.value("level")},{"discount_bps",p.value("discount_bps")},
+                {"starts_at",now},{"expires_at",now+30*86400},{"paid_until",now+30*86400},
+                {"renewal",p.value("recurring").toInt()?QJsonObject{{"status","active"},{"next_due",now+30*86400},{"price_cent",p.value("price_cent")}}:QJsonObject{}}};
+            result={{"paid_cent",p.value("price_cent")},{"balance_cent",97500},{"expires_at",now+30*86400}};
+        }
+        else if(query=="set_renewal"){
+            auto renewal=memberState.value("renewal").toObject();renewal.insert("status",params.value("enabled").toBool()?"active":"cancelled");memberState.insert("renewal",renewal);
+        }
+        else if(query=="ask")result={{"answer",QStringLiteral("请先预约空闲充电桩，再开始模拟充电。[1]")},{"generated",true},
+            {"sources",QJsonArray{QJsonObject{{"article_id",1},{"title",QStringLiteral("充电操作")},{"version",1},{"source",QStringLiteral("项目教学说明：充电流程")}}}}};
+        else if(query=="membership_update"){
+            for(int i=0;i<plans.size();++i)if(plans[i].toObject().value("plan_id")==params.value("plan_id")){
+                auto p=plans[i].toObject();p.insert("version",p.value("version").toInt()+1);p.insert("price_cent",params.value("price_cent"));plans[i]=p;break;
+            }
+        }
+        else if(query=="knowledge_list")result={{"articles",articles}};
+        else if(query=="knowledge_save"){
+            auto p=params;p.insert("draft_version",params.value("draft_version").toInt()+1);p.insert("active",1);p.insert("published_version",1);articles[0]=p;result={{"article_id",1}};
+        }
+        else if(query=="knowledge_publish" || query=="knowledge_disable"){
+            auto p=articles[0].toObject();p.insert("published_version",p.value("draft_version"));p.insert("active",query=="knowledge_publish"?1:0);articles[0]=p;
+        }
+        else if (query == "geocode") result = {{"longitude", 121.53}, {"latitude", 38.87}};
         else if (query == "station_list") result = {{"stations", stations}};
         else if (query == "station_detail") result = {{"station", stations.first()}, {"piles", QJsonArray{pile}}};
         else if (query == "pile_list") result = {{"piles", QJsonArray{pile}}};
@@ -132,7 +185,10 @@ public:
                     QJsonObject{{"status", "fault"}, {"label", QStringLiteral("故障")}, {"count", 2}}}}}}};
         }
         if (type != quint32(MessageType::LoginRequest)) responseData = {{"result", result}};
-        socket->write(ev::FrameCodec::encode(responseType, {{"success", true}, {"code", "OK"},
+        const bool fail=consultFailure && query=="ask";
+        if(fail)responseData={{"result",QJsonObject{}}};
+        socket->write(ev::FrameCodec::encode(responseType, {{"success", !fail}, {"code", fail?"MODEL_UNAVAILABLE":"OK"},
+            {"message",fail?QStringLiteral("AI服务尚未配置，请管理员设置服务端 EV_AI_API_KEY"):QString()},
             {"request_id", payload.value("request_id")}, {"data", responseData}}));
     }
 };
@@ -387,16 +443,104 @@ private slots:
         capture(main, QStringLiteral("admin-dashboard"));
         auto *nav = main.findChild<QListWidget *>("sidebarNavigation");
         QVERIFY(nav);
-        QCOMPARE(nav->count(), 5);
+        QCOMPARE(nav->count(), 7);
         nav->setCurrentRow(2);
         QTRY_VERIFY(fixture.requests.contains(QStringLiteral("station_list")));
         QTest::qWait(100);
         capture(main, QStringLiteral("admin-stations"));
         for (int row : {1, 3, 4}) { nav->setCurrentRow(row); QTest::qWait(80); }
         capture(main, QStringLiteral("admin-orders"));
+        nav->setCurrentRow(5);
+        auto *plans=main.findChild<QTableWidget *>("adminMembershipPlans");QVERIFY(plans);
+        QTRY_COMPARE(plans->rowCount(),12);
+        capture(main,QStringLiteral("admin-membership"));
+        auto *price=qobject_cast<QDoubleSpinBox *>(plans->cellWidget(0,2));QVERIFY(price);price->setValue(17.50);
+        QTimer::singleShot(80,[]{if(auto *box=qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))box->button(QMessageBox::Yes)->click();});
+        QTest::mouseClick(main.findChild<QPushButton *>("savePlan1"),Qt::LeftButton);
+        QTRY_COMPARE(fixture.lastParams.value("membership_update").value("price_cent").toInt(),1750);
+        QTRY_VERIFY(plans->isEnabled());
+        nav->setCurrentRow(6);
+        auto *articles=main.findChild<QListWidget *>("knowledgeArticles");QVERIFY(articles);
+        QTRY_COMPARE(articles->count(),1);
+        capture(main,QStringLiteral("admin-knowledge"));
+        main.findChild<QLineEdit *>("knowledgeTitle")->setText(QStringLiteral("更新后的充电操作"));
+        QTest::mouseClick(main.findChild<QPushButton *>("knowledge_publish"),Qt::LeftButton);
+        QVERIFY(!fixture.requests.contains("knowledge_publish")); // Unsaved changes cannot publish.
+        QTest::mouseClick(main.findChild<QPushButton *>("knowledge_save"),Qt::LeftButton);
+        QTRY_VERIFY(fixture.requests.contains("knowledge_save"));
+        QTRY_COMPARE(fixture.articles[0].toObject().value("draft_version").toInt(),2);
+        QTRY_VERIFY(main.findChild<QPushButton *>("knowledge_publish")->isEnabled());
+        QTest::qWait(80);
+        QTimer::singleShot(80,[]{if(auto *box=qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))box->button(QMessageBox::Yes)->click();});
+        QTest::mouseClick(main.findChild<QPushButton *>("knowledge_publish"),Qt::LeftButton);
+        QTRY_VERIFY(fixture.requests.contains("knowledge_publish"));
         nav->setCurrentRow(0);
         main.resize(1100, 680);
         capture(main, QStringLiteral("admin-small"));
+    }
+    void membershipPurchaseConsentCancellationAndConsult()
+    {
+        ThemeFixture fixture;QVERIFY(fixture.server.listen(QHostAddress::LocalHost,0));
+        ev::PlatformClient client("member-ui-test");client.connectToServer("127.0.0.1",fixture.server.serverPort());
+        QTRY_COMPARE(client.state(),ev::PlatformClient::State::Ready);
+        QVERIFY(UserSessionState::instance().setUserInfo(fixture.user));QSettings().clear();
+        ev::UserApiClient api(&client);
+        MembershipDialog dialog(&api);dialog.setAttribute(Qt::WA_DeleteOnClose,false);dialog.show();
+        QTRY_VERIFY(dialog.findChild<QPushButton *>("buyPlan7"));
+        QCOMPARE(dialog.findChildren<QPushButton *>(QRegularExpression("^buyPlan")).size(),6);
+        capture(dialog,QStringLiteral("membership-fixed"));
+        bool fixedNoConsent=false;
+        QTimer::singleShot(80,[&]{
+            auto *modal=QApplication::activeModalWidget();
+            auto *check=modal->findChild<QCheckBox *>("renewalConsent");auto *box=modal->findChild<QDialogButtonBox *>();
+            fixedNoConsent=!check->isVisible() && box->button(QDialogButtonBox::Ok)->isEnabled();
+            QTest::mouseClick(box->button(QDialogButtonBox::Ok),Qt::LeftButton);
+        });
+        QTest::mouseClick(dialog.findChild<QPushButton *>("buyPlan7"),Qt::LeftButton);
+        QVERIFY(fixedNoConsent);QTRY_COMPARE(fixture.requests.count("purchase"),1);
+        QTRY_VERIFY(dialog.findChild<QComboBox *>("membershipBilling")->isEnabled());
+        QVERIFY(!fixture.lastParams.value("purchase").value("renewal_consent").toBool());
+        auto *billing=dialog.findChild<QComboBox *>("membershipBilling");billing->setCurrentIndex(1);
+        QTRY_VERIFY(dialog.findChild<QPushButton *>("buyPlan10"));
+        QCOMPARE(dialog.findChildren<QPushButton *>(QRegularExpression("^buyPlan")).size(),6);
+        capture(dialog,QStringLiteral("membership-recurring"));
+        bool explicitConsent=false;
+        QTimer::singleShot(80,[&]{
+            auto *modal=QApplication::activeModalWidget();auto *check=modal->findChild<QCheckBox *>("renewalConsent");auto *box=modal->findChild<QDialogButtonBox *>();
+            explicitConsent=check->isVisible() && !check->isChecked() && !box->button(QDialogButtonBox::Ok)->isEnabled();
+            capture(*modal,QStringLiteral("membership-consent"));check->setChecked(true);
+            QTest::mouseClick(box->button(QDialogButtonBox::Ok),Qt::LeftButton);
+        });
+        QTest::mouseClick(dialog.findChild<QPushButton *>("buyPlan10"),Qt::LeftButton);
+        QVERIFY(explicitConsent);QTRY_COMPARE(fixture.requests.count("purchase"),2);
+        QTRY_VERIFY(billing->isEnabled());QVERIFY(fixture.lastParams.value("purchase").value("renewal_consent").toBool());
+        QTimer::singleShot(80,[]{if(auto *box=qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))box->button(QMessageBox::Yes)->click();});
+        QTest::mouseClick(dialog.findChild<QPushButton *>("membershipCancelRenewal"),Qt::LeftButton);
+        QTRY_COMPARE(fixture.memberState.value("renewal").toObject().value("status").toString(),QString("cancelled"));
+        QTRY_VERIFY(dialog.findChild<QLabel *>("renewalStatus")->text().contains(QStringLiteral("已取消")));
+        dialog.findChild<QTabWidget *>()->setCurrentIndex(1);
+        auto *question=dialog.findChild<QPlainTextEdit *>("consultQuestion");auto *chat=dialog.findChild<QPlainTextEdit *>("consultTranscript");auto *send=dialog.findChild<QPushButton *>("consultSend");
+        question->setPlainText(QStringLiteral("如何预约充电？"));QTest::mouseClick(send,Qt::LeftButton);
+        QTRY_VERIFY(chat->toPlainText().contains(QStringLiteral("版本1")));
+        capture(dialog,QStringLiteral("membership-consult"));
+        fixture.consultFailure=true;question->setPlainText(QStringLiteral("会员怎样续费？"));QTest::mouseClick(send,Qt::LeftButton);
+        QTRY_VERIFY(chat->toPlainText().contains("EV_AI_API_KEY"));
+        capture(dialog,QStringLiteral("membership-consult-no-key"));
+        QVERIFY(!QSettings().contains("membership/pending/1"));
+    }
+    void membershipRetriesOriginalOperationAfterReopening()
+    {
+        ThemeFixture fixture;QVERIFY(fixture.server.listen(QHostAddress::LocalHost,0));
+        ev::PlatformClient client("member-retry-test");client.connectToServer("127.0.0.1",fixture.server.serverPort());
+        QTRY_COMPARE(client.state(),ev::PlatformClient::State::Ready);
+        QVERIFY(UserSessionState::instance().setUserInfo(fixture.user));
+        const QJsonObject original{{"operation_key","unconfirmed-original-operation"},{"plan_id",7},{"version",1},{"renewal_consent",false}};
+        QSettings().setValue("membership/pending/1",QJsonDocument(original).toJson(QJsonDocument::Compact));
+        ev::UserApiClient api(&client);MembershipDialog dialog(&api);dialog.setAttribute(Qt::WA_DeleteOnClose,false);dialog.show();
+        auto *retry=dialog.findChild<QPushButton *>("membershipRetry");QVERIFY(retry && retry->isVisible());
+        QTest::mouseClick(retry,Qt::LeftButton);
+        QTRY_COMPARE(fixture.lastParams.value("purchase"),original);
+        QTRY_VERIFY(!QSettings().contains("membership/pending/1"));
     }
 };
 
@@ -404,6 +548,11 @@ int main(int argc, char **argv)
 {
     QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     QApplication application(argc, argv);
+    QTemporaryDir settings;
+    QCoreApplication::setOrganizationName("EV Isolated UI Tests");
+    QCoreApplication::setApplicationName("Membership regression");
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat,QSettings::UserScope,settings.path());
     ThemeUiTests tests;
     return QTest::qExec(&tests, argc, argv);
 }

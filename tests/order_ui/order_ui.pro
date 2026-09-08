@@ -5,6 +5,8 @@ TARGET = ev_order_ui_tests
 PLATFORM_ROOT = $$clean_path($$PWD/../..)
 include($$PLATFORM_ROOT/config/common.pri)
 INCLUDEPATH += $$PLATFORM_ROOT/src $$PLATFORM_ROOT/apps/user_client
+HEADERS += $$PLATFORM_ROOT/apps/user_client/membership_dialog.h
+SOURCES += $$PLATFORM_ROOT/apps/user_client/membership_dialog.cpp
 SOURCES += tst_order_ui.cpp \
     $$PLATFORM_ROOT/apps/user_client/order_list_widget.cpp \
     $$PLATFORM_ROOT/apps/user_client/user_api_client.cpp \

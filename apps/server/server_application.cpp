@@ -2,6 +2,8 @@
 
 #include "admin_handler.h"
 #include "adapters/map_api_adapter.h"
+#include "adapters/consult_api_adapter.h"
+#include "services/membership_service.h"
 #include "common/error_code.h"
 #include "common/protocol.h"
 #include "services/admin_auth_service.h"
@@ -52,7 +54,10 @@ QJsonObject chargeOrderJson(const OrderRecord &order)
         {QStringLiteral("start_time"), order.startTime},
         {QStringLiteral("charge_amount_kwh"), order.chargeAmountKwh},
         {QStringLiteral("price_per_kwh"), order.pricePerKwh},
-        {QStringLiteral("total_fee_cent"), order.totalFeeCent}
+        {QStringLiteral("total_fee_cent"), order.totalFeeCent},
+        {"gross_fee_cent",order.grossFeeCent},
+        {"discount_fee_cent",order.grossFeeCent-order.totalFeeCent},
+        {"membership_level",order.membershipLevel},{"discount_bps",order.discountBps}
     };
 }
 
@@ -64,6 +69,7 @@ ServerApplication::ServerApplication(QString databasePath, QObject *parent)
       avatarDirectory_(QFileInfo(databasePath).absoluteDir().filePath(QStringLiteral("avatars"))),
       mapApiAdapter_(std::make_unique<MapApiAdapter>(this))
 {
+    consultApiAdapter_ = std::make_unique<ConsultApiAdapter>(this);
     connect(&tcpServer_, &QTcpServer::newConnection,
             this, &ServerApplication::acceptPendingConnections);
 }
@@ -100,11 +106,18 @@ bool ServerApplication::start(const QHostAddress &address, quint16 port)
     }
 
     adminHandler_ = std::make_unique<AdminHandler>(mainDatabase_, sessionManager_);
-
+    renewalTimer_.setInterval(30000);
+    connect(&renewalTimer_, &QTimer::timeout, this, [this] {
+        const auto result = MembershipService().processDue(mainDatabase_);
+        if (!result.success) qWarning() << "membership renewal processing failed";
+    });
     if (!tcpServer_.listen(address, port)) {
         qCritical().noquote() << "listen failed:" << tcpServer_.errorString();
         return false;
     }
+    renewalTimer_.start();
+    const auto renewals = MembershipService().processDue(mainDatabase_);
+    if (!renewals.success) qWarning() << "membership startup renewal processing failed";
     qInfo().noquote() << "EV charging server listening on"
                       << tcpServer_.serverAddress().toString()
                       << tcpServer_.serverPort();
@@ -127,6 +140,9 @@ void ServerApplication::acceptPendingConnections()
             readClient(socket);
         });
         connect(socket, &QTcpSocket::disconnected, this, [this, socket] {
+            for (const auto &id : connectionSessions_.value(socket)) {
+                consultHistory_.remove(id); consultLastAt_.remove(id); consultEpoch_.remove(id); adminSessions_.remove(id);
+            }
             chargingSessionManager_.detachSocket(socket);
             sessionManager_.removeAll(connectionSessions_.take(socket));
             receiveBuffers_.remove(socket);
@@ -204,6 +220,8 @@ void ServerApplication::processFrame(QTcpSocket *socket, const Frame &frame)
         processChargeRequest(socket, frame);
         return;
     }
+    if (msgType == MessageType::MembershipRequest) { processMembershipRequest(socket, frame); return; }
+    if (msgType == MessageType::ConsultRequest) { processConsultRequest(socket, frame); return; }
     if (msgType == MessageType::AdminQuery) {
         processAdminQuery(socket, frame);
         return;
@@ -372,6 +390,7 @@ void ServerApplication::processStationRequest(QTcpSocket *socket, const Frame &f
     const QJsonObject data = frame.payload.value(QStringLiteral("data")).toObject();
     const QString sessionId = data.value(QStringLiteral("session_id")).toString();
     if (!connectionSessions_.value(socket).contains(sessionId)
+        || adminSessions_.contains(sessionId)
         || sessionManager_.authenticatedUserId(sessionId) <= 0) {
         connectionSessions_[socket].remove(sessionId);
         sendStationResponse(socket, requestId, false, QStringLiteral("UNAUTHORIZED"),
@@ -635,6 +654,7 @@ void ServerApplication::processChargeRequest(QTcpSocket *socket, const Frame &fr
                     {QStringLiteral("elapsed_sec"), info.liveSnapshot->elapsedSec},
                     {QStringLiteral("charge_amount_kwh"), info.liveSnapshot->kwh},
                     {QStringLiteral("current_fee_cent"), info.liveSnapshot->feeCent},
+                    {"gross_fee_cent",info.liveSnapshot->grossFeeCent},
                     {QStringLiteral("progress"), info.liveSnapshot->progressPercent}
                 });
                 // Re-bind the socket so 0x32 pushes resume after a reconnect.
@@ -682,7 +702,8 @@ void ServerApplication::processChargeRequest(QTcpSocket *socket, const Frame &fr
                                {QStringLiteral("order_id"), outcome.orderId},
                                {QStringLiteral("pile"), chargePileJson(outcome.pile)},
                                {QStringLiteral("station_name"), outcome.stationName},
-                               {QStringLiteral("price_per_kwh"), outcome.pricePerKwh}
+                               {QStringLiteral("price_per_kwh"), outcome.pricePerKwh},
+                               {"membership_level",outcome.membershipLevel},{"discount_bps",outcome.discountBps}
                            });
         return;
     }
@@ -702,7 +723,8 @@ void ServerApplication::processChargeRequest(QTcpSocket *socket, const Frame &fr
                                {QStringLiteral("order_id"), charge.order.orderId},
                                {QStringLiteral("start_time"), charge.order.startTime},
                                {QStringLiteral("power_kw"), charge.powerKw},
-                               {QStringLiteral("price_per_kwh"), charge.order.pricePerKwh}
+                               {QStringLiteral("price_per_kwh"), charge.order.pricePerKwh},
+                               {"membership_level",charge.order.membershipLevel},{"discount_bps",charge.order.discountBps}
                            });
         return;
     }
@@ -725,6 +747,9 @@ void ServerApplication::processChargeRequest(QTcpSocket *socket, const Frame &fr
                                {QStringLiteral("order_id"), outcome.orderId},
                                {QStringLiteral("total_kwh"), outcome.totalKwh},
                                {QStringLiteral("total_fee_cent"), outcome.totalFeeCent},
+                               {"gross_fee_cent",outcome.grossFeeCent},
+                               {"discount_fee_cent",outcome.grossFeeCent-outcome.totalFeeCent},
+                               {"membership_level",outcome.membershipLevel},{"discount_bps",outcome.discountBps},
                                {QStringLiteral("balance_cent"), outcome.balanceCent},
                                {QStringLiteral("shortfall_cent"), outcome.shortfallCent}
                            });
@@ -989,6 +1014,9 @@ void ServerApplication::processLogout(QTcpSocket *socket, const Frame &frame)
         sessionManager_.remove(sessionId);
         connectionSessions_[socket].remove(sessionId);
         adminSessions_.remove(sessionId);
+        consultHistory_.remove(sessionId);
+        consultEpoch_.remove(sessionId);
+        consultLastAt_.remove(sessionId);
     }
 
     const QJsonObject response {

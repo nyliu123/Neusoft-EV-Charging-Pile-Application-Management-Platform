@@ -1,6 +1,8 @@
 #include "admin_handler.h"
 
 #include "services/session_manager.h"
+#include "services/membership_service.h"
+#include "services/knowledge_service.h"
 
 #include <QDate>
 #include <QDebug>
@@ -19,6 +21,10 @@ AdminHandler::AdminHandler(QSqlDatabase database, SessionManager &sessionManager
 
 QJsonObject AdminHandler::processQuery(const QString &type, const QJsonObject &params)
 {
+    if(type=="membership_plans" || type=="knowledge_list") {
+        const auto r=type=="membership_plans" ? MembershipService().plans(database_,true) : KnowledgeService().list(database_);
+        return r.success ? okBody(type,r.data) : failBody(type,r.code,r.message);
+    }
     if (type == QStringLiteral("dashboard_overview")) {
         return queryDashboardOverview(params);
     }
@@ -75,6 +81,12 @@ QJsonObject AdminHandler::queryDashboardOverview(const QJsonObject &params)
 
 QJsonObject AdminHandler::processAction(const QString &type, const QJsonObject &params)
 {
+    if(type=="membership_update" || type=="knowledge_save" || type=="knowledge_publish" || type=="knowledge_disable") {
+        const auto r=type=="membership_update" ? MembershipService().updatePlan(database_,params)
+            : type=="knowledge_save" ? KnowledgeService().save(database_,params)
+            : KnowledgeService().publish(database_,params,type=="knowledge_publish");
+        return r.success ? okBody(type,r.data) : failBody(type,r.code,r.message);
+    }
     if (type == QStringLiteral("restart_pile")) {
         return actionRestartPile(params);
     }

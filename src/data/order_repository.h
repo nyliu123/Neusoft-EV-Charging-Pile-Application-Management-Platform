@@ -21,6 +21,10 @@ struct OrderRecord {
     double chargeAmountKwh = 0.0;
     double pricePerKwh = 0.0;
     qint64 totalFeeCent = 0;   // fee in cents (integer cents for precision)
+    qint64 grossFeeCent = 0;
+    QString membershipLevel = QStringLiteral("NORMAL");
+    int discountBps = 10000;
+    int membershipVersion = 0;
     // Joined fields for admin order list.
     QString userPhone;
     QString pileNumber;
@@ -71,17 +75,19 @@ public:
     // UML-025: create reservation order.
     Result<qint64> insertOrder(QSqlDatabase &database,
                                 qint64 userId, qint64 pileId,
-                                qint64 stationId, double pricePerKwh) const;
+                                qint64 stationId, double pricePerKwh,
+                                const QString &membershipLevel = QStringLiteral("NORMAL"),
+                                int discountBps = 10000, int membershipVersion = 0) const;
     // UML-027/030/031/026: status transitions.
     // 'charging' writes start_time; 'pending_settlement' writes end_time.
     Result<bool> updateStatus(QSqlDatabase &database, qint64 orderId,
                                const QString &newStatus) const;
     // UML-028: real-time charge data update.
     Result<bool> updateChargeData(QSqlDatabase &database, qint64 orderId,
-                                   double kwh, qint64 feeCent) const;
+                                   double kwh, qint64 feeCent, qint64 grossFeeCent = -1) const;
     // UML-030/031: settle order with final data.
     Result<bool> settleOrder(QSqlDatabase &database, qint64 orderId,
-                              double finalKwh, qint64 finalFeeCent) const;
+                              double finalKwh, qint64 finalFeeCent, qint64 grossFeeCent = -1) const;
 };
 
 } // namespace ev

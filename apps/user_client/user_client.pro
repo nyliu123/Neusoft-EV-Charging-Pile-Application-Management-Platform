@@ -7,6 +7,8 @@ PLATFORM_ROOT = $$clean_path($$PWD/../..)
 include($$PLATFORM_ROOT/config/common.pri)
 
 INCLUDEPATH += $$PLATFORM_ROOT/src
+HEADERS += membership_dialog.h
+SOURCES += membership_dialog.cpp
 HEADERS += \
     $$PLATFORM_ROOT/src/client_ui/apple_widgets.h \
     navigation_map_dialog.h \

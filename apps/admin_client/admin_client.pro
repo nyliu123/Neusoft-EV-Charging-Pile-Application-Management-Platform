@@ -8,6 +8,8 @@ include($$PLATFORM_ROOT/config/common.pri)
 
 INCLUDEPATH += $$PLATFORM_ROOT/src
 INCLUDEPATH += $$PWD
+HEADERS += admin_membership_page.h
+SOURCES += admin_membership_page.cpp
 
 HEADERS += \
     $$PLATFORM_ROOT/src/client_ui/apple_widgets.h \

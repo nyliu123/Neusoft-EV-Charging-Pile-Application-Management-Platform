@@ -27,6 +27,15 @@ bool UserApiClient::queryUserInfo(QObject *context, Callback callback)
     return sendUserRequest(QStringLiteral("user_info"), {}, context, std::move(callback));
 }
 
+bool UserApiClient::membership(const QString &type,const QJsonObject &params,QObject *context,Callback callback)
+{
+    return sendRequest(type,params,context,std::move(callback),quint32(MessageType::MembershipRequest),quint32(MessageType::MembershipResponse));
+}
+bool UserApiClient::consult(const QString &type,const QJsonObject &params,QObject *context,Callback callback)
+{
+    return sendRequest(type,params,context,std::move(callback),quint32(MessageType::ConsultRequest),quint32(MessageType::ConsultResponse));
+}
+
 bool UserApiClient::queryOrders(QObject *context, Callback callback)
 {
     return sendUserRequest(QStringLiteral("query_orders"), {}, context, std::move(callback));
@@ -212,6 +221,13 @@ bool UserApiClient::sendRequest(const QString &type, const QJsonObject &params,
     }
     pending_.insert(requestId,
                     {QPointer<QObject>(context), std::move(callback), responseType});
+    if(requestType==quint32(MessageType::MembershipRequest) || requestType==quint32(MessageType::ConsultRequest)) {
+        QTimer::singleShot(requestType==quint32(MessageType::ConsultRequest)?35000:15000,this,[this,requestId]{
+            auto it=pending_.find(requestId); if(it==pending_.end())return;
+            const auto item=it.value();pending_.erase(it);
+            if(item.context)item.callback(false,{},QStringLiteral("请求超时。购买请使用原操作重试，避免重复开通。"));
+        });
+    }
     if (type == QStringLiteral("query_orders")) {
         QTimer::singleShot(15000, this, [this, requestId] {
             const auto it = pending_.find(requestId);

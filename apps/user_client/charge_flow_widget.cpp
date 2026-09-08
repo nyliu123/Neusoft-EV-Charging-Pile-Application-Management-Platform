@@ -272,6 +272,8 @@ void ChargeFlowWidget::reset()
     pileType_.clear();
     powerKw_ = 0.0;
     pricePerKwh_ = 0.0;
+    membershipLevel_ = QStringLiteral("NORMAL");
+    discountBps_ = 10000;
     idleLabel_->setText(QStringLiteral("进入充电流程后将自动检查未完成订单。"));
     pages_->setCurrentWidget(idlePage_);
 }
@@ -362,7 +364,15 @@ void ChargeFlowWidget::renderPileInfo(QLabel *infoLabel, QLabel *priceLabel) con
     infoLabel->setText(QStringLiteral("%1 · %2（%3，%4 kW）")
                            .arg(stationName_, pileNumber_, pileTypeText(pileType_))
                            .arg(powerKw_, 0, 'f', 1));
-    priceLabel->setText(QStringLiteral("充电单价 ¥%1 / 度").arg(pricePerKwh_, 0, 'f', 2));
+    QString text = QStringLiteral("充电原价 ¥%1 / 度").arg(pricePerKwh_, 0, 'f', 2);
+    if (orderId_ > 0) {
+        text += discountBps_ < 10000
+            ? QStringLiteral(" · 本单 %1 %2折（预约时锁定）").arg(membershipLevel_).arg(discountBps_ / 1000.0, 0, 'g', 4)
+            : QStringLiteral(" · 本单无会员优惠");
+    } else {
+        text += QStringLiteral(" · 会员优惠将在预约时确定");
+    }
+    priceLabel->setText(text);
 }
 
 void ChargeFlowWidget::reservePile()
@@ -380,6 +390,8 @@ void ChargeFlowWidget::reservePile()
                 return;
             }
             orderId_ = result.value(QStringLiteral("order_id")).toInteger();
+            membershipLevel_ = result.value("membership_level").toString("NORMAL");
+            discountBps_ = result.value("discount_bps").toInt(10000);
             QMessageBox::information(this, QStringLiteral("预约成功"),
                 QStringLiteral("充电桩已为您保留，请点击“开始充电”。"));
             showReservedPage();
@@ -402,6 +414,8 @@ void ChargeFlowWidget::startCharging()
             startTimeText_ = result.value(QStringLiteral("start_time")).toString();
             powerKw_ = result.value(QStringLiteral("power_kw")).toDouble(powerKw_);
             pricePerKwh_ = result.value(QStringLiteral("price_per_kwh")).toDouble(pricePerKwh_);
+            membershipLevel_ = result.value("membership_level").toString(membershipLevel_);
+            discountBps_ = result.value("discount_bps").toInt(discountBps_);
             showChargingPage();
         });
 }
@@ -488,6 +502,8 @@ void ChargeFlowWidget::applyPendingOrder(const QJsonObject &order)
     pileType_ = order.value(QStringLiteral("pile_type")).toString();
     powerKw_ = order.value(QStringLiteral("power_kw")).toDouble();
     pricePerKwh_ = order.value(QStringLiteral("price_per_kwh")).toDouble();
+    membershipLevel_ = order.value("membership_level").toString("NORMAL");
+    discountBps_ = order.value("discount_bps").toInt(10000);
     const QString status = order.value(QStringLiteral("status")).toString();
 
     QMessageBox::information(this, QStringLiteral("未完成订单"),
@@ -520,6 +536,7 @@ void ChargeFlowWidget::applyPendingOrder(const QJsonObject &order)
         {QStringLiteral("total_kwh"),
          order.value(QStringLiteral("charge_amount_kwh")).toDouble()},
         {QStringLiteral("total_fee_cent"), feeCent},
+        {QStringLiteral("gross_fee_cent"), order.value("gross_fee_cent").toInteger(feeCent)},
         {QStringLiteral("balance_cent"), balanceCent},
         {QStringLiteral("shortfall_cent"), qMax<qint64>(0, feeCent - balanceCent)}
     });
@@ -579,10 +596,11 @@ void ChargeFlowWidget::showSettledPage(const QJsonObject &result)
     const qint64 balanceCent = result.value(QStringLiteral("balance_cent")).toInteger();
     UserSessionState::instance().setBalanceCent(balanceCent);
     settleTitle_->setText(QStringLiteral("充电完成"));
-    settleDetail_->setText(QStringLiteral("充电量 %1 度 · 费用 %2 · 当前余额 %3")
+    const auto net = result.value("total_fee_cent").toInteger();
+    const auto gross = result.value("gross_fee_cent").toInteger(net);
+    settleDetail_->setText(QStringLiteral("充电量 %1 度 · 原价 %2 · 优惠 %3\n实付 %4 · 当前余额 %5")
         .arg(result.value(QStringLiteral("total_kwh")).toDouble(), 0, 'f', 2)
-        .arg(yuanText(result.value(QStringLiteral("total_fee_cent")).toInteger()),
-             yuanText(balanceCent)));
+        .arg(yuanText(gross), yuanText(gross - net), yuanText(net), yuanText(balanceCent)));
     pages_->setCurrentWidget(settlePage_);
 }
 
@@ -595,10 +613,13 @@ void ChargeFlowWidget::showPendingPage(const QJsonObject &result)
     pendingTitle_->setText(QStringLiteral("余额不足，订单待结算"));
     pendingDetail_->setText(QStringLiteral(
         "充电已完成，但余额不足以支付本次费用。\n"
-        "充电量 %1 度 · 费用 %2 · 当前余额 %3 · 差额 %4\n"
+        "充电量 %1 度 · 应付 %2 · 当前余额 %3 · 差额 %4\n"
+        "原价 %5 · 优惠 %6（预约时锁定）\n"
         "请先充值，然后返回本页点击“重新结算”；结算前充电桩保持占用。")
         .arg(result.value(QStringLiteral("total_kwh")).toDouble(), 0, 'f', 2)
-        .arg(yuanText(feeCent), yuanText(balanceCent), yuanText(shortfallCent)));
+        .arg(yuanText(feeCent), yuanText(balanceCent), yuanText(shortfallCent),
+             yuanText(result.value("gross_fee_cent").toInteger(feeCent)),
+             yuanText(result.value("gross_fee_cent").toInteger(feeCent) - feeCent)));
     pages_->setCurrentWidget(pendingPage_);
 }
 

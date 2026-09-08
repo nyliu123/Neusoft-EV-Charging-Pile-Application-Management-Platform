@@ -1,4 +1,5 @@
 #include "user_info_widget.h"
+#include "membership_dialog.h"
 #include "client_ui/apple_widgets.h"
 
 #include "user_api_client.h"
@@ -18,6 +19,7 @@
 #include <QRegularExpression>
 #include <QRegularExpressionValidator>
 #include <QStyle>
+#include <QScrollArea>
 #include <QVBoxLayout>
 
 namespace {
@@ -61,7 +63,16 @@ UserInfoWidget::UserInfoWidget(ev::UserApiClient *api, QWidget *parent)
 {
     setObjectName(QStringLiteral("userInfoRoot"));
 
-    auto *mainLayout = new QVBoxLayout(this);
+    auto *outer = new QVBoxLayout(this);
+    outer->setContentsMargins(0,0,0,0);
+    auto *scroll = new QScrollArea(this);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setWidgetResizable(true);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    auto *content = new QWidget(scroll);
+    scroll->setWidget(content);
+    outer->addWidget(scroll);
+    auto *mainLayout = new QVBoxLayout(content);
     mainLayout->setContentsMargins(0, 8, 0, 0);
     mainLayout->setSpacing(18);
 
@@ -129,10 +140,22 @@ UserInfoWidget::UserInfoWidget(ev::UserApiClient *api, QWidget *parent)
     auto *operationLayout = new QHBoxLayout(operationCard);
     operationLayout->setContentsMargins(26, 18, 26, 18);
     auto *operationHint = new QLabel(
-        QStringLiteral("在这里管理个人资料与充电钱包。完成充值后，即可返回充电页面继续操作。"), operationCard);
+        QStringLiteral("会员权益 · VIP充电优惠 / SVIP专属AI咨询"), operationCard);
     operationHint->setWordWrap(true);
     operationHint->setProperty("uiClass", "muted");
     operationLayout->addWidget(operationHint);
+    auto *membership = new QPushButton(QStringLiteral("会员中心"), operationCard);
+    membership->setObjectName("membershipEntry");membership->setProperty("uiClass","primary");
+    auto *consult = new QPushButton(QStringLiteral("AI咨询"), operationCard);
+    consult->setObjectName("consultEntry");consult->setProperty("uiClass","secondary");
+    operationLayout->addWidget(membership);operationLayout->addWidget(consult);
+    const auto openMembership = [this](bool ai) {
+        auto *dialog = new MembershipDialog(api_,ai,this);
+        connect(dialog,&QDialog::finished,this,[this]{refreshFromServer();});
+        dialog->show();
+    };
+    connect(membership,&QPushButton::clicked,this,[openMembership]{openMembership(false);});
+    connect(consult,&QPushButton::clicked,this,[openMembership]{openMembership(true);});
     mainLayout->addWidget(operationCard);
     mainLayout->addStretch();
 

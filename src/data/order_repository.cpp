@@ -23,6 +23,10 @@ OrderRecord recordFromQuery(const QSqlQuery &query)
     o.endTime         = query.value(QStringLiteral("end_time")).toString();
     o.chargeAmountKwh = query.value(QStringLiteral("charge_amount_kwh")).toDouble();
     o.pricePerKwh     = query.value(QStringLiteral("price_per_kwh")).toDouble();
+    o.grossFeeCent = query.value("gross_fee_cent").toLongLong();
+    o.membershipLevel = query.value("membership_level").toString();
+    o.discountBps = query.value("discount_bps").toInt();
+    o.membershipVersion = query.value("membership_version").toInt();
     // Store fee as cents.
     o.totalFeeCent    = static_cast<qint64>(
         std::round(query.value(QStringLiteral("total_fee")).toDouble() * 100.0));
@@ -42,7 +46,7 @@ QString baseSelectSql()
     return QStringLiteral(
         "SELECT o.order_id, o.user_id, o.pile_id, o.station_id, o.status, "
         "o.reserve_time, o.start_time, o.end_time, "
-        "o.charge_amount_kwh, o.price_per_kwh, o.total_fee "
+        "o.charge_amount_kwh, o.price_per_kwh, o.total_fee, o.gross_fee_cent, o.membership_level, o.discount_bps, o.membership_version "
         "FROM orders o");
 }
 
@@ -51,7 +55,7 @@ QString joinedSelectSql()
     return QStringLiteral(
         "SELECT o.order_id, o.user_id, o.pile_id, o.station_id, o.status, "
         "o.reserve_time, o.start_time, o.end_time, "
-        "o.charge_amount_kwh, o.price_per_kwh, o.total_fee, "
+        "o.charge_amount_kwh, o.price_per_kwh, o.total_fee, o.gross_fee_cent, o.membership_level, o.discount_bps, o.membership_version, "
         "u.phone AS user_phone, p.pile_number AS pile_number, "
         "s.station_name AS station_name "
         "FROM orders o "
@@ -243,17 +247,21 @@ Result<QVector<DailyRevenue>> OrderRepository::revenueByDate(
 
 Result<qint64> OrderRepository::insertOrder(
     QSqlDatabase &database, qint64 userId, qint64 pileId,
-    qint64 stationId, double pricePerKwh) const
+    qint64 stationId, double pricePerKwh, const QString &membershipLevel,
+    int discountBps, int membershipVersion) const
 {
     QSqlQuery query(database);
     query.prepare(QStringLiteral(
         "INSERT INTO orders "
-        "(user_id, pile_id, station_id, status, reserve_time, price_per_kwh) "
-        "VALUES (?, ?, ?, 'reserved', datetime('now','localtime'), ?)"));
+        "(user_id, pile_id, station_id, status, reserve_time, price_per_kwh, membership_level, discount_bps, membership_version) "
+        "VALUES (?, ?, ?, 'reserved', datetime('now','localtime'), ?, ?, ?, ?)"));
     query.addBindValue(userId);
     query.addBindValue(pileId);
     query.addBindValue(stationId);
     query.addBindValue(pricePerKwh);
+    query.addBindValue(membershipLevel);
+    query.addBindValue(discountBps);
+    query.addBindValue(membershipVersion);
     if (!query.exec()) {
         return Result<qint64>::fail(ErrorCode::StorageError, query.lastError().text());
     }
@@ -293,14 +301,15 @@ Result<bool> OrderRepository::updateStatus(
 
 Result<bool> OrderRepository::updateChargeData(
     QSqlDatabase &database, qint64 orderId,
-    double kwh, qint64 feeCent) const
+    double kwh, qint64 feeCent, qint64 grossFeeCent) const
 {
     QSqlQuery query(database);
     query.prepare(QStringLiteral(
-        "UPDATE orders SET charge_amount_kwh = ?, total_fee = ? / 100.0 "
+        "UPDATE orders SET charge_amount_kwh = ?, total_fee = ? / 100.0, gross_fee_cent = ? "
         "WHERE order_id = ?"));
     query.addBindValue(kwh);
     query.addBindValue(feeCent);
+    query.addBindValue(grossFeeCent < 0 ? feeCent : grossFeeCent);
     query.addBindValue(orderId);
     if (!query.exec()) {
         return Result<bool>::fail(ErrorCode::StorageError, query.lastError().text());
@@ -315,16 +324,17 @@ Result<bool> OrderRepository::updateChargeData(
 
 Result<bool> OrderRepository::settleOrder(
     QSqlDatabase &database, qint64 orderId,
-    double finalKwh, qint64 finalFeeCent) const
+    double finalKwh, qint64 finalFeeCent, qint64 grossFeeCent) const
 {
     QSqlQuery query(database);
     query.prepare(QStringLiteral(
         "UPDATE orders SET "
-        "  charge_amount_kwh = ?, total_fee = ? / 100.0, "
+        "  charge_amount_kwh = ?, total_fee = ? / 100.0, gross_fee_cent = ?, "
         "  status = 'settled', end_time = datetime('now','localtime') "
         "WHERE order_id = ?"));
     query.addBindValue(finalKwh);
     query.addBindValue(finalFeeCent);
+    query.addBindValue(grossFeeCent < 0 ? finalFeeCent : grossFeeCent);
     query.addBindValue(orderId);
     if (!query.exec()) {
         return Result<bool>::fail(ErrorCode::StorageError, query.lastError().text());
