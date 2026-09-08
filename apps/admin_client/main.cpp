@@ -11,6 +11,12 @@
 #include "addstationdialog.h"
 #include "stationdetaildialog.h" // 引入设备详情弹窗
 #include "network/platform_client.h"
+#include "screendataservice.h"
+#include <QJsonDocument>
+#include <QDialog>
+#include <QVBoxLayout>
+#include <QTextEdit>
+#include <QPushButton>
 
 class AdminMainWindow : public QMainWindow {
 public:
@@ -114,5 +120,36 @@ int main(int argc, char *argv[])
     ev::PlatformClient client("AdminClient");
     AdminMainWindow w(&client);
     w.show();
+
+    // ... main() 函数前面你原本的代码 (比如 QApplication a(argc, argv); 等) ...
+
+    // --- 大屏数据测试弹窗开始 ---
+    ScreenDataService service;
+    QJsonObject bigScreenData = service.generateScreenData();
+    QJsonDocument doc(bigScreenData);
+    QString jsonString = doc.toJson(QJsonDocument::Indented);
+
+    QDialog previewDialog;
+    previewDialog.setWindowTitle("大屏数据与预警总控面板 (模拟)");
+    previewDialog.resize(600, 700);
+
+    QVBoxLayout* layout = new QVBoxLayout(&previewDialog);
+    QTextEdit* textEdit = new QTextEdit(&previewDialog);
+    textEdit->setReadOnly(true);
+    // 依然保留极客风配色
+    textEdit->setStyleSheet("background-color: #1e1e1e; color: #5ce6cd; font-family: Consolas; font-size: 14px;");
+    textEdit->setText(jsonString);
+
+    QPushButton* closeBtn = new QPushButton("确认并下发大屏", &previewDialog);
+    QObject::connect(closeBtn, &QPushButton::clicked, &previewDialog, &QDialog::accept);
+
+    layout->addWidget(textEdit);
+    layout->addWidget(closeBtn);
+
+    previewDialog.show(); // 显示弹窗
+    // --- 大屏数据测试弹窗结束 ---
+
+    return a.exec();
+
     return a.exec();
 }
