@@ -7,8 +7,8 @@
 #include "services/admin_auth_service.h"
 #include "services/admin_seeder.h"
 #include "services/charge_service.h"
+#include "services/comment_service.h"
 #include "services/station_service.h"
-#include "services/order_service.h"
 #include "services/user_service.h"
 
 #include <QDebug>
@@ -429,6 +429,13 @@ void ServerApplication::processStationRequest(QTcpSocket *socket, const Frame &f
                                 response.message);
             return;
         }
+        const CommentService commentService;
+        const auto summaries = commentService.loadSummaries(mainDatabase_);
+        if (!summaries.success) {
+            sendStationResponse(socket, requestId, false, errorCodeName(summaries.code),
+                                summaries.message);
+            return;
+        }
         QJsonArray stations;
         for (const StationListItem &item : response.data) {
             QJsonObject station {
@@ -446,6 +453,9 @@ void ServerApplication::processStationRequest(QTcpSocket *socket, const Frame &f
             if (item.distanceKm.has_value()) {
                 station.insert(QStringLiteral("distance_km"), *item.distanceKm);
             }
+            station.insert(QStringLiteral("rating"),
+                CommentService::summaryJson(
+                    summaries.data.value(item.station.stationId)));
             stations.append(station);
         }
         sendStationResponse(socket, requestId, true, QStringLiteral("OK"), {},
@@ -484,6 +494,14 @@ void ServerApplication::processStationRequest(QTcpSocket *socket, const Frame &f
         }
         const int total = detail.station.totalPiles;
         const double onlineRate = StationService::onlineRate(detail);
+        const CommentService commentService;
+        const auto rating = commentService.stationSummary(
+            mainDatabase_, detail.station.stationId);
+        if (!rating.success) {
+            sendStationResponse(socket, requestId, false, errorCodeName(rating.code),
+                                rating.message);
+            return;
+        }
         QJsonObject station {
             {QStringLiteral("station_id"), detail.station.stationId},
             {QStringLiteral("station_name"), detail.station.stationName},
@@ -494,6 +512,10 @@ void ServerApplication::processStationRequest(QTcpSocket *socket, const Frame &f
             station.insert(QStringLiteral("longitude"), detail.station.longitude);
             station.insert(QStringLiteral("latitude"), detail.station.latitude);
         }
+        station.insert(QStringLiteral("rating"),
+            rating.data.has_value()
+                ? CommentService::summaryJson(rating.data.value())
+                : CommentService::summaryJson(StationRatingSummary{}));
         sendStationResponse(socket, requestId, true, QStringLiteral("OK"), {}, QJsonObject {
             {QStringLiteral("station"), station},
             {QStringLiteral("piles"), piles},
@@ -506,6 +528,59 @@ void ServerApplication::processStationRequest(QTcpSocket *socket, const Frame &f
                 {QStringLiteral("online_rate"), onlineRate}
             }}
         });
+        return;
+    }
+
+    if (type == QStringLiteral("list_comments")) {
+        const qint64 stationId = params.value(QStringLiteral("station_id")).toInteger();
+        const qint64 viewerId = sessionManager_.authenticatedUserId(sessionId);
+        const CommentService commentService;
+        const auto response = commentService.listComments(mainDatabase_, stationId,
+                                                          viewerId);
+        if (!response.success) {
+            sendStationResponse(socket, requestId, false, errorCodeName(response.code),
+                                response.message);
+            return;
+        }
+        sendStationResponse(socket, requestId, true, QStringLiteral("OK"), {},
+                            response.data);
+        return;
+    }
+
+    if (type == QStringLiteral("post_comment")) {
+        const qint64 stationId = params.value(QStringLiteral("station_id")).toInteger();
+        const QString content = params.value(QStringLiteral("content")).toString();
+        const int rating = params.value(QStringLiteral("rating")).toInt();
+        const qint64 userId = sessionManager_.authenticatedUserId(sessionId);
+        const CommentService commentService;
+        const auto response = commentService.postComment(
+            mainDatabase_, userId, stationId, content, rating);
+        if (!response.success) {
+            sendStationResponse(socket, requestId, false, errorCodeName(response.code),
+                                response.message);
+            return;
+        }
+        sendStationResponse(socket, requestId, true, QStringLiteral("OK"),
+                            response.data.value(QStringLiteral("updated")).toBool()
+                                ? QStringLiteral("评论已更新")
+                                : QStringLiteral("评论已发表"),
+                            response.data);
+        return;
+    }
+
+    if (type == QStringLiteral("toggle_like")) {
+        const qint64 commentId = params.value(QStringLiteral("comment_id")).toInteger();
+        const qint64 userId = sessionManager_.authenticatedUserId(sessionId);
+        const CommentService commentService;
+        const auto response = commentService.toggleLike(mainDatabase_, userId,
+                                                        commentId);
+        if (!response.success) {
+            sendStationResponse(socket, requestId, false, errorCodeName(response.code),
+                                response.message);
+            return;
+        }
+        sendStationResponse(socket, requestId, true, QStringLiteral("OK"), {},
+                            response.data);
         return;
     }
 
