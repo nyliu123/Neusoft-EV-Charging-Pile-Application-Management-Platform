@@ -1,5 +1,6 @@
 #pragma once
 
+#include "charging_session_manager.h"
 #include "data/database_manager.h"
 #include "adapters/map_api_adapter.h"
 #include "network/frame_codec.h"
@@ -36,6 +37,7 @@ private:
     void processLogout(QTcpSocket *socket, const Frame &frame);
     void processUserRequest(QTcpSocket *socket, const Frame &frame);
     void processStationRequest(QTcpSocket *socket, const Frame &frame);
+    void processChargeRequest(QTcpSocket *socket, const Frame &frame);
     void processAdminQuery(QTcpSocket *socket, const Frame &frame);
     void processAdminAction(QTcpSocket *socket, const Frame &frame);
     void processAdminRequest(QTcpSocket *socket, const Frame &frame, bool isAction);
@@ -46,12 +48,16 @@ private:
     void sendStationResponse(QTcpSocket *socket, const QString &requestId,
                              bool success, const QString &code, const QString &message,
                              const QJsonObject &result = {});
+    void sendChargeResponse(QTcpSocket *socket, const QString &requestId,
+                            bool success, const QString &code, const QString &message,
+                            const QJsonObject &result = {});
 
     DatabaseManager databaseManager_;
     QSqlDatabase mainDatabase_;
     bool databaseReady_ = false;
     QString avatarDirectory_;
     SessionManager sessionManager_;
+    ChargingSessionManager chargingSessionManager_;
     QTcpServer tcpServer_;
     QHash<QTcpSocket *, QByteArray> receiveBuffers_;
     QHash<QTcpSocket *, QSet<QString>> connectionSessions_;
