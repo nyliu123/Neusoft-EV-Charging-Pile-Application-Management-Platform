@@ -63,7 +63,7 @@ compile_commands.json
 *_qmlcache.qrc
 
 # Runtime data, local configuration and secrets
-/data/
+/data/*
 logs/
 config/app.ini
 .env
@@ -72,6 +72,7 @@ config/app.ini
 *.sqlite
 *.sqlite3
 *.sqlite3-*
+!/data/ev_charging.sqlite3
 
 # Analysis outputs (keep directory documentation only)
 analysis/data/raw/

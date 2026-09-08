@@ -49,7 +49,8 @@ cp config/app.ini.example config/app.ini
 ./build/bin/ev_server -c config/app.ini
 ```
 
-未提供配置文件时，服务端使用本机地址和 `data/ev_charging.sqlite3` 等安全演示默认值。密钥和本地配置不得提交。
+未提供配置文件时，服务端使用本机地址和仓库内的 `data/ev_charging.sqlite3`
+等演示默认值。数据库模板随仓库提交；指定其他不存在的数据库路径时，服务端会从该模板创建副本。密钥和本地配置不得提交。
 
 ## 最小运行
 
@@ -95,7 +96,7 @@ apps/                 用户端、管理端、服务端入口
 analysis/             离线统计、预测、推荐与预警任务
 config/               qmake 公共配置和运行配置模板
 docs/                 设计文档与协作约定
-resources/database/   SQLite 迁移脚本
+data/                 随仓库提交的 SQLite 演示数据库
 web/screen/            ECharts 只读运营大屏
 src/common/           共享类型、常量和统一结果
 src/network/          TCP 帧协议与后续网关实现

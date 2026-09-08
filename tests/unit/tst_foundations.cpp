@@ -29,6 +29,7 @@ private slots:
     void feeUsesOrderSnapshotAndHalfUpRounding();
     void feeRejectsInvalidDiscount();
     void databaseCreatesCoreSchema();
+    void databaseTemplateHasCompactStationData();
     void phoneValidation_data();
     void phoneValidation();
     void phoneValidationMessages();
@@ -129,6 +130,97 @@ void FoundationTests::databaseCreatesCoreSchema()
     QCOMPARE(query.value(0).toInt(), 1);
 }
 
+void FoundationTests::databaseTemplateHasCompactStationData()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+
+    ev::DatabaseManager manager(directory.filePath(QStringLiteral("national.sqlite3")));
+    auto openResult = manager.openForCurrentThread();
+    QVERIFY2(openResult.success, qPrintable(openResult.message));
+    const auto migration = manager.migrate(openResult.data);
+    QVERIFY2(migration.success, qPrintable(migration.message));
+    const auto repeatedMigration = manager.migrate(openResult.data);
+    QVERIFY2(repeatedMigration.success, qPrintable(repeatedMigration.message));
+
+    QSqlQuery query(openResult.data);
+    QVERIFY(query.exec(QStringLiteral("SELECT COUNT(*) FROM charging_stations")));
+    QVERIFY(query.next());
+    QCOMPARE(query.value(0).toInt(), 26);
+
+    QVERIFY(query.exec(QStringLiteral(
+        "SELECT COUNT(*) FROM ("
+        "SELECT s.station_id, COUNT(p.pile_id) AS pile_count "
+        "FROM charging_stations s LEFT JOIN charging_piles p "
+        "ON p.station_id=s.station_id GROUP BY s.station_id "
+        "HAVING pile_count <> 10)")));
+    QVERIFY(query.next());
+    QCOMPARE(query.value(0).toInt(), 0);
+
+    QVERIFY(query.exec(QStringLiteral("SELECT COUNT(*) FROM charging_piles")));
+    QVERIFY(query.next());
+    QCOMPARE(query.value(0).toInt(), 260);
+
+    QVERIFY(query.exec(QStringLiteral(
+        "SELECT COUNT(*) FROM charging_piles "
+        "WHERE pile_number NOT GLOB '[A-Z]-[0-9][0-9]' "
+        "AND pile_number NOT GLOB '[A-Z][A-Z]-[0-9][0-9]'")));
+    QVERIFY(query.next());
+    QCOMPARE(query.value(0).toInt(), 0);
+
+    QVERIFY(query.exec(QStringLiteral(
+        "SELECT COUNT(*) FROM charging_stations WHERE address LIKE '大连市%'")));
+    QVERIFY(query.next());
+    QCOMPARE(query.value(0).toInt(), 3);
+
+    const QList<QPair<int, QString>> originalPileNumbers {
+        {1, QStringLiteral("A-01")}, {2, QStringLiteral("A-02")},
+        {3, QStringLiteral("B-01")}, {4, QStringLiteral("B-02")},
+        {5, QStringLiteral("C-01")}, {9, QStringLiteral("D-01")}
+    };
+    for (const auto &expected : originalPileNumbers) {
+        query.prepare(QStringLiteral(
+            "SELECT pile_number FROM charging_piles WHERE pile_id=?"));
+        query.addBindValue(expected.first);
+        QVERIFY(query.exec());
+        QVERIFY(query.next());
+        QCOMPARE(query.value(0).toString(), expected.second);
+    }
+
+    QVERIFY(query.exec(QStringLiteral(
+        "INSERT INTO charging_stations "
+        "(station_name, address, longitude, latitude, price_per_kwh) "
+        "VALUES ('新增站点测试', '测试地址', 120.0, 30.0, 1.0)")));
+    const qint64 newStationId = query.lastInsertId().toLongLong();
+    query.prepare(QStringLiteral(
+        "SELECT COUNT(*) FROM charging_piles WHERE station_id=?"));
+    query.addBindValue(newStationId);
+    QVERIFY(query.exec());
+    QVERIFY(query.next());
+    QCOMPARE(query.value(0).toInt(), 10);
+
+    query.prepare(QStringLiteral(
+        "SELECT MIN(pile_number), MAX(pile_number) "
+        "FROM charging_piles WHERE station_id=?"));
+    query.addBindValue(newStationId);
+    QVERIFY(query.exec());
+    QVERIFY(query.next());
+    const qint64 stationOrdinal = newStationId + 1;
+    const QString prefix = stationOrdinal <= 26
+        ? QString(QChar(static_cast<int>(64 + stationOrdinal)))
+        : QString(QChar(static_cast<int>(64 + ((stationOrdinal - 1) / 26))))
+            + QString(QChar(static_cast<int>(65 + ((stationOrdinal - 1) % 26))));
+    QCOMPARE(query.value(0).toString(), prefix + QStringLiteral("-01"));
+    QCOMPARE(query.value(1).toString(), prefix + QStringLiteral("-10"));
+
+    query.prepare(QStringLiteral(
+        "INSERT INTO charging_piles "
+        "(station_id, pile_number, pile_type, power_kw, status) "
+        "VALUES (?, 'EXTRA-11', 'slow', 7.0, 'idle')"));
+    query.addBindValue(newStationId);
+    QVERIFY(!query.exec());
+}
+
 void FoundationTests::stationSearchSortsAndReportsPileStats()
 {
     QTemporaryDir directory;
@@ -143,20 +235,21 @@ void FoundationTests::stationSearchSortsAndReportsPileStats()
         openResult.data, true, 121.509605, 38.863650);
     QVERIFY2(stationsResult.success, qPrintable(stationsResult.message));
     const QJsonArray stations = stationsResult.data.value(QStringLiteral("stations")).toArray();
-    QCOMPARE(stations.size(), 3);
+    QCOMPARE(stations.size(), 26);
     QCOMPARE(stations.first().toObject().value(QStringLiteral("station_id")).toInteger(), 1);
     QCOMPARE(stations.first().toObject().value(QStringLiteral("distance_km")).toDouble(), 0.0);
-    QCOMPARE(stations.first().toObject().value(QStringLiteral("total_piles")).toInt(), 4);
-    QCOMPARE(stations.first().toObject().value(QStringLiteral("idle_count")).toInt(), 2);
+    QCOMPARE(stations.first().toObject().value(QStringLiteral("total_piles")).toInt(), 10);
+    QCOMPARE(stations.first().toObject().value(QStringLiteral("idle_count")).toInt(), 7);
 
     const auto detailResult = service.queryPiles(openResult.data, 1);
     QVERIFY2(detailResult.success, qPrintable(detailResult.message));
-    QCOMPARE(detailResult.data.value(QStringLiteral("piles")).toArray().size(), 4);
+    QCOMPARE(detailResult.data.value(QStringLiteral("piles")).toArray().size(), 10);
     const QJsonObject stats = detailResult.data.value(QStringLiteral("stats")).toObject();
-    QCOMPARE(stats.value(QStringLiteral("idle")).toInt(), 2);
-    QCOMPARE(stats.value(QStringLiteral("in_use")).toInt(), 1);
+    QCOMPARE(stats.value(QStringLiteral("idle")).toInt(), 7);
+    QCOMPARE(stats.value(QStringLiteral("in_use")).toInt(), 2);
+    QCOMPARE(stats.value(QStringLiteral("reserved")).toInt(), 0);
     QCOMPARE(stats.value(QStringLiteral("fault")).toInt(), 1);
-    QCOMPARE(stats.value(QStringLiteral("online_rate")).toDouble(), 75.0);
+    QCOMPARE(stats.value(QStringLiteral("online_rate")).toDouble(), 90.0);
 }
 
 void FoundationTests::phoneValidation_data()
@@ -254,7 +347,7 @@ void FoundationTests::adminLoginSucceedsWithDefaultSeed()
     // Seed the default admin using AdminSeeder.
     auto seedResult = ev::AdminSeeder::seedIfNeeded(openResult.data);
     QVERIFY(seedResult.success);
-    // 002_seed_admin.sql already creates the default account during migration.
+    // The bundled database template already contains the default account.
     QCOMPARE(seedResult.data, 0);
 
     // Second seed should be a no-op.
@@ -476,7 +569,7 @@ void FoundationTests::stationQueriesSortByDistanceAndPreserveStatus()
     const ev::StationService service;
     const auto unsorted = service.listStations(openResult.data);
     QVERIFY2(unsorted.success, qPrintable(unsorted.message));
-    QCOMPARE(unsorted.data.size(), 3);
+    QCOMPARE(unsorted.data.size(), 26);
     QVERIFY(!unsorted.data.first().distanceKm.has_value());
 
     const auto sorted = service.listStations(openResult.data, 121.509605, 38.863650);
@@ -484,17 +577,26 @@ void FoundationTests::stationQueriesSortByDistanceAndPreserveStatus()
     QCOMPARE(sorted.data.first().station.stationId, 1);
     QVERIFY(sorted.data.first().distanceKm.has_value());
     QVERIFY(*sorted.data.first().distanceKm < 0.001);
-    QCOMPARE(sorted.data.first().station.totalPiles, 4);
-    QCOMPARE(sorted.data.first().station.idlePiles, 2);
+    QCOMPARE(sorted.data.first().station.totalPiles, 10);
+    QCOMPARE(sorted.data.first().station.idlePiles, 7);
+
+    const auto highTechSorted = service.listStations(
+        openResult.data, 121.530000, 38.861000);
+    const auto ganjingziSorted = service.listStations(
+        openResult.data, 121.525500, 38.953300);
+    QVERIFY(highTechSorted.success);
+    QVERIFY(ganjingziSorted.success);
+    QCOMPARE(highTechSorted.data.first().station.stationId, 3);
+    QCOMPARE(ganjingziSorted.data.first().station.stationId, 2);
 
     const auto detail = service.stationDetail(openResult.data, 1);
     QVERIFY2(detail.success, qPrintable(detail.message));
-    QCOMPARE(detail.data.piles.size(), 4);
+    QCOMPARE(detail.data.piles.size(), 10);
     QCOMPARE(detail.data.piles.first().pileNumber, QStringLiteral("A-01"));
-    QVERIFY(qAbs(ev::StationService::onlineRate(detail.data) - 0.75) < 0.000001);
+    QVERIFY(qAbs(ev::StationService::onlineRate(detail.data) - 0.9) < 0.000001);
     const auto reservedDetail = service.stationDetail(openResult.data, 2);
     QVERIFY2(reservedDetail.success, qPrintable(reservedDetail.message));
-    QVERIFY(qAbs(ev::StationService::onlineRate(reservedDetail.data) - 0.75) < 0.000001);
+    QVERIFY(qAbs(ev::StationService::onlineRate(reservedDetail.data) - 0.9) < 0.000001);
     QVERIFY(!service.stationDetail(openResult.data, 0).success);
     QVERIFY(!service.listStations(openResult.data, 121.5, std::nullopt).success);
 }
@@ -512,6 +614,29 @@ void FoundationTests::mapAdapterValidatesInputsAndUsesTeachingFallback()
         QVERIFY(qAbs(result.data.latitude - 38.863650) < 0.000001);
     });
     QVERIFY(callbackCalled);
+
+    double highTechLongitude = 0.0;
+    double highTechLatitude = 0.0;
+    adapter.geocode(QStringLiteral("辽宁省大连市高新区"), [&](const auto &result) {
+        QVERIFY2(result.success, qPrintable(result.message));
+        highTechLongitude = result.data.longitude;
+        highTechLatitude = result.data.latitude;
+    });
+    double ganjingziLongitude = 0.0;
+    double ganjingziLatitude = 0.0;
+    adapter.geocode(QStringLiteral("辽宁省大连市甘井子区"), [&](const auto &result) {
+        QVERIFY2(result.success, qPrintable(result.message));
+        ganjingziLongitude = result.data.longitude;
+        ganjingziLatitude = result.data.latitude;
+    });
+    QVERIFY(qAbs(highTechLongitude - ganjingziLongitude) > 0.001
+            || qAbs(highTechLatitude - ganjingziLatitude) > 0.001);
+
+    adapter.geocode(QStringLiteral("凌水街道, 甘井子区, 大连市"), [&](const auto &result) {
+        QVERIFY2(result.success, qPrintable(result.message));
+        QCOMPARE(result.data.longitude, highTechLongitude);
+        QCOMPARE(result.data.latitude, highTechLatitude);
+    });
 
     adapter.geocode(QStringLiteral("  "), [](const auto &result) {
         QVERIFY(!result.success);

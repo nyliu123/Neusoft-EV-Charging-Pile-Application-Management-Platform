@@ -31,6 +31,15 @@ bool AdminApiClient::sendAction(const QString &type, const QJsonObject &params,
                        type, params, context, std::move(callback));
 }
 
+bool AdminApiClient::sendGeocode(const QString &address, QObject *context,
+                                 Callback callback)
+{
+    return sendRequest(static_cast<quint32>(MessageType::StationRequest),
+                       QStringLiteral("geocode"),
+                       QJsonObject {{QStringLiteral("address"), address}},
+                       context, std::move(callback));
+}
+
 bool AdminApiClient::sendRequest(quint32 messageType, const QString &type,
                                  const QJsonObject &params, QObject *context,
                                  const Callback &callback)
@@ -58,7 +67,8 @@ bool AdminApiClient::sendRequest(quint32 messageType, const QString &type,
 
 void AdminApiClient::handleFrame(quint32 messageType, const QJsonObject &payload)
 {
-    if (messageType != static_cast<quint32>(MessageType::AdminResponse)) {
+    if (messageType != static_cast<quint32>(MessageType::AdminResponse)
+        && messageType != static_cast<quint32>(MessageType::StationResponse)) {
         return;
     }
     const QString requestId = payload.value(QStringLiteral("request_id")).toString();

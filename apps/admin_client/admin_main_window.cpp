@@ -2,7 +2,11 @@
 
 #include "admin_dashboard_page.h"
 #include "admin_login_dialog.h"
+#include "admin_order_page.h"
 #include "admin_pile_page.h"
+#include "admin_station_detail_page.h"
+#include "admin_station_page.h"
+#include "admin_user_page.h"
 
 #include <QApplication>
 #include <QHBoxLayout>
@@ -43,6 +47,9 @@ void AdminMainWindow::setupUi()
     nav_->setFixedWidth(190);
     nav_->addItem(QStringLiteral("经营看板"));
     nav_->addItem(QStringLiteral("充电桩管理"));
+    nav_->addItem(QStringLiteral("充电站管理"));
+    nav_->addItem(QStringLiteral("用户管理"));
+    nav_->addItem(QStringLiteral("订单管理"));
     bodyLayout->addWidget(nav_);
 
     // Right side: header + page stack.
@@ -75,6 +82,28 @@ void AdminMainWindow::setupUi()
 
     pilePage_ = new AdminPilePage(&api_, this);
     stack_->addWidget(pilePage_);
+
+    stationPage_ = new AdminStationPage(&api_, this);
+    stack_->addWidget(stationPage_);
+
+    userPage_ = new AdminUserPage(&api_, this);
+    stack_->addWidget(userPage_);
+
+    orderPage_ = new AdminOrderPage(&api_, this);
+    stack_->addWidget(orderPage_);
+
+    // Station detail (UML-041): stacked but not present in the navigation.
+    stationDetailPage_ = new AdminStationDetailPage(&api_, this);
+    connect(stationPage_, &AdminStationPage::detailRequested,
+            this, [this](long long stationId) {
+                stationDetailPage_->loadStation(stationId);
+                stack_->setCurrentWidget(stationDetailPage_);
+            });
+    connect(stationDetailPage_, &AdminStationDetailPage::backRequested, this, [this] {
+        stack_->setCurrentWidget(stationPage_);
+        stationPage_->reload();
+    });
+    stack_->addWidget(stationDetailPage_);
 
     stack_->setCurrentIndex(0);
 
@@ -133,11 +162,19 @@ void AdminMainWindow::refreshCurrentPage()
     if (!api_.hasSession()) {
         return;
     }
-    const int index = stack_->currentIndex();
-    if (index == 0) {
+    QWidget *current = stack_->currentWidget();
+    if (current == dashboardPage_) {
         dashboardPage_->reload();
-    } else if (index == 1) {
+    } else if (current == pilePage_) {
         pilePage_->reloadAll();
+    } else if (current == stationPage_) {
+        stationPage_->reload();
+    } else if (current == userPage_) {
+        userPage_->reload();
+    } else if (current == orderPage_) {
+        orderPage_->reloadAll();
+    } else if (current == stationDetailPage_) {
+        stationDetailPage_->reload();
     }
 }
 

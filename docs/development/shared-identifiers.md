@@ -176,11 +176,16 @@
 | `add_station`    | station_name / address / longitude / latitude / price_per_kwh | 校验后插入，返回 station_id      | UML-042 |
 | `set_user_status`| user_id / status（`frozen` 或 `normal`）              | 冻结会同时踢掉该用户全部在线会话        | UML-045 |
 
-## 共享测试数据（003_seed_test_data.sql）
+### 管理端复用站点协议的 geocode
 
-`resources/database/migrations/003_seed_test_data.sql` 提供全组共享的演示数据，启动服务端时
-自动写入（固定主键 + INSERT OR IGNORE，可重复执行）：3 个站点、10 台桩（覆盖四种状态）、
-5 个用户（含冻结账号 15812349876）、15 笔订单（近 7 日已结算订单可驱动看板营收趋势）。
-用户端与管理端联调请直接使用这批手机号。删除 sqlite 文件并重启服务端即可重置。
+管理端“新增充电站”（UML-042）的地址解析复用站点协议的 `StationRequest=0x20 / type="geocode"`，
+不新增消息编号：服务端 geocode 校验的是“会话绑定本连接 + SessionManager 有效”，管理员会话同样满足。
+管理端客户端 `ev::AdminApiClient::sendGeocode()` 发送该请求并按 `StationResponse=0x21`
+（信封与 AdminResponse 完全一致）解析；地理编码失败时表单自动解锁手动填写经纬度。
 
-**迁移编号占用：`003` 已被测试数据占用，组员新增迁移请从 `004` 开始。**
+## 共享测试数据
+
+`data/ev_charging.sqlite3` 是全组共享并随 Git 提交的演示数据库，包含 26 个站点、
+260 台桩（覆盖四种状态）、5 个用户（含冻结账号 15812349876）和 15 笔订单。
+用户端与管理端联调请直接使用其中的演示数据。服务端在显式指定一个不存在的
+数据库路径时，会从这个内置模板创建独立副本。

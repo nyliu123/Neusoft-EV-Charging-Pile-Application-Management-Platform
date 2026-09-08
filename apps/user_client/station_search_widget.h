@@ -7,6 +7,7 @@ class QComboBox;
 class QLabel;
 class QLineEdit;
 class QPushButton;
+class QRadioButton;
 class QStackedWidget;
 class QTableWidget;
 class QVBoxLayout;
@@ -29,6 +30,8 @@ private:
     void renderStations(const QJsonObject &result, bool locationAvailable);
     void showStationDetail(const QJsonObject &station);
     void renderStationDetail(const QJsonObject &result);
+    void updateNavigationPreview();
+    void startNavigation();
     void setBusy(bool busy, const QString &message = {});
 
     ev::UserApiClient *api_ = nullptr;
@@ -42,5 +45,18 @@ private:
     QVBoxLayout *stationListLayout_ = nullptr;
     QLabel *detailTitle_ = nullptr;
     QLabel *detailMeta_ = nullptr;
+    QLabel *navigationPreview_ = nullptr;
+    QLabel *navigationDistance_ = nullptr;
+    QLabel *navigationDuration_ = nullptr;
+    QRadioButton *driveMode_ = nullptr;
+    QRadioButton *walkMode_ = nullptr;
+    QPushButton *startNavigationButton_ = nullptr;
     QTableWidget *pileTable_ = nullptr;
+    bool hasOriginLocation_ = false;
+    double originLongitude_ = 0.0;
+    double originLatitude_ = 0.0;
+    bool hasDestinationLocation_ = false;
+    double destinationLongitude_ = 0.0;
+    double destinationLatitude_ = 0.0;
+    QString destinationName_;
 };
