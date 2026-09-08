@@ -6,6 +6,7 @@
 #include "common/protocol.h"
 #include "services/admin_auth_service.h"
 #include "services/admin_seeder.h"
+#include "services/charge_service.h"
 #include "services/station_service.h"
 #include "services/user_service.h"
 
@@ -24,6 +25,36 @@
 #include <utility>
 
 namespace ev {
+
+namespace {
+
+QJsonObject chargePileJson(const PileRecord &pile)
+{
+    return QJsonObject {
+        {QStringLiteral("pile_id"), pile.pileId},
+        {QStringLiteral("pile_number"), pile.pileNumber},
+        {QStringLiteral("pile_type"), pile.pileType},
+        {QStringLiteral("power_kw"), pile.powerKw},
+        {QStringLiteral("status"), pile.status}
+    };
+}
+
+QJsonObject chargeOrderJson(const OrderRecord &order)
+{
+    return QJsonObject {
+        {QStringLiteral("order_id"), order.orderId},
+        {QStringLiteral("status"), order.status},
+        {QStringLiteral("pile_id"), order.pileId},
+        {QStringLiteral("station_id"), order.stationId},
+        {QStringLiteral("reserve_time"), order.reserveTime},
+        {QStringLiteral("start_time"), order.startTime},
+        {QStringLiteral("charge_amount_kwh"), order.chargeAmountKwh},
+        {QStringLiteral("price_per_kwh"), order.pricePerKwh},
+        {QStringLiteral("total_fee_cent"), order.totalFeeCent}
+    };
+}
+
+} // namespace
 
 ServerApplication::ServerApplication(QString databasePath, QObject *parent)
     : QObject(parent),
@@ -46,6 +77,7 @@ bool ServerApplication::start(const QHostAddress &address, quint16 port)
     }
     mainDatabase_ = databaseResult.data;
     databaseReady_ = true;
+    chargingSessionManager_.setDatabase(mainDatabase_);
 
     auto migrationResult = databaseManager_.migrate(mainDatabase_);
     if (!migrationResult.success) {
@@ -93,6 +125,7 @@ void ServerApplication::acceptPendingConnections()
             readClient(socket);
         });
         connect(socket, &QTcpSocket::disconnected, this, [this, socket] {
+            chargingSessionManager_.detachSocket(socket);
             sessionManager_.removeAll(connectionSessions_.take(socket));
             receiveBuffers_.remove(socket);
             qInfo().noquote() << "client disconnected:" << socket->peerAddress().toString();
@@ -163,6 +196,10 @@ void ServerApplication::processFrame(QTcpSocket *socket, const Frame &frame)
     }
     if (msgType == MessageType::StationRequest) {
         processStationRequest(socket, frame);
+        return;
+    }
+    if (msgType == MessageType::ChargeRequest) {
+        processChargeRequest(socket, frame);
         return;
     }
     if (msgType == MessageType::AdminQuery) {
@@ -456,6 +493,183 @@ void ServerApplication::processStationRequest(QTcpSocket *socket, const Frame &f
 
     sendStationResponse(socket, requestId, false, QStringLiteral("INVALID_INPUT"),
                         QStringLiteral("不支持的站点操作"));
+}
+
+void ServerApplication::processChargeRequest(QTcpSocket *socket, const Frame &frame)
+{
+    const QString requestId = frame.payload.value(QStringLiteral("request_id")).toString();
+    const auto requestedVersion = static_cast<quint32>(
+        frame.payload.value(QStringLiteral("protocol_version")).toInteger());
+    if (requestedVersion != ProtocolVersion) {
+        sendChargeResponse(socket, requestId, false, QStringLiteral("PROTOCOL_ERROR"),
+                           QStringLiteral("unsupported protocol version"));
+        return;
+    }
+
+    const QJsonObject data = frame.payload.value(QStringLiteral("data")).toObject();
+    const QString sessionId = data.value(QStringLiteral("session_id")).toString();
+    if (!connectionSessions_.value(socket).contains(sessionId)
+        || sessionManager_.authenticatedUserId(sessionId) <= 0) {
+        connectionSessions_[socket].remove(sessionId);
+        sendChargeResponse(socket, requestId, false, QStringLiteral("UNAUTHORIZED"),
+                           QStringLiteral("登录已过期，请重新登录"));
+        return;
+    }
+    const qint64 userId = sessionManager_.authenticatedUserId(sessionId);
+
+    const QString type = data.value(QStringLiteral("type")).toString();
+    const QJsonObject params = data.value(QStringLiteral("params")).toObject();
+    const ChargeService service;
+
+    if (type == QStringLiteral("check_pending")) {
+        const auto result = service.checkPending(mainDatabase_, userId);
+        if (!result.success) {
+            sendChargeResponse(socket, requestId, false, errorCodeName(result.code),
+                               result.message);
+            return;
+        }
+        QJsonObject order;
+        if (result.data.has_value()) {
+            const PendingOrderInfo &info = *result.data;
+            order = chargeOrderJson(info.order);
+            order.insert(QStringLiteral("pile_number"), info.pileNumber);
+            order.insert(QStringLiteral("pile_type"), info.pileType);
+            order.insert(QStringLiteral("power_kw"), info.powerKw);
+            order.insert(QStringLiteral("station_name"), info.stationName);
+            if (info.liveSnapshot.has_value()) {
+                order.insert(QStringLiteral("live"), QJsonObject {
+                    {QStringLiteral("elapsed_sec"), info.liveSnapshot->elapsedSec},
+                    {QStringLiteral("charge_amount_kwh"), info.liveSnapshot->kwh},
+                    {QStringLiteral("current_fee_cent"), info.liveSnapshot->feeCent},
+                    {QStringLiteral("progress"), info.liveSnapshot->progressPercent}
+                });
+                // Re-bind the socket so 0x32 pushes resume after a reconnect.
+                chargingSessionManager_.ensureSession(info.order, info.powerKw, socket);
+            }
+        }
+        sendChargeResponse(socket, requestId, true, QStringLiteral("OK"), {},
+                           QJsonObject {
+                               {QStringLiteral("has_pending"), result.data.has_value()},
+                               {QStringLiteral("order"), order}
+                           });
+        return;
+    }
+
+    if (type == QStringLiteral("check_pile")) {
+        const qint64 pileId = params.value(QStringLiteral("pile_id")).toInteger();
+        const auto result = service.checkPile(mainDatabase_, pileId);
+        if (!result.success) {
+            sendChargeResponse(socket, requestId, false, errorCodeName(result.code),
+                               result.message);
+            return;
+        }
+        const PileCheckInfo &info = result.data;
+        sendChargeResponse(socket, requestId, true, QStringLiteral("OK"), {}, QJsonObject {
+            {QStringLiteral("available"), info.available},
+            {QStringLiteral("reason"), info.reason},
+            {QStringLiteral("pile"), chargePileJson(info.pile)},
+            {QStringLiteral("station_name"), info.stationName},
+            {QStringLiteral("price_per_kwh"), info.pricePerKwh}
+        });
+        return;
+    }
+
+    if (type == QStringLiteral("reserve")) {
+        const qint64 pileId = params.value(QStringLiteral("pile_id")).toInteger();
+        const auto result = service.reserve(mainDatabase_, userId, pileId);
+        if (!result.success) {
+            sendChargeResponse(socket, requestId, false, errorCodeName(result.code),
+                               result.message);
+            return;
+        }
+        const ReserveOutcome &outcome = result.data;
+        sendChargeResponse(socket, requestId, true, QStringLiteral("OK"),
+                           QStringLiteral("预约成功"), QJsonObject {
+                               {QStringLiteral("order_id"), outcome.orderId},
+                               {QStringLiteral("pile"), chargePileJson(outcome.pile)},
+                               {QStringLiteral("station_name"), outcome.stationName},
+                               {QStringLiteral("price_per_kwh"), outcome.pricePerKwh}
+                           });
+        return;
+    }
+
+    if (type == QStringLiteral("start_charge")) {
+        const qint64 orderId = params.value(QStringLiteral("order_id")).toInteger();
+        const auto result = service.startCharge(mainDatabase_, userId, orderId);
+        if (!result.success) {
+            sendChargeResponse(socket, requestId, false, errorCodeName(result.code),
+                               result.message);
+            return;
+        }
+        const StartedCharge &charge = result.data;
+        chargingSessionManager_.ensureSession(charge.order, charge.powerKw, socket);
+        sendChargeResponse(socket, requestId, true, QStringLiteral("OK"),
+                           QStringLiteral("充电已开始"), QJsonObject {
+                               {QStringLiteral("order_id"), charge.order.orderId},
+                               {QStringLiteral("start_time"), charge.order.startTime},
+                               {QStringLiteral("power_kw"), charge.powerKw},
+                               {QStringLiteral("price_per_kwh"), charge.order.pricePerKwh}
+                           });
+        return;
+    }
+
+    if (type == QStringLiteral("end_charge")) {
+        const qint64 orderId = params.value(QStringLiteral("order_id")).toInteger();
+        const auto result = service.endCharge(mainDatabase_, userId, orderId);
+        if (!result.success) {
+            sendChargeResponse(socket, requestId, false, errorCodeName(result.code),
+                               result.message);
+            return;
+        }
+        chargingSessionManager_.stopSession(orderId);
+        const SettleOutcome &outcome = result.data;
+        sendChargeResponse(socket, requestId, true, QStringLiteral("OK"),
+                           outcome.settled ? QStringLiteral("结算完成")
+                                           : QStringLiteral("余额不足，订单待结算"),
+                           QJsonObject {
+                               {QStringLiteral("settled"), outcome.settled},
+                               {QStringLiteral("order_id"), outcome.orderId},
+                               {QStringLiteral("total_kwh"), outcome.totalKwh},
+                               {QStringLiteral("total_fee_cent"), outcome.totalFeeCent},
+                               {QStringLiteral("balance_cent"), outcome.balanceCent},
+                               {QStringLiteral("shortfall_cent"), outcome.shortfallCent}
+                           });
+        return;
+    }
+
+    if (type == QStringLiteral("cancel_charge")) {
+        const qint64 orderId = params.value(QStringLiteral("order_id")).toInteger();
+        const auto result = service.cancel(mainDatabase_, userId, orderId);
+        if (!result.success) {
+            sendChargeResponse(socket, requestId, false, errorCodeName(result.code),
+                               result.message);
+            return;
+        }
+        sendChargeResponse(socket, requestId, true, QStringLiteral("OK"),
+                           QStringLiteral("预约已取消"),
+                           QJsonObject {{QStringLiteral("order_id"), orderId}});
+        return;
+    }
+
+    sendChargeResponse(socket, requestId, false, QStringLiteral("INVALID_INPUT"),
+                       QStringLiteral("不支持的充电操作"));
+}
+
+void ServerApplication::sendChargeResponse(QTcpSocket *socket, const QString &requestId,
+                                            bool success, const QString &code,
+                                            const QString &message,
+                                            const QJsonObject &result)
+{
+    const QJsonObject response {
+        {QStringLiteral("protocol_version"), static_cast<qint64>(ProtocolVersion)},
+        {QStringLiteral("request_id"), requestId},
+        {QStringLiteral("success"), success},
+        {QStringLiteral("code"), code},
+        {QStringLiteral("message"), message},
+        {QStringLiteral("data"), QJsonObject {{QStringLiteral("result"), result}}}
+    };
+    socket->write(FrameCodec::encode(
+        static_cast<quint32>(MessageType::ChargeResponse), response));
 }
 
 void ServerApplication::sendUserResponse(QTcpSocket *socket, const QString &requestId,

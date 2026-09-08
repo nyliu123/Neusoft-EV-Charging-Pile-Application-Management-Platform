@@ -13,6 +13,7 @@ INCLUDEPATH += $$PLATFORM_ROOT/src
 HEADERS += \
     admin_auth_service.h \
     admin_seeder.h \
+    charge_service.h \
     fee_calculator.h \
     session_manager.h \
     station_service.h \
@@ -21,6 +22,7 @@ HEADERS += \
 SOURCES += \
     admin_auth_service.cpp \
     admin_seeder.cpp \
+    charge_service.cpp \
     fee_calculator.cpp \
     session_manager.cpp \
     station_service.cpp \

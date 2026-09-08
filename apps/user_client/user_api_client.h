@@ -33,9 +33,18 @@ public:
     bool queryStations(double longitude, double latitude,
                        QObject *context, Callback callback);
     bool queryStationDetail(qint64 stationId, QObject *context, Callback callback);
+    // UML-025~032 charging flow (ChargeRequest=0x30 / ChargeResponse=0x31).
+    bool checkPendingCharge(QObject *context, Callback callback);
+    bool checkPile(qint64 pileId, QObject *context, Callback callback);
+    bool reserveCharge(qint64 pileId, QObject *context, Callback callback);
+    bool startCharge(qint64 orderId, QObject *context, Callback callback);
+    bool endCharge(qint64 orderId, QObject *context, Callback callback);
+    bool cancelCharge(qint64 orderId, QObject *context, Callback callback);
 
 signals:
     void sessionExpired(const QString &message);
+    // Server-pushed live charge data (ChargeUpdate=0x32, no request_id).
+    void chargeUpdateReceived(const QJsonObject &update);
 
 private:
     struct Pending {
@@ -51,6 +60,8 @@ private:
                          QObject *context, Callback callback);
     bool sendStationRequest(const QString &type, const QJsonObject &params,
                             QObject *context, Callback callback);
+    bool sendChargeRequest(const QString &type, const QJsonObject &params,
+                           QObject *context, Callback callback);
     void handleFrame(quint32 messageType, const QJsonObject &payload);
 
     PlatformClient *client_ = nullptr;

@@ -369,10 +369,7 @@ void StationSearchWidget::renderStationDetail(const QJsonObject &result)
         choose->setFixedSize(46, 24);
         buttonLayout->addWidget(choose, 0, Qt::AlignCenter);
         connect(choose, &QPushButton::clicked, this, [this, pile] {
-            QMessageBox::information(this, QStringLiteral("已选择充电桩"),
-                QStringLiteral("已选择 %1（%2 kW），可继续进入预约充电流程。")
-                    .arg(pile.value(QStringLiteral("pile_number")).toString())
-                    .arg(pile.value(QStringLiteral("power_kw")).toDouble(), 0, 'f', 1));
+            emit pileChosen(pile.value(QStringLiteral("pile_id")).toInteger());
         });
         pileTable_->setCellWidget(row, 3, buttonCell);
     }

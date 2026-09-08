@@ -23,6 +23,11 @@ public:
     explicit StationSearchWidget(ev::UserApiClient *api, QWidget *parent = nullptr);
     void refresh();
 
+signals:
+    // Emitted when the user picks an idle pile in the station detail page;
+    // the charging flow (UML-025~032) is entered with this pile.
+    void pileChosen(qint64 pileId);
+
 private:
     void search();
     void loadStations(bool hasLocation = false, double longitude = 0.0,

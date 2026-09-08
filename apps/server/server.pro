@@ -11,11 +11,13 @@ INCLUDEPATH += $$PLATFORM_ROOT/src
 
 HEADERS += \
     server_application.h \
-    admin_handler.h
+    admin_handler.h \
+    charging_session_manager.h
 SOURCES += \
     main.cpp \
     server_application.cpp \
-    admin_handler.cpp
+    admin_handler.cpp \
+    charging_session_manager.cpp
 
 LIBS += -L$$PLATFORM_BUILD_ROOT/lib \
     -lev_adapters \
