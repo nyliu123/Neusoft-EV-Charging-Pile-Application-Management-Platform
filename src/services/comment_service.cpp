@@ -2,6 +2,7 @@
 
 #include <QDateTime>
 #include <QJsonArray>
+#include <QSqlError>
 
 namespace ev {
 
