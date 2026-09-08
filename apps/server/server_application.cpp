@@ -8,6 +8,7 @@
 #include "services/admin_seeder.h"
 #include "services/charge_service.h"
 #include "services/comment_service.h"
+#include "services/order_service.h"
 #include "services/station_service.h"
 #include "services/user_service.h"
 
