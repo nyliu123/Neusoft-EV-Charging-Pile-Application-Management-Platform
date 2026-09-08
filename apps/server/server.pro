@@ -7,6 +7,13 @@ TARGET = ev_server
 PLATFORM_ROOT = $$clean_path($$PWD/../..)
 include($$PLATFORM_ROOT/config/common.pri)
 
+# Absolute apps/server source directory, baked in at qmake time. main.cpp uses
+# it to locate the shared runtime database: qmake compiles with source paths
+# relative to the per-project build directory, and resolving them against the
+# launch working directory (bin/) used to miss the source tree and silently
+# fall back to a private per-build-dir database.
+DEFINES += EV_SERVER_SOURCE_DIR=\\\"$$PWD\\\"
+
 INCLUDEPATH += $$PLATFORM_ROOT/src
 
 HEADERS += \

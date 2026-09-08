@@ -1,11 +1,13 @@
 #pragma once
 
 #include <QJsonObject>
+#include <QVector>
 #include <QWidget>
 
 class QComboBox;
 class QLabel;
 class QLineEdit;
+class QPlainTextEdit;
 class QPushButton;
 class QStackedWidget;
 class QTableWidget;
@@ -36,6 +38,13 @@ private:
     void renderStationDetail(const QJsonObject &result);
     void updateNavigationAvailability();
     void startNavigation();
+    // Station comment area (list / like / post with star rating).
+    void showComments(qint64 stationId);
+    void loadComments();
+    void renderComments(const QJsonObject &result);
+    void publishComment();
+    void onToggleLike(qint64 commentId);
+    void setStarRating(int rating);
     void setBusy(bool busy, const QString &message = {});
 
     ev::UserApiClient *api_ = nullptr;
@@ -51,6 +60,18 @@ private:
     QLabel *detailMeta_ = nullptr;
     QPushButton *startNavigationButton_ = nullptr;
     QTableWidget *pileTable_ = nullptr;
+    QPushButton *commentsButton_ = nullptr;
+    QWidget *commentsPage_ = nullptr;
+    QLabel *commentsTitle_ = nullptr;
+    QLabel *commentsSummary_ = nullptr;
+    QVBoxLayout *commentsListLayout_ = nullptr;
+    QPlainTextEdit *commentInput_ = nullptr;
+    QPushButton *publishCommentButton_ = nullptr;
+    QLabel *starValueLabel_ = nullptr;
+    QVector<QPushButton *> starButtons_;
+    qint64 detailStationId_ = 0;
+    qint64 commentsStationId_ = 0;
+    int starRating_ = 0;
     bool hasOriginLocation_ = false;
     double originLongitude_ = 0.0;
     double originLatitude_ = 0.0;

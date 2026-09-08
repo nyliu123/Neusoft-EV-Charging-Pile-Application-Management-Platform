@@ -115,10 +115,25 @@
 | type | params | result | 对应需求 |
 | ---- | ------ | ------ | -------- |
 | `geocode` | address | longitude / latitude / display_address / source / confidence | 22、23、67 |
-| `station_list` | longitude / latitude（同时提供或同时省略） | stations，含价格、总桩数、空闲数；有位置时含直线距离 | 24、25 |
-| `station_detail` | station_id | station / piles / stats，未知状态绝不按空闲返回 | 26 |
+| `station_list` | longitude / latitude（同时提供或同时省略） | stations，含价格、总桩数、空闲数、rating 评分摘要；有位置时含直线距离 | 24、25 |
+| `station_detail` | station_id | station（含 rating）/ piles / stats，未知状态绝不按空闲返回 | 26 |
+| `list_comments` | station_id | summary（平均分/档位/条数）/ comments（含 like_count、liked_by_me、is_mine），热评在前 | 新增：评论 |
+| `post_comment` | station_id / content（1~200 字）/ rating（0~5 星） | comment_id / updated（一人一站一条，重复即修改） | 新增：评论 |
+| `toggle_like` | comment_id | liked / like_count（UNIQUE 去重，可反复切换） | 新增：评论 |
 
 地址解析默认使用 OpenStreetMap Nominatim，并对有限的大连预设区域返回明确标识的教学坐标；地图不可用时客户端可不带经纬度查询文字列表，`distance_km` 必须缺省。
+
+### 评论与评分（站点协议扩展）
+
+评分摘要 `rating` 附在 `station_list` 的每个站对象和 `station_detail` 的 `station`
+对象上：`{ avg, count, tier, hot }`，无评论时 avg/tier/hot 为 null、count 为 0。
+`avg` 为 0~10 的一维小数（星 ×2）；`tier` 档位固定五档：`≥9 夯 / ≥7 顶级 /
+≥5 人上人 / ≥3 拉 / <3 拉完了`；`hot` 为点赞最高的评论 `{ nickname, content }`。
+
+评论数据存于 `station_comments`（UNIQUE(station_id, user_id)）与 `comment_likes`
+（UNIQUE(comment_id, user_id)）两张表，由 `DatabaseManager::migrate()` 幂等建表，
+旧运行库启动即自动升级，无需改动 qrc 模板。热评排序规则：点赞数降序、
+created_at 升序。演示数据可用 `python3 scripts/seed_comments.py` 一键生成。
 
 ## 充电协议（ChargeRequest=0x30 / ChargeResponse=0x31 / ChargeUpdate=0x32）
 

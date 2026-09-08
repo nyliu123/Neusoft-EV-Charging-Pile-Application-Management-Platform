@@ -57,10 +57,15 @@ Result<QSqlDatabase> DatabaseManager::openForCurrentThread() const
     }
 
     QSqlQuery query(database);
+    // WAL needs mmap-coherent shared memory, which VMware shared folders
+    // (hgfs) do not provide: a running server keeps a stale read snapshot
+    // and never sees writes from other processes (e.g. seed scripts).
+    // DELETE journal mode keeps per-query read visibility correct there.
+    // The switch also checkpoints and converts databases already flagged WAL.
     const QStringList pragmas {
         QStringLiteral("PRAGMA foreign_keys = ON"),
-        QStringLiteral("PRAGMA journal_mode = WAL"),
-        QStringLiteral("PRAGMA busy_timeout = %1").arg(busyTimeoutMs_)
+        QStringLiteral("PRAGMA busy_timeout = %1").arg(busyTimeoutMs_),
+        QStringLiteral("PRAGMA journal_mode = DELETE")
     };
     for (const QString &statement : pragmas) {
         if (!query.exec(statement)) {
@@ -87,6 +92,42 @@ Result<int> DatabaseManager::migrate(QSqlDatabase &database) const
             return Result<int>::fail(
                 ErrorCode::StorageError,
                 QStringLiteral("database template is missing table: %1").arg(table));
+        }
+    }
+
+    // Station comments and likes: created idempotently so runtime databases
+    // copied from the bundled template gain the tables on first start.
+    const QStringList commentSchemas {
+        QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS station_comments ("
+            "comment_id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "station_id INTEGER NOT NULL REFERENCES charging_stations(station_id), "
+            "user_id INTEGER NOT NULL REFERENCES users(user_id), "
+            "content TEXT NOT NULL, "
+            "rating INTEGER NOT NULL, "
+            "created_at TEXT NOT NULL, "
+            "updated_at TEXT NOT NULL, "
+            "UNIQUE (station_id, user_id))"),
+        QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS comment_likes ("
+            "like_id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "comment_id INTEGER NOT NULL REFERENCES station_comments(comment_id), "
+            "user_id INTEGER NOT NULL REFERENCES users(user_id), "
+            "created_at TEXT NOT NULL, "
+            "UNIQUE (comment_id, user_id))"),
+        QStringLiteral(
+            "CREATE INDEX IF NOT EXISTS idx_station_comments_station "
+            "ON station_comments(station_id)"),
+        QStringLiteral(
+            "CREATE INDEX IF NOT EXISTS idx_comment_likes_comment "
+            "ON comment_likes(comment_id)")
+    };
+    for (const QString &statement : commentSchemas) {
+        if (!query.exec(statement)) {
+            return Result<int>::fail(
+                ErrorCode::StorageError,
+                QStringLiteral("cannot create comment tables: %1")
+                    .arg(query.lastError().text()));
         }
     }
     return Result<int>::ok(0);
