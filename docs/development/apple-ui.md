@@ -1,5 +1,7 @@
 # Apple 风格轻充 UI
 
+> 本文记录前一版 Apple 界面（`fb9aebf`）。本分支后续的现代化版本已改用顶部导航和 `modern.qss`，当前版本请参见 [现代 UI 说明](modern-ui.md)。
+
 `feature/apple-ui` 基于主分支 `1d1a1c0`，沿用莱茵主题中已验证的界面改进，再重做 Apple / macOS 风格的表现层。`feature/rhine-lab-ui` 独立保留，不覆盖、不强推主分支。
 
 ## 设计依据与取舍

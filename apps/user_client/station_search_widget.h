@@ -15,6 +15,8 @@ class QVBoxLayout;
 
 namespace ev {
 class UserApiClient;
+class AdaptiveStationGrid;
+class ModernHeroBanner;
 }
 
 class StationSearchWidget final : public QWidget {
@@ -28,6 +30,9 @@ signals:
     // Emitted when the user picks an idle pile in the station detail page;
     // the charging flow (UML-025~032) is entered with this pile.
     void pileChosen(qint64 pileId);
+
+protected:
+    void resizeEvent(QResizeEvent *event) override;
 
 private:
     void search();
@@ -55,7 +60,8 @@ private:
     QLineEdit *addressEdit_ = nullptr;
     QPushButton *searchButton_ = nullptr;
     QLabel *statusLabel_ = nullptr;
-    QVBoxLayout *stationListLayout_ = nullptr;
+    ev::AdaptiveStationGrid *stationGrid_ = nullptr;
+    ev::ModernHeroBanner *heroBanner_ = nullptr;
     QLabel *detailTitle_ = nullptr;
     QLabel *detailMeta_ = nullptr;
     QPushButton *startNavigationButton_ = nullptr;

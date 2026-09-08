@@ -17,6 +17,7 @@ OTHER_FILES += \
     docs/development/architecture.md \
     docs/development/apple-ui.md \
     resources/styles/apple.qss \
+    resources/styles/modern.qss \
     tests/theme_ui/theme_ui.pro \
     tests/theme_ui/tst_theme_ui.cpp \
     docs/development/shared-identifiers.md \

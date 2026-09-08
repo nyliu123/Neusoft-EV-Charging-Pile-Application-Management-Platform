@@ -20,55 +20,44 @@
 UserHomeWidget::UserHomeWidget(ev::UserApiClient *api, QWidget *parent)
     : QWidget(parent)
 {
-    auto *shell = new QHBoxLayout(this);
-    shell->setContentsMargins(0, 0, 0, 0);
-    shell->setSpacing(0);
-    auto *sidebar = new QFrame(this);
-    sidebar->setObjectName(QStringLiteral("terminalSidebar"));
-    sidebar->setFixedWidth(196);
-    auto *rail = new QVBoxLayout(sidebar);
-    rail->setContentsMargins(14, 26, 14, 14);
-    rail->setSpacing(22);
-    rail->addWidget(ev::makeAppleBrand(sidebar));
-    auto *workspace = new QLabel(QStringLiteral("我的空间"), sidebar);
-    workspace->setProperty("uiClass", "eyebrow");
-    rail->addWidget(workspace);
-    auto *navigation = new QListWidget(sidebar);
+    auto *layout = new QVBoxLayout(this);
+    layout->setContentsMargins(24, 14, 24, 14);
+    layout->setSpacing(16);
+    auto *header = new QFrame(this);
+    header->setObjectName(QStringLiteral("userTopBar"));
+    auto *toolbar = new QHBoxLayout(header);
+    toolbar->setContentsMargins(14, 5, 14, 5);
+    toolbar->setSpacing(12);
+    auto *brand = ev::makeAppleBrand(header);
+    brand->setFixedWidth(142);
+    toolbar->addWidget(brand);
+    toolbar->addStretch();
+    auto *navigation = new QListWidget(header);
     navigation->setObjectName(QStringLiteral("userNavigation"));
     navigation->setAccessibleName(QStringLiteral("用户功能导航"));
-    navigation->setIconSize(QSize(20, 20));
+    navigation->setIconSize(QSize(18, 18));
+    navigation->setFlow(QListView::LeftToRight);
+    navigation->setWrapping(false);
+    navigation->setMovement(QListView::Static);
+    navigation->setResizeMode(QListView::Adjust);
     navigation->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    navigation->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    navigation->setFixedSize(518, 46);
     const QStringList destinations {QStringLiteral("找桩"), QStringLiteral("充电"),
         QStringLiteral("个人中心"), QStringLiteral("我的订单")};
     const ev::AppSymbol symbols[] {ev::AppSymbol::Compass, ev::AppSymbol::Bolt,
         ev::AppSymbol::Person, ev::AppSymbol::Receipt};
-    for (int i = 0; i < destinations.size(); ++i)
-        new QListWidgetItem(ev::appSymbolIcon(symbols[i]), destinations.at(i), navigation);
-    rail->addWidget(navigation, 1);
-    auto *footer = new QLabel(QStringLiteral("轻松充电，从容出发。"), sidebar);
-    footer->setObjectName(QStringLiteral("terminalSidebarFooter"));
-    footer->setWordWrap(true);
-    rail->addWidget(footer);
-    shell->addWidget(sidebar);
-
-    auto *content = new QWidget(this);
-    auto *layout = new QVBoxLayout(content);
-    layout->setContentsMargins(26, 16, 26, 18);
-    layout->setSpacing(12);
-    shell->addWidget(content, 1);
-    auto *header = new QFrame(content);
-    header->setObjectName(QStringLiteral("terminalHeader"));
-    auto *toolbar = new QHBoxLayout(header);
-    toolbar->setContentsMargins(0, 0, 0, 0);
-    auto *caption = new QLabel(QStringLiteral("充电服务"), header);
-    caption->setProperty("uiClass", "muted");
-    toolbar->addWidget(caption);
+    for (int i = 0; i < destinations.size(); ++i) {
+        auto *item = new QListWidgetItem(ev::appSymbolIcon(symbols[i]), destinations.at(i), navigation);
+        item->setSizeHint(QSize(126, 36));
+    }
+    toolbar->addWidget(navigation);
     toolbar->addStretch();
     logoutButton_ = new QPushButton(QStringLiteral("退出登录"), header);
     logoutButton_->setProperty("uiClass", "text");
     toolbar->addWidget(logoutButton_);
     layout->addWidget(header);
-    successMessage_ = new QLabel(content);
+    successMessage_ = new QLabel(this);
     successMessage_->setProperty("uiClass", "successBanner");
     successMessage_->hide();
     layout->addWidget(successMessage_);
@@ -103,7 +92,7 @@ UserHomeWidget::UserHomeWidget(ev::UserApiClient *api, QWidget *parent)
     connect(orderListWidget_, &OrderListWidget::backRequested, this, [this] {
         tabs_->setCurrentWidget(stationSearchWidget_);
     });
-    // Keep the established tab API and all page signals; the rail is a second view
+    // Keep the established tab API and all page signals; the navigation is a second view
     // of the same selection state, including programmatic charge/profile jumps.
     tabs->tabBar()->hide();
     connect(navigation, &QListWidget::currentRowChanged, tabs, &QTabWidget::setCurrentIndex);

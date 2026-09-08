@@ -6,7 +6,7 @@
 
 ## 界面主题
 
-本分支 `feature/apple-ui` 提供 Apple / macOS 风格的轻充界面：浅灰背景、白色圆角卡片、蓝色主操作和两端统一的侧边栏。保留最新主分支的内嵌地图与站点评价功能。设计依据、构建步骤和验证记录见 [UI 说明](docs/development/apple-ui.md)。莱茵风格版本独立保留在 `feature/rhine-lab-ui` 分支。
+本分支 `feature/apple-ui` 提供更现代的轻充界面：用户端顶部胶囊导航、充电主题横幅、自适应站点网格，管理端浮动侧栏和分层指标卡片。保留内嵌地图与站点评价等原有功能，见 [现代 UI 说明](docs/development/modern-ui.md)。前一版 Apple 界面保留在提交 `fb9aebf`，说明见 [Apple UI 说明](docs/development/apple-ui.md)；莱茵版本独立保留在 `feature/rhine-lab-ui` 分支。
 
 ## 环境要求
 

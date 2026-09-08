@@ -25,7 +25,7 @@ AdminLoginDialog::AdminLoginDialog(PlatformClient *client, QWidget *parent)
     setMinimumSize(880, 600);
     setModal(true);
     auto *root = new QHBoxLayout(this);
-    root->setContentsMargins(0, 0, 0, 0);
+    root->setContentsMargins(20, 20, 20, 20);
     root->setSpacing(0);
     root->addWidget(new AppleIdentityPanel(false, this), 1);
     auto *formArea = new QWidget(this);

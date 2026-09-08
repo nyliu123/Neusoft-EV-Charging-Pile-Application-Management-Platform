@@ -89,7 +89,7 @@ int main(int argc, char *argv[])
     auto *pages = new QStackedWidget(central);
     auto *loginPage = new QWidget(pages);
     auto *loginLayout = new QHBoxLayout(loginPage);
-    loginLayout->setContentsMargins(0, 0, 0, 0);
+    loginLayout->setContentsMargins(20, 20, 20, 20);
     loginLayout->setSpacing(0);
     loginLayout->addWidget(new ev::AppleIdentityPanel(false, loginPage), 1);
     auto *loginArea = new QWidget(loginPage);

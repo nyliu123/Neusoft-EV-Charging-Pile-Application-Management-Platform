@@ -41,18 +41,18 @@ void AdminMainWindow::setupUi()
 
     auto *central = new QWidget(this);
     auto *bodyLayout = new QHBoxLayout(central);
-    bodyLayout->setContentsMargins(0, 0, 0, 0);
-    bodyLayout->setSpacing(0);
+    bodyLayout->setContentsMargins(18, 18, 18, 18);
+    bodyLayout->setSpacing(22);
 
     // Persistent, familiar desktop navigation with immediate selection feedback.
     auto *sidebar = new QFrame(central);
     sidebar->setObjectName(QStringLiteral("terminalSidebar"));
-    sidebar->setFixedWidth(214);
+    sidebar->setFixedWidth(188);
     auto *sidebarLayout = new QVBoxLayout(sidebar);
-    sidebarLayout->setContentsMargins(14, 24, 14, 10);
+    sidebarLayout->setContentsMargins(12, 22, 12, 10);
     sidebarLayout->setSpacing(20);
     sidebarLayout->addWidget(makeAppleBrand(sidebar));
-    auto *workspaceLabel = new QLabel(QStringLiteral("工作空间"), sidebar);
+    auto *workspaceLabel = new QLabel(QStringLiteral("管理工作空间"), sidebar);
     workspaceLabel->setProperty("uiClass", "eyebrow");
     sidebarLayout->addWidget(workspaceLabel);
     nav_ = new QListWidget(sidebar);
@@ -74,11 +74,11 @@ void AdminMainWindow::setupUi()
 
     // Right side: header + page stack.
     auto *rightLayout = new QVBoxLayout();
-    rightLayout->setContentsMargins(20, 14, 20, 16);
+    rightLayout->setContentsMargins(0, 0, 0, 0);
     rightLayout->setSpacing(12);
 
     auto *headerLayout = new QHBoxLayout();
-    auto *headerTitle = new QLabel(QStringLiteral("轻充管理"), central);
+    auto *headerTitle = new QLabel(QStringLiteral("工作空间 / 运营管理"), central);
     headerTitle->setProperty("uiClass", "eyebrow");
     headerLayout->addWidget(headerTitle);
     headerLayout->addStretch();

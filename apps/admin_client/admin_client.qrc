@@ -1,6 +1,6 @@
 <RCC>
     <qresource prefix="/styles">
-        <file alias="client.qss">../../resources/styles/apple.qss</file>
+        <file alias="client.qss">../../resources/styles/modern.qss</file>
     </qresource>
     <qresource prefix="/icons">
         <file alias="edit.svg">../../resources/icons/edit.svg</file>

@@ -192,7 +192,12 @@ void AdminDashboardPage::applyStats(bool ok, const QJsonObject &result,
         const QString status = entry.value(QStringLiteral("status")).toString();
         const int count = entry.value(QStringLiteral("count")).toInt();
         slices.append({entry.value(QStringLiteral("label")).toString(),
-                       static_cast<double>(count), pileStatusColor(status)});
+                       static_cast<double>(count),
+                       status == QStringLiteral("idle") ? QColor("#72bba3")
+                       : status == QStringLiteral("in_use") ? QColor("#7c8cda")
+                       : status == QStringLiteral("reserved") ? QColor("#e5be78")
+                       : status == QStringLiteral("fault") ? QColor("#d78b98")
+                       : pileStatusColor(status)});
         if (status == QStringLiteral("fault")) {
             faultCount = count;
         }

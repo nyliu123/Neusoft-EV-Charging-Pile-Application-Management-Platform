@@ -170,7 +170,7 @@ private slots:
         QTRY_COMPARE(client.state(), ev::PlatformClient::State::Ready);
         QWidget login;
         auto *layout = new QHBoxLayout(&login);
-        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setContentsMargins(20, 20, 20, 20);
         layout->setSpacing(0);
         layout->addWidget(new ev::AppleIdentityPanel(false, &login), 1);
         auto *area = new QWidget(&login);
@@ -211,7 +211,18 @@ private slots:
             if (candidate->property("uiClass").toString() == "stationCard") { stationCard = candidate; break; }
         QVERIFY(stationCard);
         QVERIFY(stationCard->accessibleName().contains(QStringLiteral("软件园能源站")));
+        auto *grid = home.findChild<QWidget *>("stationList");
+        QVERIFY(grid);
+        QTRY_COMPARE(grid->property("columns").toInt(), 3);
         capture(home, QStringLiteral("user-stations"));
+        home.resize(900, 600);
+        QTRY_COMPARE(grid->property("columns").toInt(), 2);
+        QCOMPARE(home.size(), QSize(900, 600));
+        QVERIFY(stationCard->width() >= 260);
+        QTRY_VERIFY(stationCard->parentWidget()->parentWidget()->height() >= stationCard->height());
+        capture(home, QStringLiteral("user-discovery-small"));
+        home.resize(1200, 780);
+        QTRY_COMPARE(grid->property("columns").toInt(), 3);
         // Verify mouse clicks on the visual card (including over child labels) reach its action.
         QTest::mouseClick(stationCard, Qt::LeftButton, Qt::NoModifier, QPoint(150, 30));
         auto *pileTable = stationPage->findChild<QTableWidget *>();
@@ -296,7 +307,7 @@ private slots:
         QVERIFY(avatar && !avatar->pixmap().isNull());
         capture(home, QStringLiteral("user-profile"));
         navigation->setFocus();
-        QTest::keyClick(navigation, Qt::Key_Down);
+        QTest::keyClick(navigation, Qt::Key_Right);
         QCOMPARE(tabs->currentIndex(), 3);
         tabs->setCurrentIndex(0);
         QCOMPARE(navigation->currentRow(), 0);
@@ -305,6 +316,42 @@ private slots:
         capture(home, QStringLiteral("user-small"));
         QCOMPARE(home.size(), QSize(900, 600));
         UserSessionState::instance().clear();
+    }
+    void stationGridReflowsWithoutLosingActions()
+    {
+        ev::AdaptiveStationGrid grid;
+        grid.resize(1120, 500);
+        QVector<QPushButton *> cards;
+        for (int i = 0; i < 7; ++i) {
+            auto *card = new ev::AppleStationCard(QStringLiteral("充电站 %1").arg(i),
+                QStringLiteral("测试地址"), QStringLiteral("1.2 km"),
+                QStringLiteral("¥1.20/度"), QStringLiteral("空闲 2 / 6"),
+                QStringLiteral("评分 9.0"), true, &grid);
+            cards.append(card);
+            grid.addCard(card);
+        }
+        grid.show();
+        QTRY_COMPARE(grid.property("columns").toInt(), 3);
+        auto *layout = qobject_cast<QGridLayout *>(grid.layout());
+        QVERIFY(layout);
+        QCOMPARE(layout->itemAtPosition(2, 0)->widget(), cards.last());
+        QSignalSpy clicked(cards.first(), &QPushButton::clicked);
+        grid.activateWindow();
+        cards.first()->setFocus();
+        QTRY_VERIFY(cards.first()->hasFocus());
+        for (const auto &size : {QSize(800, 500), QSize(600, 500), QSize(1120, 500)}) {
+            grid.resize(size);
+            const int columns = size.width() >= 1050 ? 3 : size.width() >= 680 ? 2 : 1;
+            QTRY_COMPARE(grid.property("columns").toInt(), columns);
+            QCOMPARE(layout->itemAtPosition(6 / columns, 6 % columns)->widget(), cards.last());
+            QVERIFY(cards.first()->hasFocus());
+            QTest::keyClick(cards.first(), Qt::Key_Space);
+        }
+        QCOMPARE(clicked.count(), 3);
+        grid.clear();
+        QCOMPARE(layout->count(), 0);
+        QCOMPARE(grid.minimumHeight(), 0);
+        QVERIFY(grid.findChildren<QPushButton *>().isEmpty());
     }
     void adminLoginAndNavigation()
     {

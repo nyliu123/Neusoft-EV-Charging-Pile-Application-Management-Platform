@@ -36,30 +36,19 @@ StatCard::StatCard(const QString &caption, const QString &tone, QWidget *parent)
     : QFrame(parent)
 {
     setProperty("uiClass", "statCard");
+    setProperty("tone", tone);
 
-    auto *layout = new QHBoxLayout(this);
-    layout->setContentsMargins(16, 14, 16, 14);
+    setMinimumHeight(116);
+    auto *layout = new QVBoxLayout(this);
+    layout->setContentsMargins(18, 18, 18, 18);
     layout->setSpacing(12);
-
-    auto *bar = new QFrame(this);
-    bar->setObjectName(QStringLiteral("statAccent"));
-    bar->setProperty("tone", tone);
-    bar->setFixedWidth(4);
-    layout->addWidget(bar);
-
-    auto *textLayout = new QVBoxLayout();
-    textLayout->setSpacing(6);
-
     captionLabel_ = new QLabel(caption, this);
     captionLabel_->setProperty("uiClass", "muted");
-
     valueLabel_ = new QLabel(QStringLiteral("--"), this);
     valueLabel_->setProperty("uiClass", "statValue");
+    layout->addWidget(captionLabel_);
+    layout->addWidget(valueLabel_);
 
-    textLayout->addWidget(captionLabel_);
-    textLayout->addWidget(valueLabel_);
-    layout->addLayout(textLayout);
-    layout->addStretch();
 }
 
 void StatCard::setCaption(const QString &caption)
@@ -164,19 +153,19 @@ void LineChartWidget::paintEvent(QPaintEvent *)
         painter.fillPath(area, fill);
     }
     // Polyline + dots.
-    painter.setPen(QPen(QColor("#007aff"), 2));
+    painter.setPen(QPen(QColor("#7080dc"), 2));
     painter.setBrush(Qt::NoBrush);
     painter.drawPolyline(linePoints.constData(), linePoints.size());
 
     painter.setPen(Qt::NoPen);
-    painter.setBrush(QColor("#007aff"));
+    painter.setBrush(QColor("#7080dc"));
     for (const QPointF &point : linePoints) {
         painter.drawEllipse(point, 3.0, 3.0);
     }
 
     // Value label above the last point.
     const QPointF lastPoint = linePoints.last();
-    painter.setPen(QColor("#0061c6"));
+    painter.setPen(QColor("#6171ca"));
     QFont boldFont = painter.font();
     boldFont.setBold(true);
     painter.setFont(boldFont);
