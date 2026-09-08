@@ -16,6 +16,7 @@
 #include <QPushButton>
 #include <QStackedWidget>
 #include <QStatusBar>
+#include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -106,6 +107,7 @@ void AdminMainWindow::setupUi()
     stack_->addWidget(stationDetailPage_);
 
     stack_->setCurrentIndex(0);
+    nav_->setCurrentRow(0);
 
     // Status bar.
     connectionLabel_ = new QLabel(QStringLiteral("连接状态：连接中"), this);
@@ -125,13 +127,19 @@ void AdminMainWindow::setupConnections()
         if (answer != QMessageBox::Yes) {
             return;
         }
+        hide();
+        connect(client_, &PlatformClient::logoutFinished, this,
+            [this](bool, const QString &) {
+                QTimer::singleShot(0, this,
+                    [this] { showLoginAgain(QString()); });
+            },
+            Qt::SingleShotConnection);
         client_->logout();
-        showLoginAgain(QStringLiteral("已退出登录"));
     });
     connect(&api_, &AdminApiClient::sessionExpired, this,
-            &AdminMainWindow::showLoginAgain);
+            &AdminMainWindow::showLoginAgain, Qt::QueuedConnection);
     connect(client_, &PlatformClient::sessionExpired, this,
-            &AdminMainWindow::showLoginAgain);
+            &AdminMainWindow::showLoginAgain, Qt::QueuedConnection);
     connect(client_, &PlatformClient::stateChanged, this,
             [this](PlatformClient::State state, const QString &detail) {
                 connectionLabel_->setText(QStringLiteral("连接状态：%1").arg(detail));
@@ -180,17 +188,15 @@ void AdminMainWindow::refreshCurrentPage()
 
 void AdminMainWindow::showLoginAgain(const QString &reason)
 {
+    Q_UNUSED(reason)
     if (reloginActive_) {
         return;
     }
     reloginActive_ = true;
     api_.setSession(AdminSession {});
+    hide();
 
-    if (!reason.isEmpty()) {
-        QMessageBox::information(this, QStringLiteral("提示"), reason);
-    }
-
-    AdminLoginDialog dialog(client_, this);
+    AdminLoginDialog dialog(client_);
     const bool accepted = dialog.exec() == QDialog::Accepted;
     reloginActive_ = false;
 
@@ -199,6 +205,9 @@ void AdminMainWindow::showLoginAgain(const QString &reason)
         return;
     }
     applySession(dialog.session());
+    show();
+    raise();
+    activateWindow();
     refreshCurrentPage();
 }
 

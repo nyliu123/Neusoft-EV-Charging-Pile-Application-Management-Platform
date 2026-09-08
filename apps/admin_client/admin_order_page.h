@@ -4,7 +4,9 @@
 
 class QComboBox;
 class QDateEdit;
+class QEvent;
 class QJsonArray;
+class QJsonObject;
 class QLabel;
 class QPushButton;
 class QTableWidget;
@@ -25,12 +27,17 @@ public:
     void reloadAll();
     void reload();
 
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
 private:
     void loadStations();
     void loadOrders();
+    void applyAllDateRange(const QJsonObject &result, const QJsonArray &orders);
     void fillTable(const QJsonArray &orders);
     void resetFilters();
     void applyDatePreset();
+    void setCalendarButtonsVisible(bool visible);
     void setLoading(bool loading, const QString &message);
     void setStatusText(const QString &text, bool isError);
 

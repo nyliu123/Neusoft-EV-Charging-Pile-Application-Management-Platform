@@ -127,7 +127,7 @@ void AdminPilePage::reload()
 void AdminPilePage::loadStations()
 {
     setLoading(true, QStringLiteral("正在加载站点列表..."));
-    api_->sendQuery(QStringLiteral("station_list"), QJsonObject {}, this,
+    api_->sendStationOptions(this,
         [this](bool ok, const QJsonObject &result, const QString &message) {
             if (!ok) {
                 setLoading(false, QString());
@@ -185,6 +185,7 @@ void AdminPilePage::fillTable(const QJsonArray &piles)
         return;
     }
 
+    table_->setUpdatesEnabled(false);
     table_->setRowCount(piles.size());
     int faultCount = 0;
 
@@ -192,8 +193,6 @@ void AdminPilePage::fillTable(const QJsonArray &piles)
         const QJsonObject pile = piles[row].toObject();
         const QString status = pile.value(QStringLiteral("status")).toString();
         if (status == QStringLiteral("fault")) ++faultCount;
-
-        table_->insertRow(row);
 
         // 桩编号
         auto *numItem = new QTableWidgetItem(
@@ -257,6 +256,7 @@ void AdminPilePage::fillTable(const QJsonArray &piles)
             table_->setCellWidget(row, kColumnAction, placeholder);
         }
     }
+    table_->setUpdatesEnabled(true);
 
     // Status bar: show fault count if any.
     if (faultCount > 0) {

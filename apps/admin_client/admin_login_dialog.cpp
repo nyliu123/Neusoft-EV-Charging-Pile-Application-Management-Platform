@@ -18,6 +18,13 @@
 
 namespace ev {
 
+namespace {
+
+QString rememberedUsername;
+QString rememberedPassword;
+
+} // namespace
+
 // ── Style helpers ───────────────────────────────────────────────────────────
 
 static const char *kInputStyle =
@@ -145,6 +152,7 @@ AdminLoginDialog::AdminLoginDialog(PlatformClient *client, QWidget *parent)
     usernameEdit_->setMaxLength(50);
     usernameEdit_->setStyleSheet(QString::fromLatin1(kInputStyle));
     usernameEdit_->setMinimumHeight(42);
+    usernameEdit_->setText(rememberedUsername);
     cardLayout->addWidget(usernameEdit_);
 
     cardLayout->addSpacing(12);
@@ -160,6 +168,7 @@ AdminLoginDialog::AdminLoginDialog(PlatformClient *client, QWidget *parent)
     passwordEdit_->setMaxLength(255);
     passwordEdit_->setStyleSheet(QString::fromLatin1(kInputStyle));
     passwordEdit_->setMinimumHeight(42);
+    passwordEdit_->setText(rememberedPassword);
     passwordLayout->addWidget(passwordEdit_);
 
     passwordToggle_ = new QPushButton(QStringLiteral("显示"), card);
@@ -307,6 +316,8 @@ void AdminLoginDialog::onLoginResponse(bool success, const QString &message,
 {
     setLoading(false);
     if (success) {
+        rememberedUsername = usernameEdit_->text().trimmed();
+        rememberedPassword = passwordEdit_->text();
         session_ = session;
         accept();
     } else {

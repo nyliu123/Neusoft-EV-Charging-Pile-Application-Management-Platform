@@ -43,6 +43,8 @@ public:
     // could not be sent.
     bool sendQuery(const QString &type, const QJsonObject &params,
                    QObject *context, Callback callback);
+    // Station filters on multiple pages share the same rarely-changing list.
+    bool sendStationOptions(QObject *context, Callback callback);
     bool sendAction(const QString &type, const QJsonObject &params,
                     QObject *context, Callback callback);
     bool sendGeocode(const QString &address, QObject *context, Callback callback);
@@ -62,6 +64,7 @@ private:
 
     PlatformClient *client_ = nullptr;
     AdminSession session_;
+    QJsonObject stationOptionsCache_;
     QHash<QString, Pending> pending_;
 };
 

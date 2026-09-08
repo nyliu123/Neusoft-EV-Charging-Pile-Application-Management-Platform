@@ -19,6 +19,9 @@ AdminHandler::AdminHandler(QSqlDatabase database, SessionManager &sessionManager
 
 QJsonObject AdminHandler::processQuery(const QString &type, const QJsonObject &params)
 {
+    if (type == QStringLiteral("dashboard_overview")) {
+        return queryDashboardOverview(params);
+    }
     if (type == QStringLiteral("dashboard_summary")) {
         return queryDashboardSummary();
     }
@@ -45,6 +48,29 @@ QJsonObject AdminHandler::processQuery(const QString &type, const QJsonObject &p
     }
     return failBody(type, ErrorCode::InvalidInput,
                     QStringLiteral("未知的查询类型：%1").arg(type));
+}
+
+QJsonObject AdminHandler::queryDashboardOverview(const QJsonObject &params)
+{
+    const QJsonObject summary = queryDashboardSummary();
+    const QJsonObject trend = queryRevenueTrend(params);
+    const QJsonObject stats = queryPileStatusStats();
+    for (const QJsonObject &part : {summary, trend, stats}) {
+        if (!part.value(QStringLiteral("success")).toBool()) {
+            return failBody(QStringLiteral("dashboard_overview"), ErrorCode::StorageError,
+                part.value(QStringLiteral("message")).toString());
+        }
+    }
+
+    const auto resultOf = [](const QJsonObject &body) {
+        return body.value(QStringLiteral("data")).toObject()
+            .value(QStringLiteral("result")).toObject();
+    };
+    return okBody(QStringLiteral("dashboard_overview"), QJsonObject {
+        {QStringLiteral("summary"), resultOf(summary)},
+        {QStringLiteral("trend"), resultOf(trend)},
+        {QStringLiteral("stats"), resultOf(stats)}
+    });
 }
 
 QJsonObject AdminHandler::processAction(const QString &type, const QJsonObject &params)
@@ -388,6 +414,22 @@ QJsonObject AdminHandler::queryUserList(const QJsonObject &params)
 
 QJsonObject AdminHandler::queryOrderList(const QJsonObject &params)
 {
+    QString firstReserveDate;
+    QString lastReserveDate;
+    QSqlQuery rangeQuery(database_);
+    if (!rangeQuery.exec(QStringLiteral(
+            "SELECT MIN(DATE(reserve_time)), MAX(DATE(reserve_time)) "
+            "FROM orders WHERE reserve_time IS NOT NULL"))) {
+        qWarning().noquote() << "admin handler: order date range failed:"
+                             << rangeQuery.lastError().text();
+        return failBody(QStringLiteral("order_list"), ErrorCode::StorageError,
+                        QStringLiteral("数据查询失败，请稍后重试"));
+    }
+    if (rangeQuery.next()) {
+        firstReserveDate = rangeQuery.value(0).toString();
+        lastReserveDate = rangeQuery.value(1).toString();
+    }
+
     QStringList conditions;
     QVariantList bindings;
 
@@ -458,8 +500,11 @@ QJsonObject AdminHandler::queryOrderList(const QJsonObject &params)
             {QStringLiteral("station_name"), query.value(12).toString()}
         });
     }
-    return okBody(QStringLiteral("order_list"),
-                  QJsonObject {{QStringLiteral("orders"), orders}});
+    return okBody(QStringLiteral("order_list"), QJsonObject {
+        {QStringLiteral("orders"), orders},
+        {QStringLiteral("first_reserve_date"), firstReserveDate},
+        {QStringLiteral("last_reserve_date"), lastReserveDate}
+    });
 }
 
 QJsonObject AdminHandler::actionRestartPile(const QJsonObject &params)

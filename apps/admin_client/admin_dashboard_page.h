@@ -27,6 +27,7 @@ signals:
     void pileManagementRequested();
 
 private:
+    void loadLegacyDashboard();
     void applySummary(bool ok, const QJsonObject &result, const QString &message);
     void applyTrend(bool ok, const QJsonObject &result, const QString &message);
     void applyStats(bool ok, const QJsonObject &result, const QString &message);

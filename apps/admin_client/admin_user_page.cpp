@@ -152,6 +152,7 @@ void AdminUserPage::fillTable(const QJsonArray &users)
         return;
     }
 
+    table_->setUpdatesEnabled(false);
     table_->setRowCount(users.size());
 
     for (int row = 0; row < users.size(); ++row) {
@@ -201,6 +202,7 @@ void AdminUserPage::fillTable(const QJsonArray &users)
             });
         table_->setCellWidget(row, kColumnAction, actionButton);
     }
+    table_->setUpdatesEnabled(true);
 
     if (hasKeyword_) {
         setStatusText(QStringLiteral("找到 %1 条匹配结果").arg(users.size()), false);

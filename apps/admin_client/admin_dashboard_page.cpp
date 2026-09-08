@@ -106,6 +106,22 @@ void AdminDashboardPage::reload()
     errors_.clear();
     updateErrorLabel();
 
+    api_->sendQuery(QStringLiteral("dashboard_overview"),
+        QJsonObject {{QStringLiteral("days"), 7}}, this,
+        [this](bool ok, const QJsonObject &result, const QString &) {
+            if (!ok) {
+                // Keep compatibility with an already-running older server.
+                loadLegacyDashboard();
+                return;
+            }
+            applySummary(true, result.value(QStringLiteral("summary")).toObject(), {});
+            applyTrend(true, result.value(QStringLiteral("trend")).toObject(), {});
+            applyStats(true, result.value(QStringLiteral("stats")).toObject(), {});
+        });
+}
+
+void AdminDashboardPage::loadLegacyDashboard()
+{
     api_->sendQuery(QStringLiteral("dashboard_summary"), QJsonObject {}, this,
         [this](bool ok, const QJsonObject &result, const QString &message) {
             applySummary(ok, result, message);

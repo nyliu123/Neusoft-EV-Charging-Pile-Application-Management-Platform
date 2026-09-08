@@ -119,6 +119,7 @@ void AdminStationPage::fillTable(const QJsonArray &stations)
         return;
     }
 
+    table_->setUpdatesEnabled(false);
     table_->setRowCount(stations.size());
 
     for (int row = 0; row < stations.size(); ++row) {
@@ -155,6 +156,7 @@ void AdminStationPage::fillTable(const QJsonArray &stations)
         });
         table_->setCellWidget(row, kColumnAction, detailButton);
     }
+    table_->setUpdatesEnabled(true);
 
     setStatusText(QStringLiteral("共 %1 个充电站").arg(stations.size()), false);
 }

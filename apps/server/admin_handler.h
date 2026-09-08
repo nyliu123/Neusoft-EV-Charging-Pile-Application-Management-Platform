@@ -26,6 +26,7 @@ public:
 
 private:
     // Queries (UML-035 ~ 038 / 040 / 041 / 043 / 046).
+    QJsonObject queryDashboardOverview(const QJsonObject &params);
     QJsonObject queryDashboardSummary();
     QJsonObject queryRevenueTrend(const QJsonObject &params);
     QJsonObject queryPileStatusStats();

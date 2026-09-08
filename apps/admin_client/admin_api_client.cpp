@@ -3,6 +3,8 @@
 #include "common/protocol.h"
 #include "network/platform_client.h"
 
+#include <QTimer>
+
 namespace ev {
 
 AdminApiClient::AdminApiClient(PlatformClient *client, QObject *parent)
@@ -14,19 +16,63 @@ AdminApiClient::AdminApiClient(PlatformClient *client, QObject *parent)
 
 void AdminApiClient::setSession(const AdminSession &session)
 {
+    if (session_.sessionId != session.sessionId) {
+        stationOptionsCache_ = QJsonObject {};
+        pending_.clear();
+    }
     session_ = session;
 }
 
 bool AdminApiClient::sendQuery(const QString &type, const QJsonObject &params,
                                QObject *context, Callback callback)
 {
+    if (type == QStringLiteral("station_list")) {
+        return sendRequest(static_cast<quint32>(MessageType::AdminQuery),
+            type, params, context,
+            [this, callback = std::move(callback)](
+                bool success, const QJsonObject &result, const QString &message) {
+                if (success) {
+                    stationOptionsCache_ = result;
+                }
+                callback(success, result, message);
+            });
+    }
     return sendRequest(static_cast<quint32>(MessageType::AdminQuery),
                        type, params, context, std::move(callback));
+}
+
+bool AdminApiClient::sendStationOptions(QObject *context, Callback callback)
+{
+    if (!stationOptionsCache_.isEmpty()) {
+        const QPointer<QObject> guard(context);
+        const QJsonObject cached = stationOptionsCache_;
+        QTimer::singleShot(0, this,
+            [guard, cached, callback = std::move(callback)] {
+                if (!guard.isNull()) {
+                    callback(true, cached, QString());
+                }
+            });
+        return true;
+    }
+
+    return sendQuery(QStringLiteral("station_list"), QJsonObject {}, context,
+                     std::move(callback));
 }
 
 bool AdminApiClient::sendAction(const QString &type, const QJsonObject &params,
                                 QObject *context, Callback callback)
 {
+    if (type == QStringLiteral("add_station")) {
+        return sendRequest(static_cast<quint32>(MessageType::AdminAction),
+            type, params, context,
+            [this, callback = std::move(callback)](
+                bool success, const QJsonObject &result, const QString &message) {
+                if (success) {
+                    stationOptionsCache_ = QJsonObject {};
+                }
+                callback(success, result, message);
+            });
+    }
     return sendRequest(static_cast<quint32>(MessageType::AdminAction),
                        type, params, context, std::move(callback));
 }

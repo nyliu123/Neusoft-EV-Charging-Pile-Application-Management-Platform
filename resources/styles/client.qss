@@ -292,6 +292,37 @@ QLineEdit:disabled, QComboBox:disabled {
     color: #9aa0a6;
 }
 
+QDateEdit:disabled {
+    background-color: #f0f2f5;
+    color: #9aa0a6;
+}
+
+QDateEdit[calendarButtonVisible="true"] {
+    padding-right: 35px;
+}
+
+QDateEdit[calendarButtonVisible="true"]::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 32px;
+    border: none;
+}
+
+QDateEdit[calendarButtonVisible="true"]::down-arrow {
+    image: url(:/icons/edit.xpm);
+    width: 16px;
+    height: 16px;
+}
+
+QDateEdit[calendarButtonVisible="false"]::drop-down {
+    width: 0;
+    border: none;
+}
+
+QDateEdit[calendarButtonVisible="false"]::down-arrow {
+    image: none;
+}
+
 QComboBox::drop-down {
     width: 28px;
     border: none;

@@ -2,4 +2,8 @@
     <qresource prefix="/styles">
         <file alias="client.qss">../../resources/styles/client.qss</file>
     </qresource>
+    <qresource prefix="/icons">
+        <file alias="edit.svg">../../resources/icons/edit.svg</file>
+        <file alias="edit.xpm">../../resources/icons/edit.xpm</file>
+    </qresource>
 </RCC>

@@ -148,6 +148,7 @@ void AdminStationDetailPage::fillTable(const QJsonArray &piles)
         return;
     }
 
+    table_->setUpdatesEnabled(false);
     table_->setRowCount(piles.size());
     int faultCount = 0;
 
@@ -204,6 +205,7 @@ void AdminStationDetailPage::fillTable(const QJsonArray &piles)
             table_->setCellWidget(row, kColumnAction, placeholder);
         }
     }
+    table_->setUpdatesEnabled(true);
 
     setStatusText(faultCount > 0
         ? QStringLiteral("共 %1 台充电桩　·　故障 %2 台（可远程重启）")

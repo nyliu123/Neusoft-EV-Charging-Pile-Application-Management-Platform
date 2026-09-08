@@ -4,9 +4,11 @@
 #include "admin_format.h"
 #include "client_ui/animated_combo_box.h"
 
+#include <QCalendarWidget>
 #include <QComboBox>
 #include <QDate>
 #include <QDateEdit>
+#include <QEvent>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QJsonArray>
@@ -97,7 +99,7 @@ AdminOrderPage::AdminOrderPage(AdminApiClient *api, QWidget *parent)
     dateLayout->addWidget(presetLabel);
     datePresetBox_ = new ev::AnimatedComboBox(this);
     datePresetBox_->setMinimumWidth(120);
-    datePresetBox_->addItem(QStringLiteral("全部"), kDateAll);
+    datePresetBox_->addItem(QStringLiteral("全部时间"), kDateAll);
     datePresetBox_->addItem(QStringLiteral("今日"), kDateToday);
     datePresetBox_->addItem(QStringLiteral("近7日"), kDateLast7Days);
     datePresetBox_->addItem(QStringLiteral("近30日"), kDateLast30Days);
@@ -107,7 +109,10 @@ AdminOrderPage::AdminOrderPage(AdminApiClient *api, QWidget *parent)
     startDateEdit_ = new QDateEdit(QDate::currentDate(), this);
     startDateEdit_->setCalendarPopup(true);
     startDateEdit_->setDisplayFormat(QStringLiteral("yyyy-MM-dd"));
+    startDateEdit_->setMinimumWidth(180);
     startDateEdit_->setEnabled(false);
+    startDateEdit_->setProperty("calendarButtonVisible", false);
+    startDateEdit_->calendarWidget()->installEventFilter(this);
     dateLayout->addWidget(startDateEdit_);
     auto *rangeLabel = new QLabel(QStringLiteral("至"), this);
     rangeLabel->setProperty("tone", "muted");
@@ -115,7 +120,10 @@ AdminOrderPage::AdminOrderPage(AdminApiClient *api, QWidget *parent)
     endDateEdit_ = new QDateEdit(QDate::currentDate(), this);
     endDateEdit_->setCalendarPopup(true);
     endDateEdit_->setDisplayFormat(QStringLiteral("yyyy-MM-dd"));
+    endDateEdit_->setMinimumWidth(180);
     endDateEdit_->setEnabled(false);
+    endDateEdit_->setProperty("calendarButtonVisible", false);
+    endDateEdit_->calendarWidget()->installEventFilter(this);
     dateLayout->addWidget(endDateEdit_);
 
     dateLayout->addStretch();
@@ -167,6 +175,7 @@ AdminOrderPage::AdminOrderPage(AdminApiClient *api, QWidget *parent)
         "  font-size: 14px; border-radius: 8px; }"));
     loadingOverlay_->hide();
 
+    applyDatePreset();
     connect(datePresetBox_, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, [this](int) { applyDatePreset(); loadOrders(); });
     connect(queryButton_, &QPushButton::clicked, this, &AdminOrderPage::loadOrders);
@@ -186,7 +195,7 @@ void AdminOrderPage::reload()
 void AdminOrderPage::loadStations()
 {
     setLoading(true, QStringLiteral("正在加载站点列表..."));
-    api_->sendQuery(QStringLiteral("station_list"), QJsonObject {}, this,
+    api_->sendStationOptions(this,
         [this](bool ok, const QJsonObject &result, const QString &message) {
             if (!ok) {
                 setLoading(false, QString());
@@ -215,19 +224,82 @@ void AdminOrderPage::loadStations()
 
 void AdminOrderPage::applyDatePreset()
 {
-    const bool custom =
-        datePresetBox_->currentData().toInt() == kDateCustom;
+    const int preset = datePresetBox_->currentData().toInt();
+    const bool custom = preset == kDateCustom;
     startDateEdit_->setEnabled(custom);
     endDateEdit_->setEnabled(custom);
+    setCalendarButtonsVisible(custom);
 
-    if (!custom) {
-        const QDate today = QDate::currentDate();
-        const QDate start = datePresetBox_->currentData().toInt() == kDateToday
+    const QDate today = QDate::currentDate();
+    if (preset != kDateAll && !custom) {
+        const QDate start = preset == kDateToday
             ? today
-            : today.addDays(datePresetBox_->currentData().toInt() == kDateLast7Days
-                ? -6 : -29);
+            : today.addDays(preset == kDateLast7Days ? -6 : -29);
         startDateEdit_->setDate(start);
         endDateEdit_->setDate(today);
+    }
+}
+
+void AdminOrderPage::applyAllDateRange(const QJsonObject &result,
+                                       const QJsonArray &orders)
+{
+    if (datePresetBox_->currentData().toInt() != kDateAll) {
+        return;
+    }
+
+    QDate firstDate = QDate::fromString(
+        result.value(QStringLiteral("first_reserve_date")).toString(), Qt::ISODate);
+    QDate lastDate = QDate::fromString(
+        result.value(QStringLiteral("last_reserve_date")).toString(), Qt::ISODate);
+
+    // Compatibility with older servers: infer the bounds from an unfiltered
+    // order response when the new range fields are absent.
+    if (!firstDate.isValid() || !lastDate.isValid()) {
+        for (const QJsonValue &value : orders) {
+            const QDate reserveDate = QDate::fromString(
+                value.toObject().value(QStringLiteral("reserve_time"))
+                    .toString().left(10), Qt::ISODate);
+            if (!reserveDate.isValid()) {
+                continue;
+            }
+            if (!firstDate.isValid() || reserveDate < firstDate) {
+                firstDate = reserveDate;
+            }
+            if (!lastDate.isValid() || reserveDate > lastDate) {
+                lastDate = reserveDate;
+            }
+        }
+    }
+
+    if (firstDate.isValid() && lastDate.isValid()) {
+        startDateEdit_->setDate(firstDate);
+        endDateEdit_->setDate(lastDate);
+    }
+}
+
+bool AdminOrderPage::eventFilter(QObject *watched, QEvent *event)
+{
+    const bool isDateCalendar = watched == startDateEdit_->calendarWidget()
+        || watched == endDateEdit_->calendarWidget();
+    if (isDateCalendar && event->type() == QEvent::Show) {
+        setCalendarButtonsVisible(false);
+    } else if (isDateCalendar && event->type() == QEvent::Hide) {
+        setCalendarButtonsVisible(
+            datePresetBox_->currentData().toInt() == kDateCustom);
+    }
+    return QWidget::eventFilter(watched, event);
+}
+
+void AdminOrderPage::setCalendarButtonsVisible(bool visible)
+{
+    for (QDateEdit *edit : {startDateEdit_, endDateEdit_}) {
+        if (edit->property("calendarButtonVisible").toBool() == visible) {
+            continue;
+        }
+        edit->setProperty("calendarButtonVisible", visible);
+        edit->style()->unpolish(edit);
+        edit->style()->polish(edit);
+        edit->update();
     }
 }
 
@@ -257,7 +329,9 @@ void AdminOrderPage::loadOrders()
                 setStatusText(QStringLiteral("订单列表加载失败：%1").arg(message), true);
                 return;
             }
-            fillTable(result.value(QStringLiteral("orders")).toArray());
+            const QJsonArray orders = result.value(QStringLiteral("orders")).toArray();
+            applyAllDateRange(result, orders);
+            fillTable(orders);
         });
 }
 
@@ -270,6 +344,7 @@ void AdminOrderPage::fillTable(const QJsonArray &orders)
         return;
     }
 
+    table_->setUpdatesEnabled(false);
     table_->setRowCount(orders.size());
 
     for (int row = 0; row < orders.size(); ++row) {
@@ -333,6 +408,7 @@ void AdminOrderPage::fillTable(const QJsonArray &orders)
         feeItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
         table_->setItem(row, kColumnFee, feeItem);
     }
+    table_->setUpdatesEnabled(true);
 
     const bool filtered = !statusBox_->currentData().toString().isEmpty()
         || stationBox_->currentData().toInt() > 0
@@ -344,9 +420,13 @@ void AdminOrderPage::fillTable(const QJsonArray &orders)
 
 void AdminOrderPage::resetFilters()
 {
+    const QSignalBlocker statusBlocker(statusBox_);
+    const QSignalBlocker stationBlocker(stationBox_);
+    const QSignalBlocker dateBlocker(datePresetBox_);
     statusBox_->setCurrentIndex(0);
     stationBox_->setCurrentIndex(0);
     datePresetBox_->setCurrentIndex(kDateAll);
+    applyDatePreset();
     loadOrders();
 }
 
