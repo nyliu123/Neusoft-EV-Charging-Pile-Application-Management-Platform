@@ -141,6 +141,31 @@ bool UserApiClient::cancelCharge(qint64 orderId, QObject *context, Callback call
                              context, std::move(callback));
 }
 
+bool UserApiClient::listComments(qint64 stationId, QObject *context, Callback callback)
+{
+    return sendStationRequest(QStringLiteral("list_comments"),
+                              {{QStringLiteral("station_id"), stationId}},
+                              context, std::move(callback));
+}
+
+bool UserApiClient::postComment(qint64 stationId, const QString &content, int rating,
+                                QObject *context, Callback callback)
+{
+    return sendStationRequest(QStringLiteral("post_comment"),
+                              {{QStringLiteral("station_id"), stationId},
+                               {QStringLiteral("content"), content},
+                               {QStringLiteral("rating"), rating}},
+                              context, std::move(callback));
+}
+
+bool UserApiClient::toggleCommentLike(qint64 commentId, QObject *context,
+                                      Callback callback)
+{
+    return sendStationRequest(QStringLiteral("toggle_like"),
+                              {{QStringLiteral("comment_id"), commentId}},
+                              context, std::move(callback));
+}
+
 bool UserApiClient::sendUserRequest(const QString &type, const QJsonObject &params,
                                     QObject *context, Callback callback)
 {

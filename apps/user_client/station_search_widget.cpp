@@ -5,12 +5,14 @@
 #include "client_ui/animated_combo_box.h"
 
 #include <QComboBox>
+#include <QFrame>
 #include <QHeaderView>
 #include <QHBoxLayout>
 #include <QJsonArray>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QPlainTextEdit>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QStackedWidget>
@@ -139,11 +141,77 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
     backButton->setProperty("uiClass", "text");
     detailFooter->addWidget(backButton);
     detailFooter->addStretch();
+    commentsButton_ = new QPushButton(QStringLiteral("查看评论"), detailPage_);
+    commentsButton_->setProperty("uiClass", "secondary");
+    detailFooter->addWidget(commentsButton_);
     startNavigationButton_ = new QPushButton(QStringLiteral("打开地图导航"), detailPage_);
     startNavigationButton_->setProperty("uiClass", "primary");
     detailFooter->addWidget(startNavigationButton_);
     detailLayout->addLayout(detailFooter);
     pages_->addWidget(detailPage_);
+
+    commentsPage_ = new QWidget(pages_);
+    auto *commentsLayout = new QVBoxLayout(commentsPage_);
+    commentsTitle_ = new QLabel(commentsPage_);
+    commentsTitle_->setProperty("uiClass", "pageTitle");
+    commentsLayout->addWidget(commentsTitle_);
+    commentsSummary_ = new QLabel(commentsPage_);
+    commentsSummary_->setProperty("uiClass", "muted");
+    commentsSummary_->setWordWrap(true);
+    commentsLayout->addWidget(commentsSummary_);
+
+    auto *commentsScroll = new QScrollArea(commentsPage_);
+    commentsScroll->setWidgetResizable(true);
+    commentsScroll->setFrameShape(QFrame::NoFrame);
+    auto *commentsList = new QWidget(commentsScroll);
+    commentsListLayout_ = new QVBoxLayout(commentsList);
+    commentsListLayout_->setContentsMargins(0, 4, 8, 4);
+    commentsListLayout_->setSpacing(10);
+    commentsListLayout_->addStretch();
+    commentsScroll->setWidget(commentsList);
+    commentsLayout->addWidget(commentsScroll, 1);
+
+    auto *composeCard = new QFrame(commentsPage_);
+    composeCard->setProperty("uiClass", "card");
+    auto *composeLayout = new QVBoxLayout(composeCard);
+    composeLayout->setContentsMargins(12, 10, 12, 10);
+    auto *starRow = new QHBoxLayout;
+    starRow->addWidget(new QLabel(QStringLiteral("打星："), composeCard));
+    for (int i = 1; i <= 5; ++i) {
+        auto *star = new QPushButton(QStringLiteral("☆"), composeCard);
+        star->setProperty("uiClass", "text");
+        star->setFixedSize(36, 28);
+        starRow->addWidget(star);
+        connect(star, &QPushButton::clicked, this, [this, i] {
+            setStarRating(starRating_ == i ? 0 : i);
+        });
+        starButtons_.append(star);
+    }
+    starValueLabel_ = new QLabel(QStringLiteral("未打星（0 分）"), composeCard);
+    starValueLabel_->setProperty("uiClass", "muted");
+    starRow->addWidget(starValueLabel_);
+    starRow->addStretch();
+    composeLayout->addLayout(starRow);
+    commentInput_ = new QPlainTextEdit(composeCard);
+    commentInput_->setPlaceholderText(QStringLiteral("说说这次充电的体验（1~200 字）"));
+    commentInput_->setMaximumHeight(76);
+    composeLayout->addWidget(commentInput_);
+    auto *composeButtons = new QHBoxLayout;
+    composeButtons->addStretch();
+    publishCommentButton_ = new QPushButton(QStringLiteral("发表评论"), composeCard);
+    publishCommentButton_->setProperty("uiClass", "primary");
+    composeButtons->addWidget(publishCommentButton_);
+    composeLayout->addLayout(composeButtons);
+    commentsLayout->addWidget(composeCard);
+
+    auto *commentsFooter = new QHBoxLayout;
+    auto *backFromComments = new QPushButton(
+        QStringLiteral("< 返回站点详情"), commentsPage_);
+    backFromComments->setProperty("uiClass", "text");
+    commentsFooter->addWidget(backFromComments);
+    commentsFooter->addStretch();
+    commentsLayout->addLayout(commentsFooter);
+    pages_->addWidget(commentsPage_);
 
     connect(searchButton_, &QPushButton::clicked, this, &StationSearchWidget::search);
     connect(addressEdit_, &QLineEdit::returnPressed, this, &StationSearchWidget::search);
@@ -158,6 +226,16 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
     });
     connect(startNavigationButton_, &QPushButton::clicked,
             this, &StationSearchWidget::startNavigation);
+    connect(commentsButton_, &QPushButton::clicked, this, [this] {
+        if (detailStationId_ > 0) {
+            showComments(detailStationId_);
+        }
+    });
+    connect(publishCommentButton_, &QPushButton::clicked,
+            this, &StationSearchWidget::publishComment);
+    connect(backFromComments, &QPushButton::clicked, this, [this] {
+        pages_->setCurrentWidget(detailPage_);
+    });
 }
 
 void StationSearchWidget::refresh()
@@ -254,17 +332,32 @@ void StationSearchWidget::renderStations(const QJsonObject &result, bool locatio
                   station.value(QStringLiteral("total_piles")).toInt())
             : QStringLiteral("暂无空闲 · 总共 %1").arg(
                   station.value(QStringLiteral("total_piles")).toInt());
+        QString ratingText;
+        const QJsonObject rating = station.value(QStringLiteral("rating")).toObject();
+        if (rating.value(QStringLiteral("count")).toInt() > 0) {
+            ratingText = QStringLiteral("★ %1  %2")
+                .arg(rating.value(QStringLiteral("avg")).toDouble(), 0, 'f', 1)
+                .arg(rating.value(QStringLiteral("tier")).toString());
+            const QJsonObject hot = rating.value(QStringLiteral("hot")).toObject();
+            if (!hot.isEmpty()) {
+                ratingText += QStringLiteral("    热评：%1").arg(
+                    hot.value(QStringLiteral("content")).toString());
+            }
+        } else {
+            ratingText = QStringLiteral("暂无评分");
+        }
         auto *card = new QPushButton(
-            QStringLiteral("%1    ·    %2\n%3\n¥%4/度    %5")
+            QStringLiteral("%1    ·    %2\n%3\n¥%4/度    %5\n%6")
                 .arg(station.value(QStringLiteral("station_name")).toString(), distanceText,
                      station.value(QStringLiteral("address")).toString())
                 .arg(station.value(QStringLiteral("price_per_kwh")).toDouble(), 0, 'f', 2)
-                .arg(availability),
+                .arg(availability)
+                .arg(ratingText),
             listPage_);
         card->setProperty("uiClass", "stationCard");
         card->setProperty("available", idle > 0);
         card->setCursor(Qt::PointingHandCursor);
-        card->setMinimumHeight(96);
+        card->setMinimumHeight(108);
         connect(card, &QPushButton::clicked, this, [this, station] {
             showStationDetail(station);
         });
@@ -275,6 +368,7 @@ void StationSearchWidget::renderStations(const QJsonObject &result, bool locatio
 void StationSearchWidget::showStationDetail(const QJsonObject &station)
 {
     pages_->setCurrentWidget(detailPage_);
+    detailStationId_ = station.value(QStringLiteral("station_id")).toInteger();
     destinationName_ = station.value(QStringLiteral("station_name")).toString();
     destinationAddress_ = station.value(QStringLiteral("address")).toString();
     hasDestinationLocation_ = station.value(QStringLiteral("longitude")).isDouble()
@@ -308,9 +402,24 @@ void StationSearchWidget::renderStationDetail(const QJsonObject &result)
         destinationLatitude_ = station.value(QStringLiteral("latitude")).toDouble();
     }
     detailTitle_->setText(station.value(QStringLiteral("station_name")).toString());
-    detailMeta_->setText(QStringLiteral("%1  ·  ¥%2/度")
+    const QJsonObject rating = station.value(QStringLiteral("rating")).toObject();
+    QString ratingText;
+    if (rating.value(QStringLiteral("count")).toInt() > 0) {
+        ratingText = QStringLiteral("  ·  ★ %1 %2（%3 条评论）")
+            .arg(rating.value(QStringLiteral("avg")).toDouble(), 0, 'f', 1)
+            .arg(rating.value(QStringLiteral("tier")).toString())
+            .arg(rating.value(QStringLiteral("count")).toInt());
+    } else {
+        ratingText = QStringLiteral("  ·  暂无评分");
+    }
+    detailMeta_->setText(QStringLiteral("%1  ·  ¥%2/度%3")
         .arg(station.value(QStringLiteral("address")).toString())
-        .arg(station.value(QStringLiteral("price_per_kwh")).toDouble(), 0, 'f', 2));
+        .arg(station.value(QStringLiteral("price_per_kwh")).toDouble(), 0, 'f', 2)
+        .arg(ratingText));
+    commentsButton_->setText(
+        rating.value(QStringLiteral("count")).toInt() > 0
+            ? QStringLiteral("查看评论（%1）").arg(rating.value(QStringLiteral("count")).toInt())
+            : QStringLiteral("查看评论"));
 
     const QJsonArray piles = result.value(QStringLiteral("piles")).toArray();
     QJsonArray idlePiles;
@@ -371,4 +480,147 @@ void StationSearchWidget::setBusy(bool busy, const QString &message)
     if (!message.isEmpty()) {
         statusLabel_->setText(message);
     }
+}
+
+void StationSearchWidget::showComments(qint64 stationId)
+{
+    commentsStationId_ = stationId;
+    commentsTitle_->setText(destinationName_);
+    commentsSummary_->setText(QStringLiteral("正在读取评论…"));
+    pages_->setCurrentWidget(commentsPage_);
+    loadComments();
+}
+
+void StationSearchWidget::loadComments()
+{
+    api_->listComments(commentsStationId_, this,
+        [this](bool success, const QJsonObject &result, const QString &message) {
+        if (!success) {
+            commentsSummary_->setText(
+                message.isEmpty() ? QStringLiteral("评论读取失败") : message);
+            return;
+        }
+        renderComments(result);
+    });
+}
+
+void StationSearchWidget::renderComments(const QJsonObject &result)
+{
+    while (commentsListLayout_->count() > 1) {
+        QLayoutItem *item = commentsListLayout_->takeAt(0);
+        delete item->widget();
+        delete item;
+    }
+    const QJsonObject summary = result.value(QStringLiteral("summary")).toObject();
+    if (summary.value(QStringLiteral("count")).toInt() > 0) {
+        commentsSummary_->setText(QStringLiteral("平均 %1 分 · %2 · 共 %3 条评论")
+            .arg(summary.value(QStringLiteral("avg")).toDouble(), 0, 'f', 1)
+            .arg(summary.value(QStringLiteral("tier")).toString())
+            .arg(summary.value(QStringLiteral("count")).toInt()));
+    } else {
+        commentsSummary_->setText(QStringLiteral("暂无评论，来抢沙发吧"));
+    }
+
+    // Preserve the draft while re-rendering (e.g. after a like toggle).
+    const QString draftText = commentInput_->toPlainText();
+    const int draftStars = starRating_;
+    bool mineLoaded = false;
+    const QJsonArray comments = result.value(QStringLiteral("comments")).toArray();
+    int index = 0;
+    for (const QJsonValue &value : comments) {
+        const QJsonObject comment = value.toObject();
+        const bool isMine = comment.value(QStringLiteral("is_mine")).toBool();
+        if (isMine && !mineLoaded) {
+            mineLoaded = true;
+            commentInput_->setPlainText(comment.value(QStringLiteral("content")).toString());
+            setStarRating(comment.value(QStringLiteral("rating")).toInt());
+            publishCommentButton_->setText(QStringLiteral("修改我的评论"));
+        }
+        const int rating = comment.value(QStringLiteral("rating")).toInt();
+        QString stars;
+        for (int i = 1; i <= 5; ++i) {
+            stars += i <= rating ? QStringLiteral("★") : QStringLiteral("☆");
+        }
+        auto *card = new QFrame(commentsPage_);
+        card->setProperty("uiClass", "card");
+        auto *cardLayout = new QVBoxLayout(card);
+        cardLayout->setContentsMargins(12, 8, 12, 8);
+        auto *header = new QLabel(QStringLiteral("%1  ·  %2  ·  %3%4")
+            .arg(comment.value(QStringLiteral("nickname")).toString(),
+                 stars,
+                 comment.value(QStringLiteral("created_at")).toString(),
+                 isMine ? QStringLiteral("  ·  我的评论") : QString()), card);
+        header->setProperty("uiClass", "muted");
+        cardLayout->addWidget(header);
+        auto *content = new QLabel(comment.value(QStringLiteral("content")).toString(), card);
+        content->setWordWrap(true);
+        cardLayout->addWidget(content);
+        auto *footerRow = new QHBoxLayout;
+        footerRow->addStretch();
+        const bool liked = comment.value(QStringLiteral("liked_by_me")).toBool();
+        auto *likeButton = new QPushButton(QStringLiteral("%1 %2")
+            .arg(liked ? QStringLiteral("已赞") : QStringLiteral("赞"))
+            .arg(comment.value(QStringLiteral("like_count")).toInt()), card);
+        likeButton->setProperty("uiClass", liked ? "primary" : "secondary");
+        const qint64 commentId = comment.value(QStringLiteral("comment_id")).toInteger();
+        connect(likeButton, &QPushButton::clicked, this, [this, commentId] {
+            onToggleLike(commentId);
+        });
+        footerRow->addWidget(likeButton);
+        cardLayout->addLayout(footerRow);
+        commentsListLayout_->insertWidget(index++, card);
+    }
+    if (!mineLoaded) {
+        commentInput_->setPlainText(draftText);
+        setStarRating(draftStars);
+        publishCommentButton_->setText(QStringLiteral("发表评论"));
+    }
+}
+
+void StationSearchWidget::publishComment()
+{
+    const QString content = commentInput_->toPlainText().trimmed();
+    if (content.isEmpty()) {
+        QMessageBox::information(this, QStringLiteral("提示"),
+                                 QStringLiteral("请填写评论内容"));
+        return;
+    }
+    publishCommentButton_->setEnabled(false);
+    api_->postComment(commentsStationId_, content, starRating_, this,
+        [this](bool success, const QJsonObject &result, const QString &message) {
+        publishCommentButton_->setEnabled(true);
+        if (!success) {
+            QMessageBox::warning(this, QStringLiteral("发表失败"), message);
+            return;
+        }
+        QMessageBox::information(this, QStringLiteral("成功"),
+            result.value(QStringLiteral("updated")).toBool()
+                ? QStringLiteral("评论已更新")
+                : QStringLiteral("评论已发表"));
+        loadComments();
+    });
+}
+
+void StationSearchWidget::onToggleLike(qint64 commentId)
+{
+    api_->toggleCommentLike(commentId, this,
+        [this](bool success, const QJsonObject &result, const QString &message) {
+        if (!success) {
+            QMessageBox::warning(this, QStringLiteral("操作失败"), message);
+            return;
+        }
+        loadComments();
+    });
+}
+
+void StationSearchWidget::setStarRating(int rating)
+{
+    starRating_ = rating;
+    for (int i = 0; i < starButtons_.size(); ++i) {
+        starButtons_.at(i)->setText(
+            i < rating ? QStringLiteral("★") : QStringLiteral("☆"));
+    }
+    starValueLabel_->setText(rating > 0
+        ? QStringLiteral("%1 星（%2 分）").arg(rating).arg(rating * 2)
+        : QStringLiteral("未打星（0 分）"));
 }

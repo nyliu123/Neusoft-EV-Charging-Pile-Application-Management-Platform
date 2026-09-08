@@ -41,6 +41,12 @@ public:
     bool startCharge(qint64 orderId, QObject *context, Callback callback);
     bool endCharge(qint64 orderId, QObject *context, Callback callback);
     bool cancelCharge(qint64 orderId, QObject *context, Callback callback);
+    // Station comments (StationRequest=0x20: list_comments / post_comment /
+    // toggle_like). Station list and detail responses carry a rating summary.
+    bool listComments(qint64 stationId, QObject *context, Callback callback);
+    bool postComment(qint64 stationId, const QString &content, int rating,
+                     QObject *context, Callback callback);
+    bool toggleCommentLike(qint64 commentId, QObject *context, Callback callback);
 
 signals:
     void sessionExpired(const QString &message);
