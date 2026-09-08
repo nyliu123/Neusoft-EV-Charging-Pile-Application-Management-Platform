@@ -57,10 +57,15 @@ Result<QSqlDatabase> DatabaseManager::openForCurrentThread() const
     }
 
     QSqlQuery query(database);
+    // WAL needs mmap-coherent shared memory, which VMware shared folders
+    // (hgfs) do not provide: a running server keeps a stale read snapshot
+    // and never sees writes from other processes (e.g. seed scripts).
+    // DELETE journal mode keeps per-query read visibility correct there.
+    // The switch also checkpoints and converts databases already flagged WAL.
     const QStringList pragmas {
         QStringLiteral("PRAGMA foreign_keys = ON"),
-        QStringLiteral("PRAGMA journal_mode = WAL"),
-        QStringLiteral("PRAGMA busy_timeout = %1").arg(busyTimeoutMs_)
+        QStringLiteral("PRAGMA busy_timeout = %1").arg(busyTimeoutMs_),
+        QStringLiteral("PRAGMA journal_mode = DELETE")
     };
     for (const QString &statement : pragmas) {
         if (!query.exec(statement)) {
