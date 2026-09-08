@@ -232,6 +232,13 @@ UML-025~032 充电业务闭环复用一对请求/响应消息类型，`data` 统
 管理端客户端 `ev::AdminApiClient::sendGeocode()` 发送该请求并按 `StationResponse=0x21`
 （信封与 AdminResponse 完全一致）解析；地理编码失败时表单自动解锁手动填写经纬度。
 
+## 客户端主题组件
+
+`src/client_ui/rhine_widgets.h` 统一定义 `ev::drawEnergyMark`、`ev::makeRhineBrand`、
+`ev::RhineIdentityPanel`、`ev::RhineStationCard`。这些组件只负责 Qt Widgets 视觉与布局，
+不定义消息编号、数据模型或业务状态。两端共用 `resources/styles/rhine.qss`，
+保留 `:/styles/client.qss` 资源别名。使用说明和界面测试见 `rhine-ui.md`。
+
 ## 共享测试数据
 
 `data/ev_charging.sqlite3` 是全组共享并随 Git 提交的演示数据库，包含 26 个站点、

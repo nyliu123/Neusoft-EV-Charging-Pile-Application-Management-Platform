@@ -4,6 +4,6 @@
     </qresource>
     <qresource prefix="/styles">
         <!-- Shared by every page in the user client, including station search. -->
-        <file alias="client.qss">../../resources/styles/client.qss</file>
+        <file alias="client.qss">../../resources/styles/rhine.qss</file>
     </qresource>
 </RCC>

@@ -1,6 +1,7 @@
 #include "station_search_widget.h"
 
 #include "user_api_client.h"
+#include "client_ui/rhine_widgets.h"
 #include "client_ui/animated_combo_box.h"
 
 #include <QButtonGroup>
@@ -56,6 +57,9 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
 
     listPage_ = new QWidget(pages_);
     auto *listPageLayout = new QVBoxLayout(listPage_);
+    listPageLayout->setContentsMargins(0, 0, 0, 0);
+    listPageLayout->setSpacing(10);
+    listPageLayout->addWidget(new ev::RhineIdentityPanel(true, listPage_));
     auto *title = new QLabel(QStringLiteral("附近充电站"), listPage_);
     title->setProperty("uiClass", "pageTitle");
     listPageLayout->addWidget(title);
@@ -63,6 +67,7 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
         QStringLiteral("选择站点所在省份或输入地址。距离为直线距离，仅供找桩参考。位置数据 © OpenStreetMap contributors。"),
         listPage_);
     description->setProperty("uiClass", "muted");
+    description->setWordWrap(true);
     listPageLayout->addWidget(description);
 
     auto *searchRow = new QHBoxLayout;
@@ -140,6 +145,7 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
     detailLayout->addLayout(navigationModes);
 
     navigationPreview_ = new QLabel(detailPage_);
+    navigationPreview_->setProperty("uiClass", "navigationPreview");
     navigationPreview_->setAlignment(Qt::AlignCenter);
     navigationPreview_->setWordWrap(true);
     navigationPreview_->setMinimumHeight(82);
@@ -288,17 +294,11 @@ void StationSearchWidget::renderStations(const QJsonObject &result, bool locatio
                   station.value(QStringLiteral("total_piles")).toInt())
             : QStringLiteral("暂无空闲 · 总共 %1").arg(
                   station.value(QStringLiteral("total_piles")).toInt());
-        auto *card = new QPushButton(
-            QStringLiteral("%1    ·    %2\n%3\n¥%4/度    %5")
-                .arg(station.value(QStringLiteral("station_name")).toString(), distanceText,
-                     station.value(QStringLiteral("address")).toString())
-                .arg(station.value(QStringLiteral("price_per_kwh")).toDouble(), 0, 'f', 2)
-                .arg(availability),
-            listPage_);
-        card->setProperty("uiClass", "stationCard");
-        card->setProperty("available", idle > 0);
-        card->setCursor(Qt::PointingHandCursor);
-        card->setMinimumHeight(96);
+        auto *card = new ev::RhineStationCard(index + 1,
+            station.value(QStringLiteral("station_name")).toString(),
+            station.value(QStringLiteral("address")).toString(), distanceText,
+            QStringLiteral("¥ %1 / 度").arg(station.value(QStringLiteral("price_per_kwh")).toDouble(), 0, 'f', 2),
+            availability, idle > 0, listPage_);
         connect(card, &QPushButton::clicked, this, [this, station] {
             showStationDetail(station);
         });
@@ -383,8 +383,7 @@ void StationSearchWidget::updateNavigationPreview()
     if (!canNavigate) {
         navigationPreview_->setText(QStringLiteral(
             "导航起点不可用，请返回列表并通过地址定位后重试。"));
-        navigationPreview_->setStyleSheet(QStringLiteral(
-            "background:#f5f7fa; border:1px dashed #909399; border-radius:8px; color:#606266;"));
+
         navigationDistance_->setText(QStringLiteral("距离：-- km"));
         navigationDuration_->setText(QStringLiteral("预计耗时：--"));
         return;
@@ -400,9 +399,7 @@ void StationSearchWidget::updateNavigationPreview()
     navigationDuration_->setText(QStringLiteral("预计耗时：%1 分钟").arg(durationMinutes));
     navigationPreview_->setText(QStringLiteral("起点：当前搜索位置\n终点：%1\n路线模式：%2")
         .arg(destinationName_, walking ? QStringLiteral("步行") : QStringLiteral("驾车")));
-    navigationPreview_->setStyleSheet(walking
-        ? QStringLiteral("background:#fff3e0; border:1px dashed #ff9800; border-radius:8px; color:#e65100;")
-        : QStringLiteral("background:#e3f2fd; border:1px dashed #3f51b5; border-radius:8px; color:#303f9f;"));
+
     startNavigationButton_->setText(walking
         ? QStringLiteral("开始步行导航") : QStringLiteral("开始驾车导航"));
 }

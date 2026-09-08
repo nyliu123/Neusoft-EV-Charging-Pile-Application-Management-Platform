@@ -1,4 +1,5 @@
 #include "user_home_widget.h"
+#include "client_ui/rhine_widgets.h"
 
 #include "charge_flow_widget.h"
 #include "user_info_widget.h"
@@ -18,18 +19,28 @@ UserHomeWidget::UserHomeWidget(ev::UserApiClient *api, QWidget *parent)
     : QWidget(parent)
 {
     auto *layout = new QVBoxLayout(this);
+    layout->setContentsMargins(22, 14, 22, 18);
+    layout->setSpacing(16);
 
     successMessage_ = new QLabel(this);
     successMessage_->setProperty("uiClass", "successBanner");
     successMessage_->hide();
     layout->addWidget(successMessage_);
 
-    auto *toolbar = new QHBoxLayout;
+    auto *header = new QFrame(this);
+    header->setObjectName(QStringLiteral("terminalHeader"));
+    auto *toolbar = new QHBoxLayout(header);
+    toolbar->setContentsMargins(18, 10, 18, 12);
+    toolbar->addWidget(ev::makeRhineBrand(header));
     toolbar->addStretch();
+    auto *terminalLabel = new QLabel(QStringLiteral("用户工作台  /  PERSONAL TERMINAL"), header);
+    terminalLabel->setProperty("uiClass", "eyebrow");
+    toolbar->addWidget(terminalLabel);
+    toolbar->addSpacing(16);
     logoutButton_ = new QPushButton(QStringLiteral("退出登录"), this);
     logoutButton_->setProperty("uiClass", "danger");
     toolbar->addWidget(logoutButton_);
-    layout->addLayout(toolbar);
+    layout->addWidget(header);
     connect(logoutButton_, &QPushButton::clicked, this, [this] {
         const auto answer = QMessageBox::question(this, QStringLiteral("退出登录"),
             QStringLiteral("确定退出当前用户账号？"),

@@ -11,6 +11,7 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QStackedWidget>
+#include <QStyle>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -48,6 +49,18 @@ ChargeFlowWidget::ChargeFlowWidget(ev::UserApiClient *api, QWidget *parent)
 {
     auto *root = new QVBoxLayout(this);
     root->setContentsMargins(24, 20, 24, 20);
+    root->setSpacing(20);
+    auto *steps = new QHBoxLayout;
+    steps->setSpacing(4);
+    const QStringList captions {QStringLiteral("01  确认设备"), QStringLiteral("02  预约就绪"),
+        QStringLiteral("03  正在充电"), QStringLiteral("04  订单结算")};
+    for (const QString &caption : captions) {
+        auto *label = new QLabel(caption, this);
+        label->setProperty("uiClass", "flowStep");
+        stageLabels_.append(label);
+        steps->addWidget(label, 1);
+    }
+    root->addLayout(steps);
     pages_ = new QStackedWidget(this);
     root->addWidget(pages_);
 
@@ -66,13 +79,36 @@ ChargeFlowWidget::ChargeFlowWidget(ev::UserApiClient *api, QWidget *parent)
     selectPage_ = new QWidget(pages_);
     auto *selectLayout = new QVBoxLayout(selectPage_);
     selectLayout->addWidget(makeTitle(QStringLiteral("确认充电桩"), selectPage_));
-    selectInfo_ = new QLabel(selectPage_);
+    selectLayout->setSpacing(18);
+    auto *selectionCard = new QFrame(selectPage_);
+    selectionCard->setProperty("uiClass", "card");
+    auto *cardLayout = new QVBoxLayout(selectionCard);
+    cardLayout->setContentsMargins(26, 26, 26, 24);
+    cardLayout->setSpacing(22);
+    auto *summary = new QHBoxLayout;
+    summary->setSpacing(28);
+    auto *glyph = new QLabel(QStringLiteral("EV\nCHARGE"), selectionCard);
+    glyph->setProperty("uiClass", "chargeGlyph");
+    glyph->setAlignment(Qt::AlignCenter);
+    summary->addWidget(glyph);
+    auto *information = new QVBoxLayout;
+    information->setSpacing(14);
+    auto *caption = new QLabel(QStringLiteral("SELECTED DEVICE / 已选择的充电设备"), selectionCard);
+    caption->setProperty("uiClass", "eyebrow");
+    information->addWidget(caption);
+    selectInfo_ = new QLabel(selectionCard);
+    selectInfo_->setProperty("uiClass", "chargeInfo");
     selectInfo_->setWordWrap(true);
-    selectLayout->addWidget(selectInfo_);
-    selectPrice_ = new QLabel(selectPage_);
-    selectPrice_->setProperty("uiClass", "muted");
-    selectLayout->addWidget(selectPrice_);
-    selectLayout->addStretch();
+    information->addWidget(selectInfo_);
+    selectPrice_ = new QLabel(selectionCard);
+    selectPrice_->setProperty("uiClass", "chargePrice");
+    information->addWidget(selectPrice_);
+    auto *instruction = new QLabel(QStringLiteral("核对站点与设备，预约成功后可开始充电。"), selectionCard);
+    instruction->setProperty("uiClass", "muted");
+    instruction->setWordWrap(true);
+    information->addWidget(instruction);
+    summary->addLayout(information, 1);
+    cardLayout->addLayout(summary);
     auto *selectButtons = new QHBoxLayout;
     reselectButton_ = new QPushButton(QStringLiteral("返回重新选桩"), selectPage_);
     reselectButton_->setProperty("uiClass", "text");
@@ -81,7 +117,9 @@ ChargeFlowWidget::ChargeFlowWidget(ev::UserApiClient *api, QWidget *parent)
     reserveButton_ = new QPushButton(QStringLiteral("预约充电"), selectPage_);
     reserveButton_->setProperty("uiClass", "primary");
     selectButtons->addWidget(reserveButton_);
-    selectLayout->addLayout(selectButtons);
+    cardLayout->addLayout(selectButtons);
+    selectLayout->addWidget(selectionCard);
+    selectLayout->addStretch();
     pages_->addWidget(selectPage_);
 
     // ── Progress page: reserved and charging share one page ─────────────
@@ -147,6 +185,7 @@ ChargeFlowWidget::ChargeFlowWidget(ev::UserApiClient *api, QWidget *parent)
     settleTitle_->setProperty("uiClass", "pageTitle");
     settleLayout->addWidget(settleTitle_);
     settleDetail_ = new QLabel(settlePage_);
+    settleDetail_->setProperty("uiClass", "stationMeta");
     settleDetail_->setWordWrap(true);
     settleLayout->addWidget(settleDetail_);
     settleLayout->addStretch();
@@ -237,6 +276,13 @@ void ChargeFlowWidget::reset()
 void ChargeFlowWidget::setStage(Stage stage)
 {
     stage_ = stage;
+    const int currentStep = stage == Stage::Reserved ? 1 : stage == Stage::Charging ? 2
+        : (stage == Stage::Settled || stage == Stage::PendingSettlement) ? 3 : 0;
+    for (int i = 0; i < stageLabels_.size(); ++i) {
+        stageLabels_[i]->setProperty("active", i == currentStep);
+        stageLabels_[i]->style()->unpolish(stageLabels_[i]);
+        stageLabels_[i]->style()->polish(stageLabels_[i]);
+    }
     if (stage_ != Stage::Charging) {
         elapsedTimer_->stop();
     }

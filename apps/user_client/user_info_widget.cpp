@@ -128,7 +128,7 @@ UserInfoWidget::UserInfoWidget(ev::UserApiClient *api, QWidget *parent)
     auto *operationLayout = new QHBoxLayout(operationCard);
     operationLayout->setContentsMargins(26, 18, 26, 18);
     auto *operationHint = new QLabel(
-        QStringLiteral("首屏使用登录缓存；如需获取服务端最新数据，请点击刷新。"), operationCard);
+        QStringLiteral("在这里管理个人资料与充电钱包。完成充值后，即可返回充电页面继续操作。"), operationCard);
     operationHint->setWordWrap(true);
     operationHint->setProperty("uiClass", "muted");
     operationLayout->addWidget(operationHint);

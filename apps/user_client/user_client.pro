@@ -8,6 +8,7 @@ include($$PLATFORM_ROOT/config/common.pri)
 
 INCLUDEPATH += $$PLATFORM_ROOT/src
 HEADERS += \
+    $$PLATFORM_ROOT/src/client_ui/rhine_widgets.h \
     charge_flow_widget.h \
     order_list_widget.h \
     phone_login_widget.h \

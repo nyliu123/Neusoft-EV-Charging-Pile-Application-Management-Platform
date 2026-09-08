@@ -16,9 +16,7 @@ class PlatformClient;
 
 // Admin login dialog (UML-034).
 //
-// UI design inspired by professional admin consoles (Ant Design Pro,
-// Element Admin, Alibaba Cloud console): dark gradient background with a
-// centred white card, styled inputs and a primary-coloured login button.
+// Rhine-inspired split login surface, shared with the user terminal.
 //
 // Implements the full validation flow:
 //   1. Non-empty check for username and password
@@ -35,9 +33,6 @@ public:
     // Returns the session after successful login.
     // Call exec() first, then session() if result is Accepted.
     AdminSession session() const { return session_; }
-
-protected:
-    void paintEvent(QPaintEvent *event) override;
 
 private slots:
     void onLoginClicked();

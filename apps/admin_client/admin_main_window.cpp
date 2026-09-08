@@ -1,4 +1,5 @@
 #include "admin_main_window.h"
+#include "client_ui/rhine_widgets.h"
 
 #include "admin_dashboard_page.h"
 #include "admin_login_dialog.h"
@@ -35,23 +36,39 @@ AdminMainWindow::AdminMainWindow(PlatformClient *client, const AdminSession &ses
 void AdminMainWindow::setupUi()
 {
     setWindowTitle(QStringLiteral("汽车充电管理平台 管理端"));
-    resize(1200, 760);
+    resize(1280, 800);
+    setMinimumSize(1100, 680);
 
     auto *central = new QWidget(this);
     auto *bodyLayout = new QHBoxLayout(central);
     bodyLayout->setContentsMargins(0, 0, 0, 0);
     bodyLayout->setSpacing(0);
 
-    // Left navigation.
-    nav_ = new QListWidget(central);
+    // Persistent laboratory-style navigation rail.
+    auto *sidebar = new QFrame(central);
+    sidebar->setObjectName(QStringLiteral("terminalSidebar"));
+    sidebar->setFixedWidth(254);
+    auto *sidebarLayout = new QVBoxLayout(sidebar);
+    sidebarLayout->setContentsMargins(14, 24, 14, 10);
+    sidebarLayout->setSpacing(20);
+    sidebarLayout->addWidget(makeRhineBrand(sidebar, true));
+    auto *workspaceLabel = new QLabel(QStringLiteral("运营工作空间 / OPERATIONS"), sidebar);
+    workspaceLabel->setProperty("uiClass", "eyebrow");
+    sidebarLayout->addWidget(workspaceLabel);
+    nav_ = new QListWidget(sidebar);
     nav_->setObjectName(QStringLiteral("sidebarNavigation"));
-    nav_->setFixedWidth(190);
-    nav_->addItem(QStringLiteral("经营看板"));
-    nav_->addItem(QStringLiteral("充电桩管理"));
-    nav_->addItem(QStringLiteral("充电站管理"));
-    nav_->addItem(QStringLiteral("用户管理"));
-    nav_->addItem(QStringLiteral("订单管理"));
-    bodyLayout->addWidget(nav_);
+    nav_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    nav_->addItem(QStringLiteral("01    经营看板"));
+    nav_->addItem(QStringLiteral("02    充电桩管理"));
+    nav_->addItem(QStringLiteral("03    充电站管理"));
+    nav_->addItem(QStringLiteral("04    用户管理"));
+    nav_->addItem(QStringLiteral("05    订单管理"));
+    sidebarLayout->addWidget(nav_, 1);
+    auto *railFooter = new QLabel(QStringLiteral("ENERGY FOR TOMORROW.\n电动汽车充电桩应用管理平台"), sidebar);
+    railFooter->setObjectName(QStringLiteral("terminalSidebarFooter"));
+    railFooter->setWordWrap(true);
+    sidebarLayout->addWidget(railFooter);
+    bodyLayout->addWidget(sidebar);
 
     // Right side: header + page stack.
     auto *rightLayout = new QVBoxLayout();
@@ -59,8 +76,8 @@ void AdminMainWindow::setupUi()
     rightLayout->setSpacing(12);
 
     auto *headerLayout = new QHBoxLayout();
-    auto *headerTitle = new QLabel(QStringLiteral("运营管理端"), central);
-    headerTitle->setProperty("uiClass", "sectionTitle");
+    auto *headerTitle = new QLabel(QStringLiteral("运营控制中心  /  CONTROL CENTER"), central);
+    headerTitle->setProperty("uiClass", "eyebrow");
     headerLayout->addWidget(headerTitle);
     headerLayout->addStretch();
 
@@ -110,7 +127,8 @@ void AdminMainWindow::setupUi()
     nav_->setCurrentRow(0);
 
     // Status bar.
-    connectionLabel_ = new QLabel(QStringLiteral("连接状态：连接中"), this);
+    connectionLabel_ = new QLabel(client_->state() == PlatformClient::State::Ready
+        ? QStringLiteral("连接状态：服务端可用") : QStringLiteral("连接状态：尚未就绪"), this);
     statusBar()->addPermanentWidget(connectionLabel_);
     userLabel_ = new QLabel(this);
     statusBar()->addPermanentWidget(userLabel_);

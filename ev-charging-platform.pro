@@ -15,6 +15,9 @@ OTHER_FILES += \
     data/ev_charging.sqlite3 \
     docs/02概要设计说明书第5组（最终版）.docx \
     docs/development/architecture.md \
+    docs/development/rhine-ui.md \
+    tests/theme_ui/theme_ui.pro \
+    tests/theme_ui/tst_theme_ui.cpp \
     docs/development/shared-identifiers.md \
     scripts/smoke-test.sh \
     analysis/README.md \
