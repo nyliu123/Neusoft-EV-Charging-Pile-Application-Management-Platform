@@ -261,6 +261,20 @@ start_time, end_time, duration_hours`。按 `reserve_time DESC, order_id DESC` �
 客户端每次进入“我的订单”重新查询；15 秒未响应可重试，离开页面或会话失效会清空卡片并丢弃旧响应。
 待结算订单仅提示前往充电流程处理，不修改状态或扣款。
 
+## 内嵌地图导航（UML-023～024）
+
+- `NavigationMapDialog`：`apps/user_client/navigation_map_dialog.h`，由 Qt 请求 Valhalla 路线，
+  在独立窗口的 `QWebEngineView` 中绘制精简 OpenStreetMap 瓦片、路线和起终点。
+- `NavigationMapDialog::directionsUrl(...)`：统一校验坐标并生成 `auto`、`pedestrian`
+  或 `bicycle` 路线请求。
+
+站点详情的导航按钮只创建应用内地图窗口，不调用系统浏览器。页面不加载 OpenStreetMap 网站菜单，只显示地图、
+纵向路线详情、起终点地址和版权署名。地图支持左键拖拽和滚轮缩放，右下角比例尺、`+/-`、
+缩放百分比与重置按钮同步，放大百分比不设固定上限；比例尺达到最小值 5 米时停止继续放大。
+切换驾车、步行或骑行方式会取消旧请求并丢弃迟到结果；
+长距离步行和骑行会自动分段请求后合并。20 秒超时、网络错误、无路线或数据不完整时显示明确错误。
+地图窗口关闭或用户会话失效时停止显示，且不修改业务数据。
+
 验证：完整构建后运行 `bin/ev_unit_tests`、
 `QT_QPA_PLATFORM=offscreen bin/ev_order_ui_tests`（含15秒超时重试检查）和
 `python3 tests/integration/order_query.py <构建目录>`；后者使用临时数据库与独立 TCP 端口。

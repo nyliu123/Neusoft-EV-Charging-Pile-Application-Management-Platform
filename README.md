@@ -7,9 +7,21 @@
 ## 环境要求
 
 - Ubuntu 22.04 或更高版本
-- Qt 6.2 或更高版本（Core、Gui、Widgets、Network、Sql、Test）
+- Qt 6.2 或更高版本（Core、Gui、Widgets、Network、Sql、Test、WebEngineWidgets）
 - qmake6
 - 支持 C++17 的编译器
+
+地图导航由 Qt 请求路线，并通过 `QWebEngineView` 在应用内绘制精简 OpenStreetMap，
+只显示路线、起终点和必要摘要，支持驾车/步行/骑行切换、左键拖拽、
+滚轮及按钮缩放、比例尺、初始视图重置和超时/失败提示。超出公共路线服务
+单次限制的步行或骑行路线会自动分段规划并合并显示。
+Ubuntu 系统 Qt 请先安装 WebEngine 开发组件：
+
+```bash
+sudo apt install qt6-webengine-dev libqt6webenginecore6-bin
+```
+
+使用 Qt 官方安装器的开发者需为当前 Kit 安装匹配版本的 Qt WebEngine。安装后重新运行 qmake。
 
 ## 构建
 

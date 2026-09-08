@@ -1,4 +1,4 @@
-QT += core gui widgets network
+QT += core gui widgets network webenginewidgets
 
 TEMPLATE = app
 TARGET = ev_user_client
@@ -8,6 +8,7 @@ include($$PLATFORM_ROOT/config/common.pri)
 
 INCLUDEPATH += $$PLATFORM_ROOT/src
 HEADERS += \
+    navigation_map_dialog.h \
     charge_flow_widget.h \
     order_list_widget.h \
     phone_login_widget.h \
@@ -19,6 +20,7 @@ HEADERS += \
     $$PLATFORM_ROOT/src/client_ui/animated_combo_box.h \
     $$PLATFORM_ROOT/src/client_ui/client_style.h
 SOURCES += \
+    navigation_map_dialog.cpp \
     order_list_widget.cpp \
     main.cpp \
     charge_flow_widget.cpp \

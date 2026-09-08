@@ -1,4 +1,4 @@
-QT += core gui widgets network testlib
+QT += core gui widgets network webenginewidgets testlib
 TEMPLATE = app
 CONFIG += testcase
 TARGET = ev_order_ui_tests
@@ -25,3 +25,6 @@ HEADERS += $$PLATFORM_ROOT/apps/user_client/user_home_widget.h \
     $$PLATFORM_ROOT/apps/user_client/user_info_widget.h \
     $$PLATFORM_ROOT/src/client_ui/animated_combo_box.h
 RESOURCES += $$PLATFORM_ROOT/apps/user_client/user_client.qrc
+
+SOURCES += $$PLATFORM_ROOT/apps/user_client/navigation_map_dialog.cpp
+HEADERS += $$PLATFORM_ROOT/apps/user_client/navigation_map_dialog.h
