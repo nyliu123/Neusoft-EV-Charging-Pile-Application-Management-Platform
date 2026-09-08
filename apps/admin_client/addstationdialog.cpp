@@ -3,6 +3,13 @@
 #include <QTimer>
 #include <QMessageBox>
 #include <cmath>
+#include "screendataservice.h"
+#include <QJsonObject>
+#include <QJsonDocument>
+#include <QDialog>
+#include <QVBoxLayout>
+#include <QTextEdit>
+#include <QPushButton>
 
 AddStationDialog::AddStationDialog(QWidget *parent)
     : QDialog(parent), ui(new Ui::AddStationDialog)
@@ -77,4 +84,32 @@ void AddStationDialog::on_confirmButton_clicked()
         // ==========================================
 
     emit stationSubmitted(name, address, longitude, latitude, price);
+}
+
+// 确保它在最外层，不属于任何其他函数
+void AddStationDialog::on_openBigScreenBtn_clicked()
+{
+    ScreenDataService service;
+    QJsonObject bigScreenData = service.generateScreenData();
+
+    QJsonDocument doc(bigScreenData);
+    QString jsonString = doc.toJson(QJsonDocument::Indented);
+
+    QDialog* previewDialog = new QDialog(this);
+    previewDialog->setWindowTitle("大屏数据与预警总控面板");
+    previewDialog->resize(600, 700);
+
+    QVBoxLayout* layout = new QVBoxLayout(previewDialog);
+    QTextEdit* textEdit = new QTextEdit(previewDialog);
+    textEdit->setReadOnly(true);
+    textEdit->setStyleSheet("background-color: #1e1e1e; color: #5ce6cd; font-family: Consolas; font-size: 14px;");
+    textEdit->setText(jsonString);
+
+    QPushButton* closeBtn = new QPushButton("关闭面板", previewDialog);
+    connect(closeBtn, &QPushButton::clicked, previewDialog, &QDialog::accept);
+
+    layout->addWidget(textEdit);
+    layout->addWidget(closeBtn);
+
+    previewDialog->exec();
 }

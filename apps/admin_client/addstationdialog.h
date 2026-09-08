@@ -25,6 +25,9 @@ private:
 
 private slots:
     void on_confirmButton_clicked();
+
+private slots:
+    void on_openBigScreenBtn_clicked();
 };
 
 #endif // ADDSTATIONDIALOG_H
