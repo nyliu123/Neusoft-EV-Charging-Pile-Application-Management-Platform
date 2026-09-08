@@ -4,6 +4,7 @@
 
 #include <QSqlDatabase>
 #include <QString>
+#include <functional>
 
 namespace ev {
 
@@ -13,6 +14,17 @@ public:
 
     Result<QSqlDatabase> openForCurrentThread() const;
     Result<int> migrate(QSqlDatabase &database) const;
+
+    // ── UML-053: transaction management ─────────────────────────────────
+    // Auto-transaction wrapper: calls `fn`, commits on success,
+    // rolls back on exception or false return.
+    // Usage:
+    //   auto result = db.executeTransaction([&]() {
+    //       // multi-table writes here...
+    //       return true;
+    //   });
+    Result<bool> executeTransaction(QSqlDatabase &database,
+                                     const std::function<bool()> &fn) const;
 
 private:
     QString connectionName() const;
