@@ -7,6 +7,8 @@ class QPushButton;
 class ChargeFlowWidget;
 class StationSearchWidget;
 class UserInfoWidget;
+class OrderListWidget;
+class QTabWidget;
 
 namespace ev {
 class UserApiClient;
@@ -27,6 +29,8 @@ signals:
 private:
     QLabel *successMessage_ = nullptr;
     ChargeFlowWidget *chargeFlowWidget_ = nullptr;
+    QTabWidget *tabs_ = nullptr;
+    OrderListWidget *orderListWidget_ = nullptr;
     StationSearchWidget *stationSearchWidget_ = nullptr;
     UserInfoWidget *userInfoWidget_ = nullptr;
     QPushButton *logoutButton_ = nullptr;

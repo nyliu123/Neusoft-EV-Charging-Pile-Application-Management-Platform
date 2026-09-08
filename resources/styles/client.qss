@@ -17,6 +17,20 @@ QLabel {
     background: transparent;
 }
 
+QLabel[uiClass="orderStatus"] {
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-weight: 600;
+    background-color: #eef0f2;
+    color: #555b63;
+}
+QLabel[orderStatus="reserved"] { background-color: #fff5c2; color: #755800; }
+QLabel[orderStatus="charging"] { background-color: #e3efff; color: #185abc; }
+QLabel[orderStatus="pending_settlement"] { background-color: #ffead5; color: #a54500; }
+QLabel[orderStatus="settled"] { background-color: #def3e5; color: #176536; }
+QLabel[orderStatus="cancelled"] { background-color: #eef0f2; color: #555b63; }
+QLabel[uiClass="orderSettlementHint"] { color: #a54500; font-weight: 600; }
+
 QLabel#appTitle {
     color: #1f1f1f;
     font-size: 28px;

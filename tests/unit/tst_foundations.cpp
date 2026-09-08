@@ -9,6 +9,7 @@
 #include "services/fee_calculator.h"
 #include "services/session_manager.h"
 #include "services/station_service.h"
+#include "services/order_service.h"
 #include "services/user_service.h"
 
 #include <QJsonObject>
@@ -41,6 +42,7 @@ private slots:
     void automaticRegistrationCreatesDefaultsAndHandlesConflict();
     void userProfileOperationsStayConsistent();
     void stationSearchSortsAndReportsPileStats();
+    void orderQueriesArePrivateReadOnlyAndUseSnapshots();
     void sessionLifecycle();
     void stationQueriesSortByDistanceAndPreserveStatus();
     void mapAdapterValidatesInputsAndUsesTeachingFallback();
@@ -250,6 +252,70 @@ void FoundationTests::stationSearchSortsAndReportsPileStats()
     QCOMPARE(stats.value(QStringLiteral("reserved")).toInt(), 0);
     QCOMPARE(stats.value(QStringLiteral("fault")).toInt(), 1);
     QCOMPARE(stats.value(QStringLiteral("online_rate")).toDouble(), 90.0);
+}
+
+
+void FoundationTests::orderQueriesArePrivateReadOnlyAndUseSnapshots()
+{
+    QTemporaryDir directory;
+    ev::DatabaseManager manager(directory.filePath(QStringLiteral("orders.sqlite3")));
+    auto opened = manager.openForCurrentThread();
+    QVERIFY(opened.success);
+    QVERIFY(manager.migrate(opened.data).success);
+    QSqlQuery sql(opened.data);
+    QVERIFY(sql.exec(QStringLiteral("DELETE FROM orders")));
+    QVERIFY(sql.exec(QStringLiteral(
+        "INSERT INTO orders (order_id, user_id, pile_id, station_id, status, reserve_time, "
+        "start_time, end_time, charge_amount_kwh, price_per_kwh, total_fee) VALUES "
+        "(101, 1, 1, 1, 'settled', '2026-09-01 09:00:00', "
+        "'2026-09-01 09:00:00', '2026-09-01 10:30:00', 10, 2.5, 20), "
+        "(102, 1, 1, 1, 'cancelled', '2026-09-02 09:00:00', NULL, NULL, 0, 2.5, 0), "
+        "(103, 2, 1, 1, 'settled', '2026-09-03 09:00:00', NULL, NULL, 5, 2.5, 12.5), "
+        "(104, 1, 1, 1, 'reserved', '2026-09-02 09:00:00', NULL, NULL, 0, 2.5, 0)")));
+    const ev::OrderService service;
+    const auto response = service.queryOrders(opened.data, 1);
+    QVERIFY2(response.success, qPrintable(response.message));
+    const auto orders = response.data.value(QStringLiteral("orders")).toArray();
+    QCOMPARE(orders.size(), 3);
+    QCOMPARE(orders[0].toObject().value(QStringLiteral("order_id")).toInteger(), 104);
+    QCOMPARE(orders[1].toObject().value(QStringLiteral("order_id")).toInteger(), 102);
+    QCOMPARE(orders[2].toObject().value(QStringLiteral("order_id")).toInteger(), 101);
+    QCOMPARE(orders[0].toObject().value(QStringLiteral("status_text")).toString(), QStringLiteral("预约中"));
+    QCOMPARE(orders[1].toObject().value(QStringLiteral("status_text")).toString(), QStringLiteral("已取消"));
+    QVERIFY(orders[0].toObject().value(QStringLiteral("duration_hours")).isNull());
+    QVERIFY(orders[1].toObject().value(QStringLiteral("start_time")).isNull());
+    const auto settled = orders[2].toObject();
+    QCOMPARE(settled.value(QStringLiteral("status_text")).toString(), QStringLiteral("已结算"));
+    QCOMPARE(settled.value(QStringLiteral("duration_hours")).toDouble(), 1.5);
+    QCOMPARE(settled.value(QStringLiteral("price_per_kwh")).toDouble(), 2.5);
+    QCOMPARE(settled.value(QStringLiteral("total_fee")).toDouble(), 20.0);
+    QVERIFY(!settled.value(QStringLiteral("station_name")).toString().isEmpty());
+    QVERIFY(!settled.value(QStringLiteral("pile_number")).toString().isEmpty());
+    QVERIFY(service.queryOrders(opened.data, 3).data.value(QStringLiteral("orders")).toArray().isEmpty());
+    QCOMPARE(service.queryOrders(opened.data, 0).code, ev::ErrorCode::Unauthorized);
+    QCOMPARE(service.queryOrders(opened.data, 99999).code, ev::ErrorCode::Unauthorized);
+    QVERIFY(sql.exec(QStringLiteral("SELECT total_changes()")));
+    QVERIFY(sql.next());
+    const auto changes = sql.value(0).toLongLong();
+    QVERIFY(service.queryOrders(opened.data, 1).success);
+    QVERIFY(sql.exec(QStringLiteral("SELECT total_changes()")));
+    QVERIFY(sql.next());
+    QCOMPARE(sql.value(0).toLongLong(), changes);
+    QVERIFY(sql.exec(QStringLiteral("UPDATE orders SET status='charging' WHERE order_id=104")));
+    QCOMPARE(service.queryOrders(opened.data, 1).data.value(QStringLiteral("orders")).toArray()[0]
+                 .toObject().value(QStringLiteral("status_text")).toString(), QStringLiteral("充电中"));
+    QVERIFY(sql.exec(QStringLiteral("UPDATE orders SET status='pending_settlement', "
+        "start_time='2026-09-02T23:30:00Z', end_time='2026-09-03T01:00:00Z' WHERE order_id=104")));
+    const auto pending = service.queryOrders(opened.data, 1).data.value(QStringLiteral("orders")).toArray()[0].toObject();
+    QCOMPARE(pending.value(QStringLiteral("status_text")).toString(), QStringLiteral("待结算"));
+    QCOMPARE(pending.value(QStringLiteral("duration_hours")).toDouble(), 1.5);
+    QVERIFY(sql.exec(QStringLiteral("UPDATE orders SET end_time='2026-09-01 00:00:00' WHERE order_id=104")));
+    QVERIFY(service.queryOrders(opened.data, 1).data.value(QStringLiteral("orders")).toArray()[0]
+                .toObject().value(QStringLiteral("duration_hours")).isNull());
+    QVERIFY(sql.exec(QStringLiteral("UPDATE users SET status='frozen' WHERE user_id=1")));
+    QCOMPARE(service.queryOrders(opened.data, 1).code, ev::ErrorCode::AccountFrozen);
+    QVERIFY(sql.exec(QStringLiteral("DROP TABLE orders")));
+    QCOMPARE(service.queryOrders(opened.data, 2).code, ev::ErrorCode::StorageError);
 }
 
 void FoundationTests::phoneValidation_data()

@@ -238,3 +238,29 @@ UML-025~032 充电业务闭环复用一对请求/响应消息类型，`data` 统
 260 台桩（覆盖四种状态）、5 个用户（含冻结账号 15812349876）和 15 笔订单。
 用户端与管理端联调请直接使用其中的演示数据。服务端在显式指定一个不存在的
 数据库路径时，会从这个内置模板创建独立副本。
+
+## 个人订单查询（UML-033 / 需求38）
+
+- `ev::OrderRecord` / `ev::OrderRepository::findByUser`：复用 `src/data/order_repository.h` 的共享订单模型，关联查询本人订单（金额采用 `totalFeeCent`）。
+- `ev::OrderService::queryOrders(database, authenticatedUserId)`：`src/services/order_service.h`，校验账号、映射状态和计算完整起止时间的时长。
+- `ev::UserApiClient::queryOrders(context, callback)`：用户端异步查询入口。
+- `OrderListWidget`：`apps/user_client/order_list_widget.h`，订单卡片、详情、刷新和返回首页。
+
+详细设计的 `QUERY_ORDERS_REQ/RESP` 在现有 TCP 协议中映射为
+`UserRequest=0x10 / UserResponse=0x11`，请求 `data={type:"query_orders",params:{},session_id}`，
+不新增消息编号。服务端以当前连接绑定的用户会话反查身份，忽略任何客户端 `user_id`；
+管理员会话、过期会话、冻结账号均不得查询个人订单。
+
+成功结果为 `data.result.orders` 数组，每项包含 `order_id, station_name, pile_number,
+status, status_text, charge_amount_kwh, price_per_kwh, total_fee, reserve_time,
+start_time, end_time, duration_hours`。按 `reserve_time DESC, order_id DESC` 排序；
+金额、单价、电量均来自订单记录，不按站点当前价格重新计算。缺失起止时间返回 `null`；
+仅当两者有效且结束不早于开始时返回小时数，否则时长为 `null`，不按当前时间推算。
+当前订单表尚无会员优惠快照字段，查询不推算或伪造优惠明细，待会员/结算模块提供后扩展。
+
+客户端每次进入“我的订单”重新查询；15 秒未响应可重试，离开页面或会话失效会清空卡片并丢弃旧响应。
+待结算订单仅提示前往充电流程处理，不修改状态或扣款。
+
+验证：完整构建后运行 `bin/ev_unit_tests`、
+`QT_QPA_PLATFORM=offscreen bin/ev_order_ui_tests`（含15秒超时重试检查）和
+`python3 tests/integration/order_query.py <构建目录>`；后者使用临时数据库与独立 TCP 端口。

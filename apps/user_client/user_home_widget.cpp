@@ -3,6 +3,8 @@
 #include "charge_flow_widget.h"
 #include "user_info_widget.h"
 #include "station_search_widget.h"
+#include "order_list_widget.h"
+#include "user_api_client.h"
 
 #include <QLabel>
 #include <QMessageBox>
@@ -39,12 +41,26 @@ UserHomeWidget::UserHomeWidget(ev::UserApiClient *api, QWidget *parent)
         emit logoutRequested();
     });
     auto *tabs = new QTabWidget(this);
+    tabs_ = tabs;
     stationSearchWidget_ = new StationSearchWidget(api, tabs);
     chargeFlowWidget_ = new ChargeFlowWidget(api, tabs);
+    connect(api, &ev::UserApiClient::sessionExpired, chargeFlowWidget_, &ChargeFlowWidget::reset);
     userInfoWidget_ = new UserInfoWidget(api, tabs);
     tabs->addTab(stationSearchWidget_, QStringLiteral("找桩"));
     tabs->addTab(chargeFlowWidget_, QStringLiteral("充电"));
     tabs->addTab(userInfoWidget_, QStringLiteral("个人中心"));
+    orderListWidget_ = new OrderListWidget(api, tabs);
+    tabs->addTab(orderListWidget_, QStringLiteral("我的订单"));
+    connect(tabs, &QTabWidget::currentChanged, this, [this](int) {
+        if (tabs_->currentWidget() == orderListWidget_) {
+            orderListWidget_->refresh();
+        } else {
+            orderListWidget_->reset();
+        }
+    });
+    connect(orderListWidget_, &OrderListWidget::backRequested, this, [this] {
+        tabs_->setCurrentWidget(stationSearchWidget_);
+    });
     layout->addWidget(tabs, 1);
 
     connect(stationSearchWidget_, &StationSearchWidget::pileChosen, this, [this, tabs](qint64 pileId) {
@@ -70,6 +86,9 @@ UserHomeWidget::UserHomeWidget(ev::UserApiClient *api, QWidget *parent)
 
 void UserHomeWidget::refresh()
 {
+    orderListWidget_->reset();
+    chargeFlowWidget_->reset();
+    tabs_->setCurrentWidget(stationSearchWidget_);
     stationSearchWidget_->refresh();
     userInfoWidget_->refreshFromSession();
 }

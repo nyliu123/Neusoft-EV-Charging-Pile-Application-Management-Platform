@@ -58,3 +58,8 @@ admin_client.depends = common network
 unit_tests.subdir = tests/unit
 unit_tests.target = unit_tests
 unit_tests.depends = common network services adapters
+
+SUBDIRS += order_ui_tests
+order_ui_tests.subdir = tests/order_ui
+order_ui_tests.target = order_ui_tests
+order_ui_tests.depends = common network

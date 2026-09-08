@@ -4,6 +4,8 @@
 #include "network/platform_client.h"
 #include "user_session_state.h"
 
+#include <QTimer>
+
 #include <utility>
 
 namespace ev {
@@ -23,6 +25,11 @@ UserApiClient::UserApiClient(PlatformClient *client, QObject *parent)
 bool UserApiClient::queryUserInfo(QObject *context, Callback callback)
 {
     return sendUserRequest(QStringLiteral("user_info"), {}, context, std::move(callback));
+}
+
+bool UserApiClient::queryOrders(QObject *context, Callback callback)
+{
+    return sendUserRequest(QStringLiteral("query_orders"), {}, context, std::move(callback));
 }
 
 bool UserApiClient::updateNickname(const QString &nickname, QObject *context,
@@ -180,6 +187,19 @@ bool UserApiClient::sendRequest(const QString &type, const QJsonObject &params,
     }
     pending_.insert(requestId,
                     {QPointer<QObject>(context), std::move(callback), responseType});
+    if (type == QStringLiteral("query_orders")) {
+        QTimer::singleShot(15000, this, [this, requestId] {
+            const auto it = pending_.find(requestId);
+            if (it == pending_.end()) {
+                return;
+            }
+            const Pending pending = it.value();
+            pending_.erase(it);
+            if (pending.context) {
+                pending.callback(false, {}, QStringLiteral("订单查询超时，请重试"));
+            }
+        });
+    }
     return true;
 }
 
