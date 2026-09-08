@@ -86,15 +86,21 @@ void AddStationDialog::on_confirmButton_clicked()
     emit stationSubmitted(name, address, longitude, latitude, price);
 }
 
-// 确保它在最外层，不属于任何其他函数
 void AddStationDialog::on_openBigScreenBtn_clicked()
 {
+    // 1. 生成大屏数据
     ScreenDataService service;
     QJsonObject bigScreenData = service.generateScreenData();
 
+    // 2. 将 JSON 转换为字符串（用于界面显示）和字节流（用于网络下发）
     QJsonDocument doc(bigScreenData);
     QString jsonString = doc.toJson(QJsonDocument::Indented);
+    QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
 
+    // 3. 模拟网络层下发日志
+    qDebug() << "【网络层】大屏数据打包成功，准备下发，数据大小：" << jsonData.size() << " 字节";
+
+    // 4. 创建可视化弹窗面板
     QDialog* previewDialog = new QDialog(this);
     previewDialog->setWindowTitle("大屏数据与预警总控面板");
     previewDialog->resize(600, 700);
@@ -106,6 +112,8 @@ void AddStationDialog::on_openBigScreenBtn_clicked()
     textEdit->setText(jsonString);
 
     QPushButton* closeBtn = new QPushButton("关闭面板", previewDialog);
+
+    // 5. 绑定关闭按钮事件
     connect(closeBtn, &QPushButton::clicked, previewDialog, &QDialog::accept);
 
     layout->addWidget(textEdit);
