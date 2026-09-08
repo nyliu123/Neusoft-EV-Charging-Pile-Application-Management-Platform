@@ -4,6 +4,7 @@
 
 class QLabel;
 class QPushButton;
+class ChargeFlowWidget;
 class StationSearchWidget;
 class UserInfoWidget;
 
@@ -25,6 +26,7 @@ signals:
 
 private:
     QLabel *successMessage_ = nullptr;
+    ChargeFlowWidget *chargeFlowWidget_ = nullptr;
     StationSearchWidget *stationSearchWidget_ = nullptr;
     UserInfoWidget *userInfoWidget_ = nullptr;
     QPushButton *logoutButton_ = nullptr;

@@ -93,6 +93,47 @@ bool UserApiClient::queryStationDetail(qint64 stationId, QObject *context,
                               context, std::move(callback));
 }
 
+bool UserApiClient::checkPendingCharge(QObject *context, Callback callback)
+{
+    return sendChargeRequest(QStringLiteral("check_pending"), {},
+                             context, std::move(callback));
+}
+
+bool UserApiClient::checkPile(qint64 pileId, QObject *context, Callback callback)
+{
+    return sendChargeRequest(QStringLiteral("check_pile"),
+                             {{QStringLiteral("pile_id"), pileId}},
+                             context, std::move(callback));
+}
+
+bool UserApiClient::reserveCharge(qint64 pileId, QObject *context, Callback callback)
+{
+    return sendChargeRequest(QStringLiteral("reserve"),
+                             {{QStringLiteral("pile_id"), pileId}},
+                             context, std::move(callback));
+}
+
+bool UserApiClient::startCharge(qint64 orderId, QObject *context, Callback callback)
+{
+    return sendChargeRequest(QStringLiteral("start_charge"),
+                             {{QStringLiteral("order_id"), orderId}},
+                             context, std::move(callback));
+}
+
+bool UserApiClient::endCharge(qint64 orderId, QObject *context, Callback callback)
+{
+    return sendChargeRequest(QStringLiteral("end_charge"),
+                             {{QStringLiteral("order_id"), orderId}},
+                             context, std::move(callback));
+}
+
+bool UserApiClient::cancelCharge(qint64 orderId, QObject *context, Callback callback)
+{
+    return sendChargeRequest(QStringLiteral("cancel_charge"),
+                             {{QStringLiteral("order_id"), orderId}},
+                             context, std::move(callback));
+}
+
 bool UserApiClient::sendUserRequest(const QString &type, const QJsonObject &params,
                                     QObject *context, Callback callback)
 {
@@ -107,6 +148,14 @@ bool UserApiClient::sendStationRequest(const QString &type, const QJsonObject &p
     return sendRequest(type, params, context, std::move(callback),
                        static_cast<quint32>(MessageType::StationRequest),
                        static_cast<quint32>(MessageType::StationResponse));
+}
+
+bool UserApiClient::sendChargeRequest(const QString &type, const QJsonObject &params,
+                                      QObject *context, Callback callback)
+{
+    return sendRequest(type, params, context, std::move(callback),
+                       static_cast<quint32>(MessageType::ChargeRequest),
+                       static_cast<quint32>(MessageType::ChargeResponse));
 }
 
 bool UserApiClient::sendRequest(const QString &type, const QJsonObject &params,
@@ -136,6 +185,11 @@ bool UserApiClient::sendRequest(const QString &type, const QJsonObject &params,
 
 void UserApiClient::handleFrame(quint32 messageType, const QJsonObject &payload)
 {
+    // Server push (0x32) carries no request_id and must bypass the pending map.
+    if (messageType == static_cast<quint32>(MessageType::ChargeUpdate)) {
+        emit chargeUpdateReceived(payload);
+        return;
+    }
     const QString requestId = payload.value(QStringLiteral("request_id")).toString();
     const auto it = pending_.find(requestId);
     if (it == pending_.end()) {

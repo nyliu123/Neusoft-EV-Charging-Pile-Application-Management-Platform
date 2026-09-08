@@ -1,5 +1,6 @@
 #include "user_home_widget.h"
 
+#include "charge_flow_widget.h"
 #include "user_info_widget.h"
 #include "station_search_widget.h"
 
@@ -39,10 +40,32 @@ UserHomeWidget::UserHomeWidget(ev::UserApiClient *api, QWidget *parent)
     });
     auto *tabs = new QTabWidget(this);
     stationSearchWidget_ = new StationSearchWidget(api, tabs);
+    chargeFlowWidget_ = new ChargeFlowWidget(api, tabs);
     userInfoWidget_ = new UserInfoWidget(api, tabs);
     tabs->addTab(stationSearchWidget_, QStringLiteral("找桩"));
+    tabs->addTab(chargeFlowWidget_, QStringLiteral("充电"));
     tabs->addTab(userInfoWidget_, QStringLiteral("个人中心"));
     layout->addWidget(tabs, 1);
+
+    connect(stationSearchWidget_, &StationSearchWidget::pileChosen, this, [this, tabs](qint64 pileId) {
+        chargeFlowWidget_->enterWithPile(pileId);
+        tabs->setCurrentWidget(chargeFlowWidget_);
+    });
+    connect(chargeFlowWidget_, &ChargeFlowWidget::pileSelectionRequested, this, [this, tabs] {
+        tabs->setCurrentWidget(stationSearchWidget_);
+    });
+    connect(chargeFlowWidget_, &ChargeFlowWidget::rechargeRequested, this, [this, tabs] {
+        tabs->setCurrentWidget(userInfoWidget_);
+    });
+    connect(chargeFlowWidget_, &ChargeFlowWidget::homeRequested, this, [this, tabs] {
+        tabs->setCurrentWidget(stationSearchWidget_);
+    });
+    // UML-025: entering the charge tab always re-checks pending orders first.
+    connect(tabs, &QTabWidget::currentChanged, this, [this, tabs](int index) {
+        if (tabs->widget(index) == chargeFlowWidget_) {
+            chargeFlowWidget_->enterFromHome();
+        }
+    });
 }
 
 void UserHomeWidget::refresh()
