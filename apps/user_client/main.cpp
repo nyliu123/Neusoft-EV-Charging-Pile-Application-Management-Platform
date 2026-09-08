@@ -21,6 +21,7 @@
 int main(int argc, char *argv[])
 {
     ev::configureClientInputMethod();
+    QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     QApplication application(argc, argv);
     QApplication::setApplicationName(QStringLiteral("ev_user_client"));
     QApplication::setApplicationVersion(QStringLiteral("0.1.0"));

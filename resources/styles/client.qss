@@ -88,6 +88,13 @@ QLabel[tone="success"] {
     font-size: 13px;
 }
 
+QLabel[uiClass="mapStatus"] {
+    color: #303134;
+    font-size: 17px;
+    font-weight: 600;
+    padding: 10px 12px;
+}
+
 QLabel[uiClass="successBanner"] {
     background-color: #e6f4ea;
     border: 1px solid #ceead6;
