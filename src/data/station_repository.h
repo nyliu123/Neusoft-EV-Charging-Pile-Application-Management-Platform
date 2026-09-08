@@ -39,6 +39,17 @@ public:
     Result<QVector<StationRecord>> listStations(QSqlDatabase &database) const;
     Result<std::optional<StationDetailRecord>> findDetail(
         QSqlDatabase &database, qint64 stationId) const;
+    // UML-018: nearby stations sorted by Haversine distance.
+    Result<QVector<StationRecord>> findNearby(QSqlDatabase &database,
+                                               double longitude,
+                                               double latitude) const;
+    // UML-042: insert a new station. Returns new station_id.
+    Result<qint64> insertStation(QSqlDatabase &database,
+                                  const QString &name,
+                                  const QString &address,
+                                  double longitude,
+                                  double latitude,
+                                  double pricePerKwh) const;
 };
 
 } // namespace ev

@@ -167,4 +167,104 @@ Result<qint64> UserRepository::recharge(QSqlDatabase &database, qint64 userId,
     return Result<qint64>::ok(newBalanceCent);
 }
 
+// ── UML-035: registered user count ─────────────────────────────────────────
+
+Result<int> UserRepository::countAll(QSqlDatabase &database) const
+{
+    QSqlQuery query(database);
+    if (!query.exec(QStringLiteral("SELECT COUNT(*) FROM users")) || !query.next()) {
+        return Result<int>::fail(ErrorCode::StorageError, query.lastError().text());
+    }
+    return Result<int>::ok(query.value(0).toInt());
+}
+
+// ── UML-043: full user list ─────────────────────────────────────────────────
+
+Result<QVector<UserRecord>> UserRepository::listAll(QSqlDatabase &database) const
+{
+    QSqlQuery query(database);
+    if (!query.exec(QStringLiteral(
+            "SELECT user_id, phone, nickname, avatar_path, "
+            "CAST(ROUND(balance * 100) AS INTEGER), register_time, status "
+            "FROM users ORDER BY register_time DESC"))) {
+        return Result<QVector<UserRecord>>::fail(ErrorCode::StorageError,
+                                                   query.lastError().text());
+    }
+    QVector<UserRecord> users;
+    while (query.next()) {
+        users.append(recordFromQuery(query));
+    }
+    return Result<QVector<UserRecord>>::ok(users);
+}
+
+// ── UML-044: fuzzy search by phone ─────────────────────────────────────────
+
+Result<QVector<UserRecord>> UserRepository::searchByPhone(
+    QSqlDatabase &database, const QString &keyword) const
+{
+    QSqlQuery query(database);
+    query.prepare(QStringLiteral(
+        "SELECT user_id, phone, nickname, avatar_path, "
+        "CAST(ROUND(balance * 100) AS INTEGER), register_time, status "
+        "FROM users WHERE phone LIKE ? ORDER BY register_time DESC"));
+    query.addBindValue(QStringLiteral("%%1%").arg(keyword));
+    if (!query.exec()) {
+        return Result<QVector<UserRecord>>::fail(ErrorCode::StorageError,
+                                                   query.lastError().text());
+    }
+    QVector<UserRecord> users;
+    while (query.next()) {
+        users.append(recordFromQuery(query));
+    }
+    return Result<QVector<UserRecord>>::ok(users);
+}
+
+// ── UML-030/031: update balance (set absolute value in cents) ──────────────
+
+Result<bool> UserRepository::updateBalance(QSqlDatabase &database,
+                                            qint64 userId,
+                                            qint64 newBalanceCent) const
+{
+    if (newBalanceCent < 0) {
+        return Result<bool>::fail(ErrorCode::InvalidInput,
+                                  QStringLiteral("balance_cannot_be_negative"));
+    }
+    QSqlQuery query(database);
+    query.prepare(QStringLiteral(
+        "UPDATE users SET balance = ? / 100.0 WHERE user_id = ?"));
+    query.addBindValue(newBalanceCent);
+    query.addBindValue(userId);
+    if (!query.exec()) {
+        return Result<bool>::fail(ErrorCode::StorageError, query.lastError().text());
+    }
+    if (query.numRowsAffected() == 0) {
+        return Result<bool>::fail(ErrorCode::NotFound, QStringLiteral("user_not_found"));
+    }
+    return Result<bool>::ok(true);
+}
+
+// ── UML-045: freeze/unfreeze ───────────────────────────────────────────────
+
+Result<bool> UserRepository::updateStatus(QSqlDatabase &database,
+                                           qint64 userId,
+                                           const QString &newStatus) const
+{
+    if (newStatus != QStringLiteral("normal")
+        && newStatus != QStringLiteral("frozen")) {
+        return Result<bool>::fail(ErrorCode::InvalidInput,
+                                  QStringLiteral("invalid_status"));
+    }
+    QSqlQuery query(database);
+    query.prepare(QStringLiteral("UPDATE users SET status = ? WHERE user_id = ?"));
+    query.addBindValue(newStatus);
+    query.addBindValue(userId);
+    if (!query.exec()) {
+        return Result<bool>::fail(ErrorCode::StorageError, query.lastError().text());
+    }
+    if (query.numRowsAffected() == 0) {
+        return Result<bool>::fail(ErrorCode::NotFound, QStringLiteral("user_not_found"));
+    }
+    return Result<bool>::ok(true);
+}
+
 } // namespace ev

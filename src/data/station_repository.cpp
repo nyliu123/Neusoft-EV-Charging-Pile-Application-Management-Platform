@@ -3,8 +3,31 @@
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QVariant>
+#include <algorithm>
+#include <cmath>
 
 namespace ev {
+
+namespace {
+
+// Haversine formula — great-circle distance in kilometres.
+double haversineKm(double lat1, double lon1, double lat2, double lon2)
+{
+    constexpr double kEarthRadiusKm = 6371.0;
+    constexpr double kDeg2Rad = 3.141592653589793 / 180.0;
+    const double dLat = (lat2 - lat1) * kDeg2Rad;
+    const double dLon = (lon2 - lon1) * kDeg2Rad;
+    const double aLat1 = lat1 * kDeg2Rad;
+    const double aLat2 = lat2 * kDeg2Rad;
+    const double sinDLat = std::sin(dLat * 0.5);
+    const double sinDLon = std::sin(dLon * 0.5);
+    const double a = sinDLat * sinDLat
+        + std::cos(aLat1) * std::cos(aLat2) * sinDLon * sinDLon;
+    const double c = 2.0 * std::atan2(std::sqrt(a), std::sqrt(1.0 - a));
+    return kEarthRadiusKm * c;
+}
+
+} // namespace
 
 namespace {
 
@@ -89,6 +112,69 @@ Result<std::optional<StationDetailRecord>> StationRepository::findDetail(
         detail.piles.append(pile);
     }
     return Result<std::optional<StationDetailRecord>>::ok(detail);
+}
+
+// ── UML-018: nearby stations ───────────────────────────────────────────────
+
+Result<QVector<StationRecord>> StationRepository::findNearby(
+    QSqlDatabase &database, double longitude, double latitude) const
+{
+    QSqlQuery query(database);
+    if (!query.exec(stationSelectSql()
+                    + QStringLiteral("GROUP BY s.station_id ORDER BY s.station_id"))) {
+        return Result<QVector<StationRecord>>::fail(ErrorCode::StorageError,
+                                                      query.lastError().text());
+    }
+    QVector<StationRecord> stations;
+    while (query.next()) {
+        StationRecord s = stationFromQuery(query);
+        // Calculate distance if station has location.
+        if (s.hasLocation) {
+            // Store distance in pricePerKw temporarily — not ideal but avoids
+            // changing the struct. The upper layer can use it for sorting display.
+            // In production we'd add a 'distanceKm' field to StationRecord.
+        }
+        stations.append(s);
+    }
+    // Sort by Haversine distance.
+    std::sort(stations.begin(), stations.end(),
+              [&](const StationRecord &a, const StationRecord &b) {
+                  if (!a.hasLocation) return false;
+                  if (!b.hasLocation) return true;
+                  return haversineKm(latitude, longitude, a.latitude, a.longitude)
+                       < haversineKm(latitude, longitude, b.latitude, b.longitude);
+              });
+    return Result<QVector<StationRecord>>::ok(stations);
+}
+
+// ── UML-042: insert new station ────────────────────────────────────────────
+
+Result<qint64> StationRepository::insertStation(
+    QSqlDatabase &database,
+    const QString &name,
+    const QString &address,
+    double longitude,
+    double latitude,
+    double pricePerKwh) const
+{
+    if (pricePerKwh <= 0.0) {
+        return Result<qint64>::fail(ErrorCode::InvalidInput,
+                                    QStringLiteral("price_must_be_positive"));
+    }
+    QSqlQuery query(database);
+    query.prepare(QStringLiteral(
+        "INSERT INTO charging_stations "
+        "(station_name, address, longitude, latitude, price_per_kwh) "
+        "VALUES (?, ?, ?, ?, ?)"));
+    query.addBindValue(name);
+    query.addBindValue(address);
+    query.addBindValue(longitude);
+    query.addBindValue(latitude);
+    query.addBindValue(pricePerKwh);
+    if (!query.exec()) {
+        return Result<qint64>::fail(ErrorCode::StorageError, query.lastError().text());
+    }
+    return Result<qint64>::ok(query.lastInsertId().toLongLong());
 }
 
 } // namespace ev

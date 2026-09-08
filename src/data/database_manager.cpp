@@ -92,4 +92,32 @@ Result<int> DatabaseManager::migrate(QSqlDatabase &database) const
     return Result<int>::ok(0);
 }
 
+// ── UML-053: transaction wrapper ─────────────────────────────────────────
+
+Result<bool> DatabaseManager::executeTransaction(
+    QSqlDatabase &database, const std::function<bool()> &fn) const
+{
+    if (!database.transaction()) {
+        return Result<bool>::fail(ErrorCode::StorageError,
+                                   database.lastError().text());
+    }
+    try {
+        if (!fn()) {
+            database.rollback();
+            return Result<bool>::fail(ErrorCode::InternalError,
+                                       QStringLiteral("transaction_callback_failed"));
+        }
+        if (!database.commit()) {
+            database.rollback();
+            return Result<bool>::fail(ErrorCode::StorageError,
+                                       database.lastError().text());
+        }
+        return Result<bool>::ok(true);
+    } catch (...) {
+        database.rollback();
+        return Result<bool>::fail(ErrorCode::StorageError,
+                                   QStringLiteral("transaction_exception"));
+    }
+}
+
 } // namespace ev
