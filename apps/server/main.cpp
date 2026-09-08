@@ -3,6 +3,7 @@
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QCoreApplication>
+#include <QDebug>
 #include <QDir>
 #include <QFileInfo>
 #include <QSettings>
@@ -11,7 +12,15 @@ namespace {
 
 QString defaultDatabasePath()
 {
+#ifdef EV_SERVER_SOURCE_DIR
+    // Absolute source directory from server.pro. Resolving __FILE__ at
+    // runtime depends on the process working directory: Qt Creator launches
+    // the binary from bin/, which makes the build-relative __FILE__ miss the
+    // source tree and fall back to a private per-build-dir database.
+    const QDir sourceDirectory(QString::fromUtf8(EV_SERVER_SOURCE_DIR));
+#else
     const QDir sourceDirectory = QFileInfo(QString::fromUtf8(__FILE__)).absoluteDir();
+#endif
     const QString sourceDatabase = QDir::cleanPath(sourceDirectory.absoluteFilePath(
         QStringLiteral("../../data/ev_charging.sqlite3")));
     if (QFileInfo::exists(sourceDatabase)) {
@@ -74,6 +83,7 @@ int main(int argc, char *argv[])
         databasePath = parser.value(databaseOption);
     }
 
+    qInfo().noquote() << "ev_server database:" << databasePath;
     ev::ServerApplication server(databasePath);
     if (!server.start(QHostAddress(host), port)) {
         return 1;
