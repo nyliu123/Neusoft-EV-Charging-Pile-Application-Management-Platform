@@ -21,11 +21,14 @@
 | `ev::StationRepository`                   | 站点数据 | `src/data/station_repository.h`         | 站点、设备只读查询与统计               |
 | `ev::StationService`                      | 站点服务 | `src/services/station_service.h`        | 需求22～26列表、距离排序与详情          |
 | `ev::MapApiAdapter`                       | 外部接口 | `src/adapters/map_api_adapter.h`        | OpenStreetMap 地址解析与离线教学坐标兜底 |
+| `ev::ChargeService`                       | 充电服务 | `src/services/charge_service.h`         | UML-025~032 预约、充电与结算业务闭环     |
+| `ev::ChargingSessionManager`              | 服务端  | `apps/server/charging_session_manager.h`| 充电模拟会话与 0x32 实时推送           |
 | `ev::SessionManager`                      | 用户服务 | `src/services/session_manager.h`        | UML-013 服务端内存会话、续期与清理        |
 | `ev::AdminInfo` / `ev::AdminAuthService`  | 认证   | `src/services/admin_auth_service.h`     | 管理员身份认证服务                    |
 | `ev::AdminSeeder`                         | 认证   | `src/services/admin_seeder.h`           | 默认管理员账号初始化                   |
 | `UserSessionState`                        | 用户端  | `apps/user_client/user_session_state.h` | 保存当前登录用户与会话标识                |
 | `ev::UserApiClient`                       | 用户端  | `apps/user_client/user_api_client.h`    | 关联用户请求与异步响应                  |
+| `ChargeFlowWidget`                        | 用户端  | `apps/user_client/charge_flow_widget.h` | 充电流程界面（检查/选桩/进度/结算四态页）  |
 | `ev::AdminSession`                        | 管理端  | `apps/admin_client/admin_session.h`     | 管理端登录会话信息                    |
 
 新增消息类型必须显式分配未使用编号，并同步更新客户端、服务端与协议测试；禁止依据枚举顺序隐式生成线上编号。
@@ -116,6 +119,52 @@
 | `station_detail` | station_id | station / piles / stats，未知状态绝不按空闲返回 | 26 |
 
 地址解析默认使用 OpenStreetMap Nominatim，并对有限的大连预设区域返回明确标识的教学坐标；地图不可用时客户端可不带经纬度查询文字列表，`distance_km` 必须缺省。
+
+## 充电协议（ChargeRequest=0x30 / ChargeResponse=0x31 / ChargeUpdate=0x32）
+
+UML-025~032 充电业务闭环复用一对请求/响应消息类型，`data` 统一为
+`{ type, params, session_id }`，响应结果位于 `data.result`；服务端只接受当前连接上
+有效的用户会话，订单归属一律以会话反查的 user_id 为准，不信任客户端参数。
+
+### type 清单（ChargeRequest）
+
+| type | params | result | 对应设计 |
+| ---- | ------ | ------ | -------- |
+| `check_pending` | 无 | has_pending / order（含桩、站点、单价；charging 时附带 live 实时快照并重新绑定推送） | UML-025 |
+| `check_pile` | pile_id | available / reason / pile / station_name / price_per_kwh | UML-026 |
+| `reserve` | pile_id | order_id / pile / station_name / price_per_kwh | UML-027 |
+| `start_charge` | order_id | order_id / start_time / power_kw / price_per_kwh | UML-028 |
+| `end_charge` | order_id | settled / order_id / total_kwh / total_fee_cent / balance_cent / shortfall_cent | UML-031 |
+| `cancel_charge` | order_id | order_id | UML-027（取消预约） |
+
+### 服务端推送（ChargeUpdate=0x32）
+
+订单进入 charging 后，服务端 `ChargingSessionManager` 以 1 Hz 按墙钟时间计算
+`kwh = power_kw × elapsed / 3600`、`fee = kwh × price_per_kwh`（订单快照单价）并推送：
+
+```json
+{
+  "protocol_version": 1,
+  "order_id": 1,
+  "charge_amount_kwh": 0.83,
+  "current_fee_cent": 125,
+  "progress": 1.67
+}
+```
+
+该帧无 `request_id`，客户端 `ev::UserApiClient::chargeUpdateReceived` 信号分发。
+进度按"满充量 50 度"假设计算（UML-029）。
+
+### 关键规则
+
+- 金额全链路整数分（`*_cent`），展示层除以 100；电量单位为度（kWh）。
+- reserve 在同一事务内完成"桩 idle→reserved + 订单插入（单价快照）"；
+  并发预约由乐观锁裁决，冲突方收到 `STATE_CONFLICT`。
+- 余额充足时结算在同一事务内完成"扣余额 + 订单 settled + 桩 idle + 桩累计统计"；
+  余额不足时订单进入 `pending_settlement`，桩保持 `in_use`，用户充值后再次
+  `end_charge` 即可重新结算。
+- 断连不终止充电：订单按墙钟继续计费，重连后 `check_pending` 恢复进度页并
+  重新绑定 0x32 推送。
 
 ## 管理端数据协议（AdminQuery=0x60 / AdminAction=0x61 / AdminResponse=0x62）
 
