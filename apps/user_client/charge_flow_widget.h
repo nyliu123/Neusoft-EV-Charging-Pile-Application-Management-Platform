@@ -2,6 +2,7 @@
 
 #include <QJsonObject>
 #include <QWidget>
+#include <QVector>
 
 class QFrame;
 class QLabel;
@@ -69,6 +70,7 @@ private:
     void updateElapsedLabel();
 
     ev::UserApiClient *api_ = nullptr;
+    QVector<QLabel *> stageLabels_;
     QStackedWidget *pages_ = nullptr;
     QWidget *idlePage_ = nullptr;
     QLabel *idleLabel_ = nullptr;

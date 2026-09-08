@@ -26,19 +26,24 @@ PhoneLoginWidget::PhoneLoginWidget(QWidget *parent)
     : QWidget(parent)
 {
     setObjectName(QStringLiteral("userLoginCard"));
-    setFixedSize(380, 280);
+    setAttribute(Qt::WA_StyledBackground, true);
+    setMinimumSize(360, 360);
+    setMaximumWidth(440);
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(32, 28, 32, 24);
     layout->setSpacing(16);
 
-    auto *title = new QLabel(QStringLiteral("用户服务中心"), this);
+    auto *eyebrow = new QLabel(QStringLiteral("轻充账号"), this);
+    eyebrow->setProperty("uiClass", "eyebrow");
+    layout->addWidget(eyebrow);
+    auto *title = new QLabel(QStringLiteral("欢迎回来"), this);
     title->setProperty("uiClass", "dialogTitle");
-    title->setAlignment(Qt::AlignCenter);
+    title->setAlignment(Qt::AlignLeft);
     layout->addWidget(title);
 
-    auto *subTitle = new QLabel(QStringLiteral("电动汽车充电桩管理平台"), this);
+    auto *subTitle = new QLabel(QStringLiteral("登录后，开启你的轻充之旅。"), this);
     subTitle->setProperty("uiClass", "muted");
-    subTitle->setAlignment(Qt::AlignCenter);
+    subTitle->setAlignment(Qt::AlignLeft);
     layout->addWidget(subTitle);
 
     layout->addSpacing(8);
@@ -46,12 +51,16 @@ PhoneLoginWidget::PhoneLoginWidget(QWidget *parent)
     auto *formLayout = new QFormLayout;
     formLayout->setSpacing(10);
 
+    auto *phoneLabel = new QLabel(QStringLiteral("手机号"), this);
+    phoneLabel->setProperty("uiClass", "formLabel");
+    formLayout->addRow(phoneLabel);
     phoneInput_ = new QLineEdit(this);
+    phoneInput_->setObjectName(QStringLiteral("userPhoneInput"));
     phoneInput_->setPlaceholderText(QStringLiteral("请输入11位大陆手机号"));
     phoneInput_->setClearButtonEnabled(true);
     phoneInput_->setInputMethodHints(Qt::ImhDigitsOnly);
     phoneInput_->setAccessibleName(QStringLiteral("手机号"));
-    formLayout->addRow(QStringLiteral("手机号："), phoneInput_);
+    formLayout->addRow(phoneInput_);
     layout->addLayout(formLayout);
 
     phoneMessage_ = new QLabel(this);
@@ -63,11 +72,16 @@ PhoneLoginWidget::PhoneLoginWidget(QWidget *parent)
 
     layout->addStretch();
 
-    loginButton_ = new QPushButton(QStringLiteral("登 录"), this);
+    loginButton_ = new QPushButton(QStringLiteral("登录"), this);
+    loginButton_->setObjectName(QStringLiteral("userLoginButton"));
     loginButton_->setProperty("uiClass", "primary");
     loginButton_->setDefault(true);
     loginButton_->setMinimumHeight(36);
     layout->addWidget(loginButton_);
+    auto *hint = new QLabel(QStringLiteral("未注册的手机号将自动创建账号。"), this);
+    hint->setProperty("uiClass", "muted");
+    hint->setWordWrap(true);
+    layout->addWidget(hint);
 
     connect(loginButton_, &QPushButton::clicked, this, [this] { validatePhone(); });
     connect(phoneInput_, &QLineEdit::returnPressed, this, [this] { validatePhone(); });
@@ -82,7 +96,7 @@ void PhoneLoginWidget::setLoginInProgress(bool inProgress)
 {
     loginButton_->setEnabled(!inProgress);
     loginButton_->setText(inProgress ? QStringLiteral("正在登录...")
-                                     : QStringLiteral("登 录"));
+                                     : QStringLiteral("登录"));
 }
 
 void PhoneLoginWidget::showLoginError(const QString &message)

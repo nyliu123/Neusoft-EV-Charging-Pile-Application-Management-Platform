@@ -10,6 +10,7 @@ INCLUDEPATH += $$PLATFORM_ROOT/src
 INCLUDEPATH += $$PWD
 
 HEADERS += \
+    $$PLATFORM_ROOT/src/client_ui/apple_widgets.h \
     admin_add_station_dialog.h \
     admin_api_client.h \
     admin_charts.h \

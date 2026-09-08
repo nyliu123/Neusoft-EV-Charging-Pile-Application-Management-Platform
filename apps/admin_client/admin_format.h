@@ -26,16 +26,16 @@ inline QString pileStatusText(const QString &status)
 inline QColor pileStatusColor(const QString &status)
 {
     if (status == QStringLiteral("idle")) {
-        return {0x2e, 0x7d, 0x32};
+        return {0x23, 0x77, 0x46};
     }
     if (status == QStringLiteral("reserved")) {
-        return {0xf9, 0xa8, 0x25};
+        return {0x88, 0x53, 0x0b};
     }
     if (status == QStringLiteral("in_use")) {
-        return {0x15, 0x65, 0xc0};
+        return {0x00, 0x61, 0xc6};
     }
     if (status == QStringLiteral("fault")) {
-        return {0xc6, 0x28, 0x28};
+        return {0xb4, 0x23, 0x32};
     }
     return {0x75, 0x75, 0x75};
 }
@@ -65,10 +65,10 @@ inline QString userStatusText(const QString &status)
 inline QColor userStatusColor(const QString &status)
 {
     if (status == QStringLiteral("normal")) {
-        return {0x2e, 0x7d, 0x32};
+        return {0x23, 0x77, 0x46};
     }
     if (status == QStringLiteral("frozen")) {
-        return {0xc6, 0x28, 0x28};
+        return {0xb4, 0x23, 0x32};
     }
     return {0x75, 0x75, 0x75};
 }
@@ -105,19 +105,19 @@ inline QString orderStatusText(const QString &status)
 inline QColor orderStatusColor(const QString &status)
 {
     if (status == QStringLiteral("reserved")) {
-        return {0xf9, 0xa8, 0x25};
+        return {0x88, 0x53, 0x0b};
     }
     if (status == QStringLiteral("charging")) {
-        return {0x15, 0x65, 0xc0};
+        return {0x00, 0x61, 0xc6};
     }
     if (status == QStringLiteral("pending_settlement")) {
         return {0xef, 0x6c, 0x00};
     }
     if (status == QStringLiteral("settled")) {
-        return {0x2e, 0x7d, 0x32};
+        return {0x23, 0x77, 0x46};
     }
     if (status == QStringLiteral("cancelled")) {
-        return {0x9e, 0x9e, 0x9e};
+        return {0x62, 0x62, 0x6c};
     }
     return {0x75, 0x75, 0x75};
 }

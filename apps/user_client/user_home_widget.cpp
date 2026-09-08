@@ -1,4 +1,5 @@
 #include "user_home_widget.h"
+#include "client_ui/apple_widgets.h"
 
 #include "charge_flow_widget.h"
 #include "user_info_widget.h"
@@ -11,25 +12,66 @@
 #include <QPushButton>
 #include <QTimer>
 #include <QTabWidget>
+#include <QTabBar>
+#include <QListWidget>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 
 UserHomeWidget::UserHomeWidget(ev::UserApiClient *api, QWidget *parent)
     : QWidget(parent)
 {
-    auto *layout = new QVBoxLayout(this);
+    auto *shell = new QHBoxLayout(this);
+    shell->setContentsMargins(0, 0, 0, 0);
+    shell->setSpacing(0);
+    auto *sidebar = new QFrame(this);
+    sidebar->setObjectName(QStringLiteral("terminalSidebar"));
+    sidebar->setFixedWidth(196);
+    auto *rail = new QVBoxLayout(sidebar);
+    rail->setContentsMargins(14, 26, 14, 14);
+    rail->setSpacing(22);
+    rail->addWidget(ev::makeAppleBrand(sidebar));
+    auto *workspace = new QLabel(QStringLiteral("我的空间"), sidebar);
+    workspace->setProperty("uiClass", "eyebrow");
+    rail->addWidget(workspace);
+    auto *navigation = new QListWidget(sidebar);
+    navigation->setObjectName(QStringLiteral("userNavigation"));
+    navigation->setAccessibleName(QStringLiteral("用户功能导航"));
+    navigation->setIconSize(QSize(20, 20));
+    navigation->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    const QStringList destinations {QStringLiteral("找桩"), QStringLiteral("充电"),
+        QStringLiteral("个人中心"), QStringLiteral("我的订单")};
+    const ev::AppSymbol symbols[] {ev::AppSymbol::Compass, ev::AppSymbol::Bolt,
+        ev::AppSymbol::Person, ev::AppSymbol::Receipt};
+    for (int i = 0; i < destinations.size(); ++i)
+        new QListWidgetItem(ev::appSymbolIcon(symbols[i]), destinations.at(i), navigation);
+    rail->addWidget(navigation, 1);
+    auto *footer = new QLabel(QStringLiteral("轻松充电，从容出发。"), sidebar);
+    footer->setObjectName(QStringLiteral("terminalSidebarFooter"));
+    footer->setWordWrap(true);
+    rail->addWidget(footer);
+    shell->addWidget(sidebar);
 
-    successMessage_ = new QLabel(this);
+    auto *content = new QWidget(this);
+    auto *layout = new QVBoxLayout(content);
+    layout->setContentsMargins(26, 16, 26, 18);
+    layout->setSpacing(12);
+    shell->addWidget(content, 1);
+    auto *header = new QFrame(content);
+    header->setObjectName(QStringLiteral("terminalHeader"));
+    auto *toolbar = new QHBoxLayout(header);
+    toolbar->setContentsMargins(0, 0, 0, 0);
+    auto *caption = new QLabel(QStringLiteral("充电服务"), header);
+    caption->setProperty("uiClass", "muted");
+    toolbar->addWidget(caption);
+    toolbar->addStretch();
+    logoutButton_ = new QPushButton(QStringLiteral("退出登录"), header);
+    logoutButton_->setProperty("uiClass", "text");
+    toolbar->addWidget(logoutButton_);
+    layout->addWidget(header);
+    successMessage_ = new QLabel(content);
     successMessage_->setProperty("uiClass", "successBanner");
     successMessage_->hide();
     layout->addWidget(successMessage_);
-
-    auto *toolbar = new QHBoxLayout;
-    toolbar->addStretch();
-    logoutButton_ = new QPushButton(QStringLiteral("退出登录"), this);
-    logoutButton_->setProperty("uiClass", "danger");
-    toolbar->addWidget(logoutButton_);
-    layout->addLayout(toolbar);
     connect(logoutButton_, &QPushButton::clicked, this, [this] {
         const auto answer = QMessageBox::question(this, QStringLiteral("退出登录"),
             QStringLiteral("确定退出当前用户账号？"),
@@ -61,6 +103,12 @@ UserHomeWidget::UserHomeWidget(ev::UserApiClient *api, QWidget *parent)
     connect(orderListWidget_, &OrderListWidget::backRequested, this, [this] {
         tabs_->setCurrentWidget(stationSearchWidget_);
     });
+    // Keep the established tab API and all page signals; the rail is a second view
+    // of the same selection state, including programmatic charge/profile jumps.
+    tabs->tabBar()->hide();
+    connect(navigation, &QListWidget::currentRowChanged, tabs, &QTabWidget::setCurrentIndex);
+    connect(tabs, &QTabWidget::currentChanged, navigation, QOverload<int>::of(&QListWidget::setCurrentRow));
+    navigation->setCurrentRow(tabs->currentIndex());
     layout->addWidget(tabs, 1);
 
     connect(stationSearchWidget_, &StationSearchWidget::pileChosen, this, [this, tabs](qint64 pileId) {

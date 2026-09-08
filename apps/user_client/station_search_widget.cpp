@@ -3,6 +3,7 @@
 #include "navigation_map_dialog.h"
 #include "user_api_client.h"
 #include "client_ui/animated_combo_box.h"
+#include "client_ui/apple_widgets.h"
 
 #include <QComboBox>
 #include <QFrame>
@@ -49,12 +50,14 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
     : QWidget(parent), api_(api)
 {
     auto *root = new QVBoxLayout(this);
-    root->setContentsMargins(24, 20, 24, 20);
+    root->setContentsMargins(0, 0, 0, 0);
     pages_ = new QStackedWidget(this);
     root->addWidget(pages_);
 
     listPage_ = new QWidget(pages_);
     auto *listPageLayout = new QVBoxLayout(listPage_);
+    listPageLayout->setContentsMargins(0, 8, 0, 0);
+    listPageLayout->setSpacing(14);
     auto *title = new QLabel(QStringLiteral("附近充电站"), listPage_);
     title->setProperty("uiClass", "pageTitle");
     listPageLayout->addWidget(title);
@@ -62,6 +65,7 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
         QStringLiteral("输入当前位置或从区域列表中选择。（位置数据 © OpenStreetMap contributors）"),
         listPage_);
     description->setProperty("uiClass", "muted");
+    description->setWordWrap(true);
     listPageLayout->addWidget(description);
 
     auto *searchRow = new QHBoxLayout;
@@ -117,7 +121,7 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
     detailTitle_->setProperty("uiClass", "pageTitle");
     detailLayout->addWidget(detailTitle_);
     detailMeta_ = new QLabel(detailPage_);
-    detailMeta_->setProperty("uiClass", "muted");
+    detailMeta_->setProperty("uiClass", "stationMeta");
     detailMeta_->setWordWrap(true);
     detailLayout->addWidget(detailMeta_);
 
@@ -179,8 +183,10 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
     starRow->addWidget(new QLabel(QStringLiteral("打星："), composeCard));
     for (int i = 1; i <= 5; ++i) {
         auto *star = new QPushButton(QStringLiteral("☆"), composeCard);
-        star->setProperty("uiClass", "text");
-        star->setFixedSize(36, 28);
+        star->setProperty("uiClass", "ratingStar");
+        star->setAccessibleName(QStringLiteral("%1 星").arg(i));
+        star->setObjectName(QStringLiteral("ratingStar%1").arg(i));
+        star->setFixedSize(36, 36);
         starRow->addWidget(star);
         connect(star, &QPushButton::clicked, this, [this, i] {
             setStarRating(starRating_ == i ? 0 : i);
@@ -193,6 +199,7 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
     starRow->addStretch();
     composeLayout->addLayout(starRow);
     commentInput_ = new QPlainTextEdit(composeCard);
+    commentInput_->setAccessibleName(QStringLiteral("站点评价内容"));
     commentInput_->setPlaceholderText(QStringLiteral("说说这次充电的体验（1~200 字）"));
     commentInput_->setMaximumHeight(76);
     composeLayout->addWidget(commentInput_);
@@ -346,18 +353,11 @@ void StationSearchWidget::renderStations(const QJsonObject &result, bool locatio
         } else {
             ratingText = QStringLiteral("暂无评分");
         }
-        auto *card = new QPushButton(
-            QStringLiteral("%1    ·    %2\n%3\n¥%4/度    %5\n%6")
-                .arg(station.value(QStringLiteral("station_name")).toString(), distanceText,
-                     station.value(QStringLiteral("address")).toString())
-                .arg(station.value(QStringLiteral("price_per_kwh")).toDouble(), 0, 'f', 2)
-                .arg(availability)
-                .arg(ratingText),
-            listPage_);
-        card->setProperty("uiClass", "stationCard");
-        card->setProperty("available", idle > 0);
-        card->setCursor(Qt::PointingHandCursor);
-        card->setMinimumHeight(108);
+        auto *card = new ev::AppleStationCard(
+            station.value(QStringLiteral("station_name")).toString(),
+            station.value(QStringLiteral("address")).toString(), distanceText,
+            QStringLiteral("¥%1/度").arg(station.value(QStringLiteral("price_per_kwh")).toDouble(), 0, 'f', 2),
+            availability, ratingText, idle > 0, listPage_);
         connect(card, &QPushButton::clicked, this, [this, station] {
             showStationDetail(station);
         });

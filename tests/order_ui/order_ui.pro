@@ -28,3 +28,5 @@ RESOURCES += $$PLATFORM_ROOT/apps/user_client/user_client.qrc
 
 SOURCES += $$PLATFORM_ROOT/apps/user_client/navigation_map_dialog.cpp
 HEADERS += $$PLATFORM_ROOT/apps/user_client/navigation_map_dialog.h
+SOURCES += $$PLATFORM_ROOT/src/client_ui/client_style.cpp
+HEADERS += $$PLATFORM_ROOT/src/client_ui/client_style.h $$PLATFORM_ROOT/src/client_ui/apple_widgets.h

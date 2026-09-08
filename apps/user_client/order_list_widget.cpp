@@ -31,7 +31,7 @@ OrderListWidget::OrderListWidget(ev::UserApiClient *api, QWidget *parent)
     : QWidget(parent), api_(api)
 {
     auto *root = new QVBoxLayout(this);
-    root->setContentsMargins(24, 20, 24, 20);
+    root->setContentsMargins(0, 8, 0, 0);
     auto *header = new QHBoxLayout;
     auto *title = plainLabel(QStringLiteral("我的订单"), this);
     title->setProperty("uiClass", "pageTitle");

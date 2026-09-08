@@ -1,6 +1,7 @@
 #include "order_list_widget.h"
 #include "navigation_map_dialog.h"
 #include "client_ui/animated_combo_box.h"
+#include "client_ui/client_style.h"
 #include <QWebEngineView>
 #include <QComboBox>
 #include <QJsonDocument>
@@ -27,10 +28,20 @@
 class OrderUiTests final : public QObject {
     Q_OBJECT
 private slots:
+    void initTestCase();
     void listDetailsRetryAndStaleResponses();
     void embeddedMapLoadsSwitchesModeAndHandlesFailures();
     void realBeijingRouteService();
 };
+
+void OrderUiTests::initTestCase()
+{
+    ev::installClientStyle(*qApp);
+    QFile stylesheet(qEnvironmentVariable("EV_ORDER_TEST_STYLESHEET",
+                                           QStringLiteral(":/styles/client.qss")));
+    QVERIFY(stylesheet.open(QIODevice::ReadOnly));
+    qApp->setStyleSheet(QString::fromUtf8(stylesheet.readAll()));
+}
 
 void OrderUiTests::listDetailsRetryAndStaleResponses()
 {
@@ -74,10 +85,6 @@ void OrderUiTests::listDetailsRetryAndStaleResponses()
     QCOMPARE(tabs->tabText(tabs->indexOf(chargePage)), QStringLiteral("充电"));
     QCOMPARE(tabs->tabText(tabs->indexOf(orderPage)), QStringLiteral("我的订单"));
     auto &widget = *orderPage;
-    QFile stylesheet(qEnvironmentVariable("EV_ORDER_TEST_STYLESHEET"));
-    if (!stylesheet.fileName().isEmpty() && stylesheet.open(QIODevice::ReadOnly)) {
-        home.setStyleSheet(QString::fromUtf8(stylesheet.readAll()));
-    }
     home.resize(1000, 680);
     home.show();
     auto *status = widget.findChild<QLabel *>(QStringLiteral("ordersStatus"));
@@ -264,7 +271,7 @@ void OrderUiTests::embeddedMapLoadsSwitchesModeAndHandlesFailures()
     const double initialCenter = runJavascript(
         QStringLiteral("window.navigationMapState.centerX")).toDouble();
     QCOMPARE(runJavascript(QStringLiteral("getComputedStyle(document.getElementById('start')).backgroundColor"))
-                 .toString(), QStringLiteral("rgb(24, 128, 56)"));
+                 .toString(), QStringLiteral("rgb(35, 119, 70)"));
     runJavascript(QStringLiteral("document.getElementById('zoomIn').click()"));
     QCOMPARE(runJavascript(QStringLiteral("document.getElementById('zoomPercent').textContent"))
                  .toString(), QStringLiteral("125%"));

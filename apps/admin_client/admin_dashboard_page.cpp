@@ -84,10 +84,18 @@ AdminDashboardPage::AdminDashboardPage(AdminApiClient *api, QWidget *parent)
     // Charts row (UML-036/037).
     trendChart_ = new LineChartWidget(this);
     pileChart_ = new PieChartWidget(this);
-    rootLayout->addWidget(chartCard(QStringLiteral("近 7 日营收趋势（元）"),
-                                    trendChart_, this), 3);
-    rootLayout->addWidget(chartCard(QStringLiteral("充电桩状态分布"),
-                                    pileChart_, this), 2);
+    auto *chartsLayout = new QHBoxLayout;
+    chartsLayout->setSpacing(16);
+    chartsLayout->addWidget(chartCard(QStringLiteral("近 7 日营收趋势（元）"),
+                                     trendChart_, this), 3);
+    chartsLayout->addWidget(chartCard(QStringLiteral("充电桩状态分布"),
+                                     pileChart_, this), 2);
+    trendChart_->setMinimumHeight(250);
+    pileChart_->setMinimumHeight(250);
+    rootLayout->addLayout(chartsLayout, 1);
+    auto *footnote = new QLabel(QStringLiteral("运营数据由服务端同步 · 金额与充电量以实际订单为准"), this);
+    footnote->setProperty("uiClass", "muted");
+    rootLayout->addWidget(footnote);
 
     // Error line.
     errorLabel_ = new QLabel(this);

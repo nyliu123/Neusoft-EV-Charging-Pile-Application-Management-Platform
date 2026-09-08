@@ -52,9 +52,7 @@ AdminStationDetailPage::AdminStationDetailPage(AdminApiClient *api, QWidget *par
     // Station info card.
     infoLabel_ = new QLabel(this);
     infoLabel_->setWordWrap(true);
-    infoLabel_->setStyleSheet(QStringLiteral(
-        "QLabel { background: #f5f7fa; color: #37474f; border-radius: 6px;"
-        "  padding: 12px 14px; font-size: 13px; }"));
+    infoLabel_->setProperty("uiClass", "stationMeta");
     rootLayout->addWidget(infoLabel_);
 
     // Pile table.
@@ -87,9 +85,7 @@ AdminStationDetailPage::AdminStationDetailPage(AdminApiClient *api, QWidget *par
     // Loading overlay — centred in the table area.
     loadingOverlay_ = new QLabel(table_);
     loadingOverlay_->setAlignment(Qt::AlignCenter);
-    loadingOverlay_->setStyleSheet(QStringLiteral(
-        "QLabel { background: rgba(255,255,255,200); color: #409eff;"
-        "  font-size: 14px; border-radius: 8px; }"));
+    loadingOverlay_->setProperty("uiClass", "loadingOverlay");
     loadingOverlay_->hide();
 
     connect(backButton_, &QPushButton::clicked, this,
@@ -201,7 +197,7 @@ void AdminStationDetailPage::fillTable(const QJsonArray &piles)
         } else {
             auto *placeholder = new QLabel(QStringLiteral("—"), table_);
             placeholder->setAlignment(Qt::AlignCenter);
-            placeholder->setStyleSheet(QStringLiteral("QLabel { color: #c0c4cc; }"));
+            placeholder->setProperty("uiClass", "muted");
             table_->setCellWidget(row, kColumnAction, placeholder);
         }
     }

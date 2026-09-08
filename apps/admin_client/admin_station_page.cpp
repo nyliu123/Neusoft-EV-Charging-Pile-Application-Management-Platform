@@ -81,9 +81,7 @@ AdminStationPage::AdminStationPage(AdminApiClient *api, QWidget *parent)
     // Loading overlay — centred in the table area.
     loadingOverlay_ = new QLabel(table_);
     loadingOverlay_->setAlignment(Qt::AlignCenter);
-    loadingOverlay_->setStyleSheet(QStringLiteral(
-        "QLabel { background: rgba(255,255,255,200); color: #409eff;"
-        "  font-size: 14px; border-radius: 8px; }"));
+    loadingOverlay_->setProperty("uiClass", "loadingOverlay");
     loadingOverlay_->hide();
 
     connect(refreshButton_, &QPushButton::clicked, this, &AdminStationPage::loadStations);

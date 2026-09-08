@@ -4,6 +4,7 @@
 #include <QLabel>
 #include <QHBoxLayout>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPaintEvent>
 #include <QVBoxLayout>
 
@@ -88,10 +89,10 @@ void LineChartWidget::paintEvent(QPaintEvent *)
 {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.fillRect(rect(), QColor(0xfc, 0xfd, 0xfe));
+    painter.fillRect(rect(), QColor("#ffffff"));
 
     if (points_.isEmpty()) {
-        painter.setPen(QColor(0x9e, 0x9e, 0x9e));
+        painter.setPen(QColor("#6e6e76"));
         painter.drawText(rect(), Qt::AlignCenter, QStringLiteral("暂无数据"));
         return;
     }
@@ -122,9 +123,9 @@ void LineChartWidget::paintEvent(QPaintEvent *)
     for (int i = 0; i <= divisions; ++i) {
         const double ratio = double(i) / divisions;
         const double y = chartArea.bottom() - chartArea.height() * ratio;
-        painter.setPen(QPen(QColor(0xe8, 0xec, 0xf0), 1));
+        painter.setPen(QPen(QColor("#ebebf0"), 1));
         painter.drawLine(QPointF(chartArea.left(), y), QPointF(chartArea.right(), y));
-        painter.setPen(QColor(0x9e, 0x9e, 0x9e));
+        painter.setPen(QColor("#6e6e76"));
         const QString label = QString::number(maxValue * ratio, 'f', maxValue < 10 ? 1 : 0);
         painter.drawText(QRectF(0, y - 8, marginLeft - 8, 16),
                          Qt::AlignRight | Qt::AlignVCenter, label);
@@ -144,32 +145,48 @@ void LineChartWidget::paintEvent(QPaintEvent *)
         linePoints.append(QPointF(x, y));
 
         if (i % labelEvery == 0 || i == count - 1) {
-            painter.setPen(QColor(0x9e, 0x9e, 0x9e));
+            painter.setPen(QColor("#6e6e76"));
             painter.drawText(QRectF(x - 40, chartArea.bottom() + 4, 80, 16),
                              Qt::AlignHCenter | Qt::AlignVCenter, points_[i].first);
         }
     }
 
+    // A subtle area fill supports the trend without changing the plotted values.
+    if (linePoints.size() > 1) {
+        QPainterPath area;
+        area.moveTo(linePoints.first().x(), chartArea.bottom());
+        for (const auto &point : linePoints) area.lineTo(point);
+        area.lineTo(linePoints.last().x(), chartArea.bottom());
+        area.closeSubpath();
+        QLinearGradient fill(chartArea.topLeft(), chartArea.bottomLeft());
+        fill.setColorAt(0, QColor(0, 122, 255, 48));
+        fill.setColorAt(1, QColor(0, 122, 255, 4));
+        painter.fillPath(area, fill);
+    }
     // Polyline + dots.
-    painter.setPen(QPen(QColor(0x19, 0x76, 0xd2), 2));
+    painter.setPen(QPen(QColor("#007aff"), 2));
     painter.setBrush(Qt::NoBrush);
     painter.drawPolyline(linePoints.constData(), linePoints.size());
 
     painter.setPen(Qt::NoPen);
-    painter.setBrush(QColor(0x19, 0x76, 0xd2));
+    painter.setBrush(QColor("#007aff"));
     for (const QPointF &point : linePoints) {
         painter.drawEllipse(point, 3.0, 3.0);
     }
 
     // Value label above the last point.
     const QPointF lastPoint = linePoints.last();
-    painter.setPen(QColor(0x0d, 0x47, 0xa1));
+    painter.setPen(QColor("#0061c6"));
     QFont boldFont = painter.font();
     boldFont.setBold(true);
     painter.setFont(boldFont);
-    painter.drawText(QRectF(lastPoint.x() - 60, lastPoint.y() - 24, 120, 16),
+    const QString lastLabel = QString::number(points_.last().second, 'f', 2) + unit_;
+    const qreal labelWidth = painter.fontMetrics().horizontalAdvance(lastLabel) + 8;
+    const qreal labelLeft = qBound(0.0, lastPoint.x() - labelWidth / 2,
+                                  qMax(0.0, width() - labelWidth));
+    painter.drawText(QRectF(labelLeft, lastPoint.y() - 24, labelWidth, 20),
                      Qt::AlignHCenter | Qt::AlignVCenter,
-                     QString::number(points_.last().second, 'f', 2) + unit_);
+                     lastLabel);
 }
 
 PieChartWidget::PieChartWidget(QWidget *parent)
@@ -188,14 +205,14 @@ void PieChartWidget::paintEvent(QPaintEvent *)
 {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.fillRect(rect(), QColor(0xfc, 0xfd, 0xfe));
+    painter.fillRect(rect(), QColor("#ffffff"));
 
     double total = 0.0;
     for (const Slice &slice : slices_) {
         total += slice.value;
     }
     if (slices_.isEmpty() || total <= 0.0) {
-        painter.setPen(QColor(0x9e, 0x9e, 0x9e));
+        painter.setPen(QColor("#6e6e76"));
         painter.drawText(rect(), Qt::AlignCenter, QStringLiteral("暂无数据"));
         return;
     }
@@ -223,7 +240,7 @@ void PieChartWidget::paintEvent(QPaintEvent *)
     // Donut hole + total in the middle.
     const double hole = diameter * 0.55;
     painter.setPen(Qt::NoPen);
-    painter.setBrush(QColor(0xfc, 0xfd, 0xfe));
+    painter.setBrush(QColor("#ffffff"));
     painter.drawEllipse(center, hole / 2, hole / 2);
 
     QFont boldFont = painter.font();

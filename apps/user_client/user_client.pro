@@ -8,6 +8,7 @@ include($$PLATFORM_ROOT/config/common.pri)
 
 INCLUDEPATH += $$PLATFORM_ROOT/src
 HEADERS += \
+    $$PLATFORM_ROOT/src/client_ui/apple_widgets.h \
     navigation_map_dialog.h \
     charge_flow_widget.h \
     order_list_widget.h \

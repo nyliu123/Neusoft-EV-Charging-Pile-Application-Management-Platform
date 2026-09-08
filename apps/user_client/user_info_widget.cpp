@@ -1,4 +1,5 @@
 #include "user_info_widget.h"
+#include "client_ui/apple_widgets.h"
 
 #include "user_api_client.h"
 #include "user_session_state.h"
@@ -61,7 +62,7 @@ UserInfoWidget::UserInfoWidget(ev::UserApiClient *api, QWidget *parent)
     setObjectName(QStringLiteral("userInfoRoot"));
 
     auto *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(28, 22, 28, 22);
+    mainLayout->setContentsMargins(0, 8, 0, 0);
     mainLayout->setSpacing(18);
 
     auto *header = new QHBoxLayout;
@@ -128,7 +129,7 @@ UserInfoWidget::UserInfoWidget(ev::UserApiClient *api, QWidget *parent)
     auto *operationLayout = new QHBoxLayout(operationCard);
     operationLayout->setContentsMargins(26, 18, 26, 18);
     auto *operationHint = new QLabel(
-        QStringLiteral("首屏使用登录缓存；如需获取服务端最新数据，请点击刷新。"), operationCard);
+        QStringLiteral("在这里管理个人资料与充电钱包。完成充值后，即可返回充电页面继续操作。"), operationCard);
     operationHint->setWordWrap(true);
     operationHint->setProperty("uiClass", "muted");
     operationLayout->addWidget(operationHint);
@@ -155,14 +156,14 @@ void UserInfoWidget::refreshFromSession()
 
     QPixmap avatar(session.avatarPath());
     if (avatar.isNull()) {
-        avatar = QPixmap(QStringLiteral(":/images/default-avatar.svg"));
-    }
-    if (avatar.isNull()) {
-        avatarLabel_->setPixmap({});
-        avatarLabel_->setText(QStringLiteral("默认头像"));
+        // A vector fallback also works on Qt installations without the SVG image plugin.
+        avatarLabel_->setText({});
+        avatarLabel_->setPixmap(ev::appSymbolIcon(ev::AppSymbol::Person).pixmap(56, 56));
+        avatarLabel_->setAccessibleName(QStringLiteral("默认头像"));
         avatarLabel_->setProperty("empty", true);
     } else {
         avatarLabel_->setText({});
+        avatarLabel_->setAccessibleName(QStringLiteral("用户头像"));
         avatarLabel_->setProperty("empty", false);
         avatarLabel_->setPixmap(avatar.scaled(avatarLabel_->size(),
             Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation));
