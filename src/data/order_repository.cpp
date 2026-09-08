@@ -68,9 +68,9 @@ Result<QVector<OrderRecord>> OrderRepository::findByUser(
     QSqlDatabase &database, qint64 userId) const
 {
     QSqlQuery query(database);
-    query.prepare(baseSelectSql()
+    query.prepare(joinedSelectSql()
                   + QStringLiteral(" WHERE o.user_id = ? "
-                                   "ORDER BY o.reserve_time DESC"));
+                                   "ORDER BY o.reserve_time DESC, o.order_id DESC"));
     query.addBindValue(userId);
     if (!query.exec()) {
         return Result<QVector<OrderRecord>>::fail(ErrorCode::StorageError,

@@ -11,6 +11,7 @@ include($$PLATFORM_ROOT/config/common.pri)
 INCLUDEPATH += $$PLATFORM_ROOT/src
 
 HEADERS += \
+    order_service.h \
     admin_auth_service.h \
     admin_seeder.h \
     charge_service.h \
@@ -20,6 +21,7 @@ HEADERS += \
     user_service.h
 
 SOURCES += \
+    order_service.cpp \
     admin_auth_service.cpp \
     admin_seeder.cpp \
     charge_service.cpp \

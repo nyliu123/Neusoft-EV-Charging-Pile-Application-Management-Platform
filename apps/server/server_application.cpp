@@ -8,6 +8,7 @@
 #include "services/admin_seeder.h"
 #include "services/charge_service.h"
 #include "services/station_service.h"
+#include "services/order_service.h"
 #include "services/user_service.h"
 
 #include <QDebug>
@@ -243,6 +244,23 @@ void ServerApplication::processUserRequest(QTcpSocket *socket, const Frame &fram
     const QString type = data.value(QStringLiteral("type")).toString();
     const QJsonObject params = data.value(QStringLiteral("params")).toObject();
     const UserService service;
+
+    if (type == QStringLiteral("query_orders")) {
+        if (adminSessions_.contains(sessionId)) {
+            sendUserResponse(socket, requestId, false, QStringLiteral("UNAUTHORIZED"),
+                             QStringLiteral("请使用用户账号查询个人订单"));
+            return;
+        }
+        // User identity is resolved above; client-supplied user_id is never trusted.
+        const auto result = OrderService().queryOrders(mainDatabase_, userId);
+        if (result.code == ErrorCode::AccountFrozen || result.code == ErrorCode::Unauthorized) {
+            sessionManager_.remove(sessionId);
+            connectionSessions_[socket].remove(sessionId);
+        }
+        sendUserResponse(socket, requestId, result.success, errorCodeName(result.code),
+                         result.message, result.data);
+        return;
+    }
 
     if (type == QStringLiteral("user_info")) {
         const auto result = service.queryUserInfo(mainDatabase_, userId);

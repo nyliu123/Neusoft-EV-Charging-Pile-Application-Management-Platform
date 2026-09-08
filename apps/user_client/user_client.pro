@@ -9,6 +9,7 @@ include($$PLATFORM_ROOT/config/common.pri)
 INCLUDEPATH += $$PLATFORM_ROOT/src
 HEADERS += \
     charge_flow_widget.h \
+    order_list_widget.h \
     phone_login_widget.h \
     station_search_widget.h \
     user_api_client.h \
@@ -18,6 +19,7 @@ HEADERS += \
     $$PLATFORM_ROOT/src/client_ui/animated_combo_box.h \
     $$PLATFORM_ROOT/src/client_ui/client_style.h
 SOURCES += \
+    order_list_widget.cpp \
     main.cpp \
     charge_flow_widget.cpp \
     phone_login_widget.cpp \

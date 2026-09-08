@@ -21,6 +21,7 @@ public:
     explicit UserApiClient(PlatformClient *client, QObject *parent = nullptr);
 
     bool queryUserInfo(QObject *context, Callback callback);
+    bool queryOrders(QObject *context, Callback callback);
     bool updateNickname(const QString &nickname, QObject *context, Callback callback);
     bool updateAvatar(const QByteArray &jpegData, QObject *context, Callback callback);
     bool recharge(qint64 amountCent, QObject *context, Callback callback);
