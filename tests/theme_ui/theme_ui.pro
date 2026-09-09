@@ -1,4 +1,4 @@
-QT += core gui widgets network testlib webenginewidgets
+QT += core gui widgets network testlib webenginewidgets svg
 TEMPLATE = app
 CONFIG += testcase
 TARGET = ev_theme_ui_tests
@@ -14,6 +14,7 @@ SOURCES -= $$PLATFORM_ROOT/apps/user_client/main.cpp $$PLATFORM_ROOT/apps/admin_
 HEADERS += $$files($$PLATFORM_ROOT/apps/user_client/*.h) \
     $$files($$PLATFORM_ROOT/apps/admin_client/*.h) \
     $$files($$PLATFORM_ROOT/src/client_ui/*.h)
-RESOURCES += $$PLATFORM_ROOT/apps/admin_client/admin_client.qrc
+RESOURCES += $$PLATFORM_ROOT/apps/admin_client/admin_client.qrc \
+    $$PLATFORM_ROOT/apps/user_client/user_client.qrc
 LIBS += -L$$PLATFORM_BUILD_ROOT/lib -lev_network -lev_common
 PRE_TARGETDEPS += $$PLATFORM_BUILD_ROOT/lib/libev_network.a $$PLATFORM_BUILD_ROOT/lib/libev_common.a

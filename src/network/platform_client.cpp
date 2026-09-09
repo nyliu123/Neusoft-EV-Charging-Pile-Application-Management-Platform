@@ -18,7 +18,7 @@ PlatformClient::PlatformClient(QString clientName, QObject *parent)
     loginTimer_.setInterval(10000);
     sessionHeartbeatTimer_.setInterval(30000);
     sessionResponseTimer_.setSingleShot(true);
-    sessionResponseTimer_.setInterval(3000);
+    sessionResponseTimer_.setInterval(10000);
 
     connect(&socket_, &QTcpSocket::connected, this, [this] {
         reconnectAttempt_ = 0;
@@ -30,16 +30,24 @@ PlatformClient::PlatformClient(QString clientName, QObject *parent)
         failPendingLogin(QStringLiteral("CONNECTION_LOST"),
                          QStringLiteral("网络连接已断开，请稍后重试"));
         const bool hadSession = !sessionId_.isEmpty();
-        clearUserSession();
         if (hadSession) {
-            emit sessionExpired(QStringLiteral("登录已过期，请重新登录"));
+            sessionHeartbeatTimer_.stop();
+            sessionResponseTimer_.stop();
+            heartbeatRequestId_.clear();
+            logoutRequestId_.clear();
+            sessionRecoveryPending_ = true;
+            setState(State::Disconnected,
+                     QStringLiteral("检测到网络波动，正在恢复当前会话..."));
+        } else {
+            setState(State::Disconnected, QStringLiteral("与服务端断开"));
         }
-        setState(State::Disconnected, QStringLiteral("与服务端断开"));
         scheduleReconnect();
     });
     connect(&socket_, &QTcpSocket::errorOccurred, this,
             [this](QAbstractSocket::SocketError) {
-        setState(State::Disconnected, socket_.errorString());
+        setState(State::Disconnected, sessionId_.isEmpty()
+            ? socket_.errorString()
+            : QStringLiteral("检测到网络波动，正在恢复当前会话..."));
         scheduleReconnect();
     });
     connect(&reconnectTimer_, &QTimer::timeout, this, &PlatformClient::reconnectNow);
@@ -51,8 +59,13 @@ PlatformClient::PlatformClient(QString clientName, QObject *parent)
             this, &PlatformClient::sendSessionHeartbeat);
     connect(&sessionResponseTimer_, &QTimer::timeout, this, [this] {
         if (!heartbeatRequestId_.isEmpty()) {
-            clearUserSession();
-            emit sessionExpired(QStringLiteral("登录已过期，请重新登录"));
+            sessionHeartbeatTimer_.stop();
+            heartbeatRequestId_.clear();
+            sessionRecoveryPending_ = true;
+            setState(State::Disconnected,
+                     QStringLiteral("检测到网络波动，正在恢复当前会话..."));
+            socket_.abort();
+            scheduleReconnect();
             return;
         }
         if (!logoutRequestId_.isEmpty()) {
@@ -227,6 +240,7 @@ void PlatformClient::activateUserSession(const QString &sessionId)
     if (sessionId_.isEmpty()) {
         return;
     }
+    sessionRecoveryPending_ = false;
     sessionHeartbeatTimer_.start();
     sendSessionHeartbeat();
 }
@@ -257,6 +271,7 @@ void PlatformClient::clearUserSession()
     sessionId_.clear();
     heartbeatRequestId_.clear();
     logoutRequestId_.clear();
+    sessionRecoveryPending_ = false;
 }
 
 void PlatformClient::readFrames()
@@ -289,8 +304,13 @@ void PlatformClient::readFrames()
             }
             const QJsonObject data = result.frame.payload.value(QStringLiteral("data")).toObject();
             const QString version = data.value(QStringLiteral("server_version")).toString();
-            setState(State::Ready, QStringLiteral("服务可用，协议握手成功"));
+            setState(State::Ready, sessionRecoveryPending_ && !sessionId_.isEmpty()
+                ? QStringLiteral("检测到网络波动，正在恢复当前会话...")
+                : QStringLiteral("服务可用，协议握手成功"));
             emit healthCheckSucceeded(version);
+            if (sessionRecoveryPending_ && !sessionId_.isEmpty()) {
+                sendSessionHeartbeat();
+            }
             continue;
         }
         if (result.frame.messageType == static_cast<quint32>(MessageType::LoginResponse)) {
@@ -344,6 +364,10 @@ void PlatformClient::readFrames()
                 clearUserSession();
                 emit sessionExpired(message.isEmpty()
                     ? QStringLiteral("登录已过期，请重新登录") : message);
+            } else if (sessionRecoveryPending_) {
+                sessionRecoveryPending_ = false;
+                sessionHeartbeatTimer_.start();
+                setState(State::Ready, QStringLiteral("当前会话已恢复"));
             }
             continue;
         }

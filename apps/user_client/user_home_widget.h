@@ -27,7 +27,6 @@ signals:
     void logoutRequested();
 
 private:
-    QLabel *successMessage_ = nullptr;
     ChargeFlowWidget *chargeFlowWidget_ = nullptr;
     QTabWidget *tabs_ = nullptr;
     OrderListWidget *orderListWidget_ = nullptr;

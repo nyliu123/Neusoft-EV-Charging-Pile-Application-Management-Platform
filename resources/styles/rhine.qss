@@ -89,6 +89,7 @@ QRadioButton::indicator, QCheckBox::indicator { width: 14px; height: 14px; borde
 QRadioButton::indicator { border-radius: 8px; }
 QRadioButton::indicator:checked, QCheckBox::indicator:checked { background: #76954b; border: 2px solid #b7ce8e; }
 QRadioButton:focus, QCheckBox:focus { color: #49682e; }
+QLabel[uiClass="stationHotReview"] { background: #fff0df; color: #b93d28; border-radius: 2px; padding: 4px 7px; font-size: 11px; }
 QLabel#profileAvatar { background: #e4ebd8; border: 1px solid #bfcca9; border-radius: 2px; color: #62754c; }
 QLabel[uiClass="orderStatus"] { border-radius: 2px; padding: 5px 12px; font-weight: 600; background: #e6eadf; color: #5a6650; }
 QLabel[orderStatus="reserved"] { background: #f2e9cc; color: #846321; }

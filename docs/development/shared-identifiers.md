@@ -127,7 +127,7 @@
 
 评分摘要 `rating` 附在 `station_list` 的每个站对象和 `station_detail` 的 `station`
 对象上：`{ avg, count, tier, hot }`，无评论时 avg/tier/hot 为 null、count 为 0。
-`avg` 为 0~10 的一维小数（星 ×2）；`tier` 档位固定五档：`≥9 夯 / ≥7 顶级 /
+`avg` 为 0~5 的一维小数；`tier` 档位固定五档：`≥4.5 夯 / ≥3.5 顶级 /
 ≥5 人上人 / ≥3 拉 / <3 拉完了`；`hot` 为点赞最高的评论 `{ nickname, content }`。
 
 评论数据存于 `station_comments`（UNIQUE(station_id, user_id)）与 `comment_likes`

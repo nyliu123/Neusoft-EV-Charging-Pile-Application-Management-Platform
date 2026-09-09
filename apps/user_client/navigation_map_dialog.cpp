@@ -361,6 +361,13 @@ void NavigationMapDialog::renderRoute(const QVector<QPointF> &route, double dist
         routeJson.append(QJsonArray {coordinate.x(), coordinate.y()});
     }
     const int minutes = qMax(1, qRound(durationSeconds / 60.0));
+    const int hours = minutes / 60;
+    const int remainingMinutes = minutes % 60;
+    const QString formattedDuration = hours == 0
+        ? QStringLiteral("%1 分钟").arg(minutes)
+        : remainingMinutes == 0
+            ? QStringLiteral("%1 小时").arg(hours)
+            : QStringLiteral("%1 小时 %2 分钟").arg(hours).arg(remainingMinutes);
     const QString modeColor = mode_->currentIndex() == 1 ? QStringLiteral("#237746")
         : mode_->currentIndex() == 2 ? QStringLiteral("#9653c4")
                                      : QStringLiteral("#007aff");
@@ -388,10 +395,10 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#f5f5f7;fon
 <div id="summary" class="summary"><div class="summary-title">路线详情</div><div id="modeDetail"></div><div id="distanceDetail"></div><div id="durationDetail"></div></div><div class="attribution">© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a> · Route: Valhalla</div>
 <div id="bottomControls"><div id="scaleControl"><span id="scaleText"></span><div id="scaleLine"></div></div><div id="zoomControls"><button id="zoomOut" title="缩小">−</button><span id="zoomPercent">100%</span><button id="zoomIn" title="放大">+</button><button id="resetZoom" title="重置初始显示">重置</button></div></div></div>
 <script>
-const routeCoordinates=__ROUTE__,tileTemplate=__TILES__,modeName=__MODE__,routeDistance=__DISTANCE_TEXT__,originAddress=__ORIGIN_ADDRESS__,destinationAddress=__DESTINATION_ADDRESS__;
+const routeCoordinates=__ROUTE__,tileTemplate=__TILES__,modeName=__MODE__,routeDistance=__DISTANCE_TEXT__,routeDuration=__DURATION_TEXT__,originAddress=__ORIGIN_ADDRESS__,destinationAddress=__DESTINATION_ADDRESS__;
 const baseZoom=__ZOOM__,initialCenterX=__CENTER_X__,initialCenterY=__CENTER_Y__,zoomLevels=[25,50,75,100,125,150,200,300,400,500,750,1000,1500,2000];let centerX=initialCenterX,centerY=initialCenterY,zoomPercent=100,dragging=false,lastX=0,lastY=0,frame=0;
 const map=document.getElementById('map'),tiles=document.getElementById('tiles'),routeLine=document.getElementById('route');
-document.getElementById('modeDetail').textContent='出行方式：'+modeName;document.getElementById('distanceDetail').textContent='路线距离：'+routeDistance;document.getElementById('durationDetail').textContent='预计耗时：约 __MINUTES__ 分钟';document.getElementById('startLabel').textContent=originAddress;document.getElementById('endLabel').textContent=destinationAddress;
+document.getElementById('modeDetail').textContent='出行方式：'+modeName;document.getElementById('distanceDetail').textContent='路线距离：'+routeDistance;document.getElementById('durationDetail').textContent='预计耗时：'+routeDuration;document.getElementById('startLabel').textContent=originAddress;document.getElementById('endLabel').textContent=destinationAddress;
 function normalized(coordinate){const lon=coordinate[0],lat=Math.max(-85.05112878,Math.min(85.05112878,coordinate[1]));const sine=Math.sin(lat*Math.PI/180);return [(lon+180)/360,.5-Math.log((1+sine)/(1-sine))/(4*Math.PI)]}
 const normalizedRoute=routeCoordinates.map(normalized);
 function worldSize(){return 256*Math.pow(2,baseZoom)*(zoomPercent/100)}
@@ -421,6 +428,7 @@ window.navigationMapState={get centerX(){return centerX},get centerY(){return ce
     html.replace(QStringLiteral("__TILES__"), jsonLiteral(tileTemplate()));
     html.replace(QStringLiteral("__MODE__"), jsonLiteral(mode_->currentText()));
     html.replace(QStringLiteral("__DISTANCE_TEXT__"), jsonLiteral(formattedDistance));
+    html.replace(QStringLiteral("__DURATION_TEXT__"), jsonLiteral(formattedDuration));
     html.replace(QStringLiteral("__ORIGIN_ADDRESS__"), jsonLiteral(
         originAddress_.isEmpty() ? QStringLiteral("当前搜索位置") : originAddress_));
     html.replace(QStringLiteral("__DESTINATION_ADDRESS__"), jsonLiteral(
@@ -428,7 +436,6 @@ window.navigationMapState={get centerX(){return centerX},get centerY(){return ce
     html.replace(QStringLiteral("__ZOOM__"), QString::number(zoom));
     html.replace(QStringLiteral("__CENTER_X__"), QString::number(center.x() / fittedWorldSize, 'g', 16));
     html.replace(QStringLiteral("__CENTER_Y__"), QString::number(center.y() / fittedWorldSize, 'g', 16));
-    html.replace(QStringLiteral("__MINUTES__"), QString::number(minutes));
 
     connect(view_, &QWebEngineView::loadFinished, this, [this](bool ok) {
         if (!ok) {

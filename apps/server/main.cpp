@@ -10,6 +10,20 @@
 
 namespace {
 
+void applyAiConfiguration(QSettings &settings)
+{
+    const auto apply = [&settings](const char *environmentName, const char *settingName) {
+        const QByteArray value = settings.value(QString::fromLatin1(settingName)).toString().trimmed().toUtf8();
+        if (!value.isEmpty()) {
+            qputenv(environmentName, value);
+        }
+    };
+    apply("EV_AI_API_KEY", "ai/api_key");
+    apply("EV_AI_BASE_URL", "ai/base_url");
+    apply("EV_AI_PROVIDER", "ai/provider");
+    apply("EV_AI_MODEL", "ai/model");
+}
+
 QString defaultDatabasePath()
 {
 #ifdef EV_SERVER_SOURCE_DIR
@@ -67,6 +81,7 @@ int main(int argc, char *argv[])
         host = settings.value(QStringLiteral("network/tcp_host"), host).toString();
         port = settings.value(QStringLiteral("network/tcp_port"), port).toUInt();
         databasePath = settings.value(QStringLiteral("database/path"), databasePath).toString();
+        applyAiConfiguration(settings);
     }
     if (parser.isSet(hostOption)) {
         host = parser.value(hostOption);

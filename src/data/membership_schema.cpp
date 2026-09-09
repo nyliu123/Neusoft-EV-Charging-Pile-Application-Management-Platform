@@ -16,10 +16,18 @@ Result<int> migrateMembership(QSqlDatabase &db)
         "CREATE TABLE IF NOT EXISTS membership_events (event_id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(user_id), event_type TEXT NOT NULL, terms_json TEXT NOT NULL, created_at INTEGER NOT NULL)",
         "CREATE TABLE IF NOT EXISTS membership_subscriptions (subscription_id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL UNIQUE REFERENCES users(user_id), plan_id INTEGER NOT NULL REFERENCES membership_plans(plan_id), version INTEGER NOT NULL, price_cent INTEGER NOT NULL, discount_bps INTEGER NOT NULL, next_due INTEGER NOT NULL, status TEXT NOT NULL, updated_at INTEGER NOT NULL)",
         "CREATE TABLE IF NOT EXISTS knowledge_articles (article_id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, keywords TEXT NOT NULL, content TEXT NOT NULL, source TEXT NOT NULL, draft_version INTEGER NOT NULL DEFAULT 1, published_title TEXT NOT NULL DEFAULT '', published_keywords TEXT NOT NULL DEFAULT '', published_content TEXT NOT NULL DEFAULT '', published_source TEXT NOT NULL DEFAULT '', published_version INTEGER NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS ai_settings (settings_id INTEGER PRIMARY KEY CHECK(settings_id=1), api_key TEXT NOT NULL DEFAULT '', base_url TEXT NOT NULL DEFAULT 'https://api.moonshot.cn/v1', model TEXT NOT NULL DEFAULT 'kimi-k2.6', system_prompt TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL DEFAULT 0)",
         "CREATE TABLE IF NOT EXISTS feature_migrations (name TEXT PRIMARY KEY)"
     };
     auto fail = [&]() { QString error = q.lastError().text(); db.rollback(); return Result<int>::fail(ErrorCode::StorageError, error); };
     for (const auto &sql : ddl) if (!q.exec(sql)) return fail();
+    if (!q.exec("INSERT OR IGNORE INTO ai_settings(settings_id) VALUES(1)")) return fail();
+    const QString defaultSystemPrompt=QStringLiteral("你是轻充平台的AI助手小轻。请依据已发布的咨询知识回答充电操作、费用、会员和订单问题，使用简洁中文并标注参考资料编号。没有可靠依据时应明确说明，不编造价格、优惠或实时状态，不索取用户密码、手机号、钱包余额或支付资料。");
+    q.prepare("UPDATE ai_settings SET api_key=CASE WHEN api_key='' THEN ? ELSE api_key END,base_url=CASE WHEN base_url='' THEN ? ELSE base_url END,model=CASE WHEN model='' THEN ? ELSE model END,system_prompt=CASE WHEN system_prompt='' THEN ? ELSE system_prompt END WHERE settings_id=1");
+    const QString environmentApiKey=qEnvironmentVariable("EV_AI_API_KEY").trimmed();
+    q.addBindValue(environmentApiKey.isNull()?QStringLiteral(""):environmentApiKey);q.addBindValue(qEnvironmentVariable("EV_AI_BASE_URL","https://api.moonshot.cn/v1"));q.addBindValue(qEnvironmentVariable("EV_AI_MODEL","kimi-k2.6"));q.addBindValue(defaultSystemPrompt);
+    if(!q.exec())return fail();
+    if(!q.exec("UPDATE ai_settings SET model='kimi-k2.6' WHERE model='moonshot-v1-8k'"))return fail();
     QSet<QString> columns;
     if (!q.exec("PRAGMA table_info(orders)")) return fail();
     while (q.next()) columns.insert(q.value(1).toString());

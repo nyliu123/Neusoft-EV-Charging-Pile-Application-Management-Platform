@@ -9,6 +9,7 @@ class QPaintEvent;
 class QLabel;
 class QLineEdit;
 class QPushButton;
+class QToolButton;
 
 namespace ev {
 
@@ -52,7 +53,7 @@ private:
     QLineEdit *usernameEdit_ = nullptr;
     QLineEdit *passwordEdit_ = nullptr;
     QPushButton *loginButton_ = nullptr;
-    QPushButton *passwordToggle_ = nullptr;
+    QToolButton *passwordToggle_ = nullptr;
     QLabel *errorLabel_ = nullptr;
     QLabel *hintLabel_ = nullptr;
     QString pendingRequestId_;

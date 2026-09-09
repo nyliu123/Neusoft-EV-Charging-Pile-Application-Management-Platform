@@ -1,6 +1,7 @@
 #include "admin_login_dialog.h"
 #include "admin_session.h"
 #include "client_ui/apple_widgets.h"
+#include "client_ui/eye_line_edit.h"
 #include "common/protocol.h"
 #include "network/platform_client.h"
 #include <QHBoxLayout>
@@ -8,6 +9,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 namespace ev {
@@ -63,22 +65,18 @@ AdminLoginDialog::AdminLoginDialog(PlatformClient *client, QWidget *parent)
     auto *passwordLabel = new QLabel(QStringLiteral("密码"), card);
     passwordLabel->setProperty("uiClass", "formLabel");
     cardLayout->addWidget(passwordLabel);
-    auto *passwordLayout = new QHBoxLayout;
-    passwordLayout->setSpacing(6);
-    passwordEdit_ = new QLineEdit(card);
+    auto *passwordInput = new EyeLineEdit(card);
+    passwordEdit_ = passwordInput;
     passwordEdit_->setObjectName(QStringLiteral("adminPasswordInput"));
     passwordEdit_->setAccessibleName(QStringLiteral("管理员密码"));
     passwordEdit_->setEchoMode(QLineEdit::Password);
     passwordEdit_->setPlaceholderText(QStringLiteral("请输入密码"));
     passwordEdit_->setMaxLength(255);
     passwordEdit_->setText(rememberedPassword);
-    passwordLayout->addWidget(passwordEdit_, 1);
-    passwordToggle_ = new QPushButton(QStringLiteral("显示"), card);
-    passwordToggle_->setProperty("uiClass", "text");
-    passwordToggle_->setAutoDefault(false);
-    passwordToggle_->setCursor(Qt::PointingHandCursor);
-    passwordLayout->addWidget(passwordToggle_);
-    cardLayout->addLayout(passwordLayout);
+    passwordToggle_ = passwordInput->eyeButton();
+    passwordInput->setEyeVisible(false);
+    passwordToggle_->setToolTip(QStringLiteral("显示密码"));
+    cardLayout->addWidget(passwordEdit_);
     errorLabel_ = new QLabel(card);
     errorLabel_->setProperty("uiClass", "errorText");
     errorLabel_->setWordWrap(true);
@@ -104,12 +102,12 @@ AdminLoginDialog::AdminLoginDialog(PlatformClient *client, QWidget *parent)
     // ── Connections ───────────────────────────────────────────────────────
     connect(loginButton_, &QPushButton::clicked,
             this, &AdminLoginDialog::onLoginClicked);
-    connect(passwordToggle_, &QPushButton::clicked, this, [this]() {
+    connect(passwordToggle_, &QToolButton::clicked, this, [this]() {
         passwordVisible_ = !passwordVisible_;
         passwordEdit_->setEchoMode(passwordVisible_
             ? QLineEdit::Normal : QLineEdit::Password);
-        passwordToggle_->setText(passwordVisible_
-            ? QStringLiteral("隐藏") : QStringLiteral("显示"));
+        static_cast<EyeLineEdit *>(passwordEdit_)->setEyeVisible(passwordVisible_);
+        passwordToggle_->setToolTip(passwordVisible_ ? QStringLiteral("隐藏密码") : QStringLiteral("显示密码"));
     });
     connect(passwordEdit_, &QLineEdit::returnPressed,
             loginButton_, &QPushButton::click);

@@ -15,7 +15,9 @@
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QRadioButton>
 #include <QScrollArea>
+#include <QSpacerItem>
 #include <QStackedWidget>
 #include <QStringList>
 #include <QTableWidget>
@@ -62,11 +64,25 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
     listPageLayout->addWidget(heroBanner_);
     auto *searchCard = new QFrame(listPage_);
     searchCard->setObjectName(QStringLiteral("discoverySearch"));
-    auto *searchRow = new QHBoxLayout(searchCard);
-    searchRow->setContentsMargins(14, 12, 14, 12);
+    auto *searchCardLayout = new QVBoxLayout(searchCard);
+    searchCardLayout->setContentsMargins(14, 12, 14, 12);
+    searchCardLayout->setSpacing(8);
+    auto *locationModeRow = new QHBoxLayout;
+    locationModeRow->setSpacing(16);
+    auto *locationModeLabel = new QLabel(QStringLiteral("定位方式："), searchCard);
+    locationModeLabel->setProperty("uiClass", "muted");
+    listLocationButton_ = new QRadioButton(QStringLiteral("从列表中选择"), searchCard);
+    manualLocationButton_ = new QRadioButton(QStringLiteral("手动输入"), searchCard);
+    listLocationButton_->setChecked(true);
+    locationModeRow->addWidget(locationModeLabel);
+    locationModeRow->addWidget(listLocationButton_);
+    locationModeRow->addWidget(manualLocationButton_);
+    locationModeRow->addStretch();
+    searchCardLayout->addLayout(locationModeRow);
+    auto *searchRow = new QHBoxLayout;
     searchRow->setSpacing(12);
-    areaBox_ = new ev::AnimatedComboBox(listPage_);
-    areaBox_->addItem(QStringLiteral("当前区域"), QString());
+    areaBox_ = new ev::AnimatedComboBox(searchCard);
+    areaBox_->addItem(QStringLiteral("（无）"), QString());
     const QStringList stationProvinces {
         QStringLiteral("辽宁省"), QStringLiteral("北京市"),
         QStringLiteral("河北省"), QStringLiteral("山西省"),
@@ -84,19 +100,38 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
     for (const QString &province : stationProvinces) {
         areaBox_->addItem(province, province);
     }
-    addressEdit_ = new QLineEdit(listPage_);
+    areaBox_->setMinimumWidth(180);
+    areaBox_->setMaximumWidth(240);
+    addressEdit_ = new QLineEdit(searchCard);
     addressEdit_->setPlaceholderText(QStringLiteral("请输入当前位置，例如：大连市软件园路8号"));
     addressEdit_->setClearButtonEnabled(true);
-    searchButton_ = new QPushButton(QStringLiteral("搜索"), listPage_);
+    addressEdit_->hide();
+    searchButton_ = new QPushButton(QStringLiteral("搜索"), searchCard);
     searchButton_->setProperty("uiClass", "primary");
     searchRow->addWidget(areaBox_);
     searchRow->addWidget(addressEdit_, 1);
     searchRow->addWidget(searchButton_);
+    auto *searchRowSpacer = new QSpacerItem(0, 0, QSizePolicy::Expanding,
+                                             QSizePolicy::Minimum);
+    searchRow->addItem(searchRowSpacer);
+    searchButton_->hide();
+    searchCardLayout->addLayout(searchRow);
     listPageLayout->addWidget(searchCard);
     auto *resultHeading = new QHBoxLayout;
     auto *title = new QLabel(QStringLiteral("探索附近"), listPage_);
     title->setProperty("uiClass", "sectionTitle");
     resultHeading->addWidget(title);
+    distanceBox_ = new ev::AnimatedComboBox(listPage_);
+    distanceBox_->addItem(QStringLiteral("不限"), -1.0);
+    distanceBox_->addItem(QStringLiteral("1 公里"), 1.0);
+    distanceBox_->addItem(QStringLiteral("3 公里"), 3.0);
+    distanceBox_->addItem(QStringLiteral("5 公里"), 5.0);
+    distanceBox_->addItem(QStringLiteral("10 公里"), 10.0);
+    distanceBox_->addItem(QStringLiteral("20 公里"), 20.0);
+    distanceBox_->setCurrentIndex(0);
+    distanceBox_->setMinimumWidth(100);
+    distanceBox_->hide();
+    resultHeading->addWidget(distanceBox_);
     resultHeading->addStretch();
 
     statusLabel_ = new QLabel(listPage_);
@@ -109,7 +144,16 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
     scroll->setFrameShape(QFrame::NoFrame);
     stationGrid_ = new ev::AdaptiveStationGrid(scroll);
     scroll->setWidget(stationGrid_);
-    listPageLayout->addWidget(scroll, 1);
+    stationResultsPage_ = scroll;
+    resultPages_ = new QStackedWidget(listPage_);
+    resultPages_->addWidget(stationResultsPage_);
+    resultMessageLabel_ = new QLabel(resultPages_);
+    resultMessageLabel_->setAlignment(Qt::AlignCenter);
+    resultMessageLabel_->setProperty("uiClass", "sectionTitle");
+    resultMessageLabel_->setText(QStringLiteral("你似乎来到了没有充电站的荒漠～"));
+    resultPages_->addWidget(resultMessageLabel_);
+    resultPages_->setCurrentWidget(resultMessageLabel_);
+    listPageLayout->addWidget(resultPages_, 1);
     auto *attribution = new QLabel(QStringLiteral("输入位置或选择区域搜索 · 位置数据 © OpenStreetMap contributors"), listPage_);
     attribution->setProperty("uiClass", "muted");
     attribution->setWordWrap(true);
@@ -223,10 +267,40 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
 
     connect(searchButton_, &QPushButton::clicked, this, &StationSearchWidget::search);
     connect(addressEdit_, &QLineEdit::returnPressed, this, &StationSearchWidget::search);
+    connect(listLocationButton_, &QRadioButton::toggled, this,
+            [this, searchRow, searchRowSpacer](bool checked) {
+        areaBox_->setVisible(checked);
+        addressEdit_->setVisible(!checked);
+        searchButton_->setVisible(!checked);
+        distanceBox_->setVisible(!checked || areaBox_->currentIndex() > 0);
+        searchRowSpacer->changeSize(0, 0,
+            checked ? QSizePolicy::Expanding : QSizePolicy::Fixed,
+            QSizePolicy::Minimum);
+        searchRow->invalidate();
+        if (checked) {
+            areaBox_->setFocus();
+        } else {
+            addressEdit_->setFocus();
+        }
+    });
     connect(areaBox_, &QComboBox::activated, this, [this](int index) {
+        distanceBox_->setVisible(index > 0);
         if (index > 0) {
             addressEdit_->clear();
             search();
+        } else {
+            hasOriginLocation_ = false;
+            originAddress_.clear();
+            stationGrid_->clear();
+            statusLabel_->clear();
+            resultMessageLabel_->setText(QStringLiteral("你似乎来到了没有充电站的荒漠～"));
+            resultPages_->setCurrentWidget(resultMessageLabel_);
+        }
+    });
+    connect(distanceBox_, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [this] {
+        if (hasOriginLocation_) {
+            loadStations(true, originLongitude_, originLatitude_);
         }
     });
     connect(backButton, &QPushButton::clicked, this, [this] {
@@ -256,22 +330,28 @@ void StationSearchWidget::resizeEvent(QResizeEvent *event)
 void StationSearchWidget::refresh()
 {
     pages_->setCurrentWidget(listPage_);
+    listLocationButton_->setChecked(true);
     areaBox_->setCurrentIndex(0);
+    distanceBox_->setCurrentIndex(0);
+    distanceBox_->hide();
     addressEdit_->clear();
     hasOriginLocation_ = false;
     originAddress_.clear();
     stationGrid_->clear();
-    statusLabel_->setText(QStringLiteral("请选择区域或输入地址后搜索"));
+    statusLabel_->clear();
+    resultMessageLabel_->setText(QStringLiteral("你似乎来到了没有充电站的荒漠～"));
+    resultPages_->setCurrentWidget(resultMessageLabel_);
 }
 
 void StationSearchWidget::search()
 {
-    const QString manualAddress = addressEdit_->text().trimmed();
-    const QString address = !manualAddress.isEmpty()
-        ? manualAddress : areaBox_->currentData().toString();
+    const bool useList = listLocationButton_->isChecked();
+    const QString address = useList ? areaBox_->currentData().toString()
+                                    : addressEdit_->text().trimmed();
     if (address.isEmpty()) {
         QMessageBox::information(this, QStringLiteral("提示"),
-                                 QStringLiteral("请选择区域或输入地址"));
+                                 useList ? QStringLiteral("请从列表中选择区域")
+                                         : QStringLiteral("请输入当前位置"));
         return;
     }
     originAddress_ = address;
@@ -279,9 +359,11 @@ void StationSearchWidget::search()
     api_->geocode(address, this,
                   [this](bool success, const QJsonObject &result, const QString &message) {
         if (!success) {
+            setBusy(false);
             QMessageBox::warning(this, QStringLiteral("定位失败"),
                 message.isEmpty() ? QStringLiteral("地图服务暂不可用，请稍后重试") : message);
-            loadStations();
+            resultMessageLabel_->setText(QStringLiteral("定位失败，请稍后重试"));
+            resultPages_->setCurrentWidget(resultMessageLabel_);
             return;
         }
         loadStations(true, result.value(QStringLiteral("longitude")).toDouble(),
@@ -305,6 +387,8 @@ void StationSearchWidget::loadStations(bool hasLocation, double longitude, doubl
             statusLabel_->setProperty("tone", "error");
             statusLabel_->style()->unpolish(statusLabel_);
             statusLabel_->style()->polish(statusLabel_);
+            resultMessageLabel_->setText(QStringLiteral("充电站读取失败"));
+            resultPages_->setCurrentWidget(resultMessageLabel_);
             return;
         }
         renderStations(result, hasLocation);
@@ -314,16 +398,30 @@ void StationSearchWidget::loadStations(bool hasLocation, double longitude, doubl
 void StationSearchWidget::renderStations(const QJsonObject &result, bool locationAvailable)
 {
     stationGrid_->clear();
-    const QJsonArray stations = result.value(QStringLiteral("stations")).toArray();
+    const QJsonArray allStations = result.value(QStringLiteral("stations")).toArray();
+    QJsonArray stations;
+    const double radiusKm = distanceBox_->currentData().toDouble();
+    for (const QJsonValue &value : allStations) {
+        const QJsonValue distance = value.toObject().value(QStringLiteral("distance_km"));
+        if (distance.isDouble() && (radiusKm < 0.0 || distance.toDouble() <= radiusKm)) {
+            stations.append(value);
+        }
+    }
     statusLabel_->setProperty("tone", "muted");
     statusLabel_->style()->unpolish(statusLabel_);
     statusLabel_->style()->polish(statusLabel_);
     if (stations.isEmpty()) {
-        statusLabel_->setText(QStringLiteral("附近暂无充电站"));
+        statusLabel_->clear();
+        resultMessageLabel_->setText(QStringLiteral("你似乎来到了没有充电站的荒漠～"));
+        resultPages_->setCurrentWidget(resultMessageLabel_);
         return;
     }
+    resultPages_->setCurrentWidget(stationResultsPage_);
     statusLabel_->setText(locationAvailable
-        ? QStringLiteral("共找到 %1 个模拟站点，已按直线距离排序").arg(stations.size())
+        ? (radiusKm < 0.0
+              ? QStringLiteral("共找到 %1 个模拟站点").arg(stations.size())
+              : QStringLiteral("%1 公里内共找到 %2 个模拟站点")
+                    .arg(radiusKm, 0, 'g', 3).arg(stations.size()))
         : QStringLiteral("尚未定位或地图位置不可用，当前按站点编号展示 %1 个模拟站点")
               .arg(stations.size()));
     for (const QJsonValue &value : stations) {
@@ -338,25 +436,22 @@ void StationSearchWidget::renderStations(const QJsonObject &result, bool locatio
                   station.value(QStringLiteral("total_piles")).toInt())
             : QStringLiteral("暂无空闲 · 总共 %1").arg(
                   station.value(QStringLiteral("total_piles")).toInt());
-        QString ratingText;
+        double ratingValue = -1.0;
+        QString hotReview;
         const QJsonObject rating = station.value(QStringLiteral("rating")).toObject();
         if (rating.value(QStringLiteral("count")).toInt() > 0) {
-            ratingText = QStringLiteral("★ %1  %2")
-                .arg(rating.value(QStringLiteral("avg")).toDouble(), 0, 'f', 1)
-                .arg(rating.value(QStringLiteral("tier")).toString());
+            ratingValue = rating.value(QStringLiteral("avg")).toDouble();
             const QJsonObject hot = rating.value(QStringLiteral("hot")).toObject();
             if (!hot.isEmpty()) {
-                ratingText += QStringLiteral("    热评：%1").arg(
+                hotReview = QStringLiteral("“%1”").arg(
                     hot.value(QStringLiteral("content")).toString());
             }
-        } else {
-            ratingText = QStringLiteral("暂无评分");
         }
         auto *card = new ev::AppleStationCard(
             station.value(QStringLiteral("station_name")).toString(),
             station.value(QStringLiteral("address")).toString(), distanceText,
             QStringLiteral("¥%1/度").arg(station.value(QStringLiteral("price_per_kwh")).toDouble(), 0, 'f', 2),
-            availability, ratingText, idle > 0, listPage_);
+            availability, ratingValue, hotReview, idle > 0, listPage_);
         connect(card, &QPushButton::clicked, this, [this, station] {
             showStationDetail(station);
         });
@@ -475,7 +570,13 @@ void StationSearchWidget::setBusy(bool busy, const QString &message)
     areaBox_->setEnabled(!busy);
     addressEdit_->setEnabled(!busy);
     searchButton_->setEnabled(!busy);
-    searchButton_->setText(busy ? QStringLiteral("查询中…") : QStringLiteral("搜索"));
+    distanceBox_->setEnabled(!busy);
+    searchButton_->setText(QStringLiteral("搜索"));
+    if (busy) {
+        stationGrid_->clear();
+        resultMessageLabel_->setText(QStringLiteral("正在玩命加载中..."));
+        resultPages_->setCurrentWidget(resultMessageLabel_);
+    }
     if (!message.isEmpty()) {
         statusLabel_->setText(message);
     }
@@ -544,13 +645,10 @@ void StationSearchWidget::renderComments(const QJsonObject &result)
         card->setProperty("uiClass", "card");
         auto *cardLayout = new QVBoxLayout(card);
         cardLayout->setContentsMargins(12, 8, 12, 8);
-        auto *header = new QLabel(QStringLiteral("%1  ·  %2  ·  %3%4")
-            .arg(comment.value(QStringLiteral("nickname")).toString(),
-                 stars,
-                 comment.value(QStringLiteral("created_at")).toString(),
-                 isMine ? QStringLiteral("  ·  我的评论") : QString()), card);
-        header->setProperty("uiClass", "muted");
-        cardLayout->addWidget(header);
+        auto *headerRow=new QHBoxLayout;
+        auto *author=new QLabel(comment.value(QStringLiteral("nickname")).toString()+QStringLiteral("  ·"),card);author->setProperty("uiClass","muted");headerRow->addWidget(author);
+        auto *starLabel=new QLabel(stars,card);starLabel->setProperty("uiClass","commentStars");headerRow->addWidget(starLabel);
+        auto *meta=new QLabel(QStringLiteral("·  %1%2").arg(comment.value(QStringLiteral("created_at")).toString(),isMine?QStringLiteral("  ·  我的评论"):QString()),card);meta->setProperty("uiClass","muted");headerRow->addWidget(meta);headerRow->addStretch();cardLayout->addLayout(headerRow);
         auto *content = new QLabel(comment.value(QStringLiteral("content")).toString(), card);
         content->setWordWrap(true);
         cardLayout->addWidget(content);

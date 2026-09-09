@@ -22,7 +22,8 @@ public:
     AdminHandler(QSqlDatabase database, SessionManager &sessionManager);
 
     QJsonObject processQuery(const QString &type, const QJsonObject &params);
-    QJsonObject processAction(const QString &type, const QJsonObject &params);
+    QJsonObject processAction(const QString &type, const QJsonObject &params,
+                              qint64 authenticatedAdminId);
 
 private:
     // Queries (UML-035 ~ 038 / 040 / 041 / 043 / 046).

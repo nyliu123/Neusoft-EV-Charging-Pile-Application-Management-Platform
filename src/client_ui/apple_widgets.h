@@ -13,6 +13,7 @@
 #include <QStyleOptionButton>
 #include <QVBoxLayout>
 #include <QVector>
+#include <QtMath>
 
 namespace ev {
 
@@ -302,17 +303,76 @@ private:
     QString fullText_;
 };
 
+class StarRatingBar final : public QWidget {
+public:
+    explicit StarRatingBar(double rating, QWidget *parent = nullptr)
+        : QWidget(parent), rating_(qBound(0.0, rating, 5.0))
+    {
+        setFixedSize(96, 18);
+        setAccessibleName(QStringLiteral("评分 %1 / 5").arg(rating_, 0, 'f', 1));
+        setAttribute(Qt::WA_TransparentForMouseEvents);
+    }
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        QPainterPath stars;
+        constexpr qreal outerRadius = 7.5;
+        constexpr qreal innerRadius = 3.2;
+        constexpr qreal spacing = 19.0;
+        for (int star = 0; star < 5; ++star) {
+            QPainterPath path;
+            const QPointF center(star * spacing + outerRadius + 1.0, height() / 2.0);
+            for (int point = 0; point < 10; ++point) {
+                const qreal angle = -M_PI_2 + point * M_PI / 5.0;
+                const qreal radius = point % 2 == 0 ? outerRadius : innerRadius;
+                const QPointF vertex(center.x() + qCos(angle) * radius,
+                                     center.y() + qSin(angle) * radius);
+                if (point == 0) {
+                    path.moveTo(vertex);
+                } else {
+                    path.lineTo(vertex);
+                }
+            }
+            path.closeSubpath();
+            stars.addPath(path);
+        }
+        painter.setPen(QPen(QColor("#d7a43c"), 1.0));
+        painter.setBrush(QColor("#fff4d8"));
+        painter.drawPath(stars);
+        painter.save();
+        painter.setClipRect(QRectF(0, 0, width() * rating_ / 5.0, height()));
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor("#f2a900"));
+        painter.drawPath(stars);
+        painter.restore();
+    }
+private:
+    double rating_;
+};
+
 class AppleStationCard final : public QPushButton {
 public:
     AppleStationCard(const QString &name, const QString &address, const QString &distance,
                      const QString &price, const QString &availability, const QString &rating,
-                     bool available, QWidget *parent) : QPushButton(parent)
+                     bool available, QWidget *parent)
+        : AppleStationCard(name, address, distance, price, availability,
+                           -1.0, QString(), available, parent)
+    {
+        setAccessibleDescription(rating);
+    }
+    AppleStationCard(const QString &name, const QString &address, const QString &distance,
+                     const QString &price, const QString &availability, double rating,
+                     const QString &hotReview, bool available, QWidget *parent) : QPushButton(parent)
     {
         setProperty("uiClass", "stationCard");
         setProperty("available", available);
         setCursor(Qt::PointingHandCursor);
         const QString description = name + QStringLiteral("，") + address + QStringLiteral("，")
-            + distance + QStringLiteral("，") + price + QStringLiteral("，") + availability + QStringLiteral("，") + rating;
+            + distance + QStringLiteral("，") + price + QStringLiteral("，") + availability
+            + (rating >= 0.0 ? QStringLiteral("，评分 %1").arg(rating, 0, 'f', 1) : QString())
+            + (hotReview.isEmpty() ? QString() : QStringLiteral("，") + hotReview);
         setText(description);
         setAccessibleName(description);
         auto *column = new QVBoxLayout(this);
@@ -326,7 +386,10 @@ public:
         symbol->setFixedSize(44, 44);
         symbol->setAttribute(Qt::WA_TransparentForMouseEvents);
         top->addWidget(symbol);
-        top->addStretch();
+        auto *addressLabel = new AppleElidedLabel(address, this);
+        addressLabel->setProperty("uiClass", "muted");
+        addressLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
+        top->addWidget(addressLabel, 1);
         auto *distanceLabel = new QLabel(distance, this);
         distanceLabel->setProperty("uiClass", "distancePill");
         distanceLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
@@ -339,8 +402,26 @@ public:
             return label;
         };
         column->addWidget(elided(name, "stationTitle"));
-        column->addWidget(elided(address, "muted"));
-        column->addWidget(elided(rating, "stationRating"));
+        if (rating >= 0.0) {
+            auto *ratingRow = new QHBoxLayout;
+            ratingRow->setSpacing(6);
+            ratingRow->addWidget(new StarRatingBar(rating, this));
+            auto *scoreLabel = new QLabel(QString::number(rating, 'f', 1), this);
+            scoreLabel->setProperty("uiClass", "stationRating");
+            scoreLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
+            ratingRow->addWidget(scoreLabel);
+            ratingRow->addStretch();
+            column->addLayout(ratingRow);
+        } else {
+            column->addWidget(elided(QStringLiteral("暂无评分"), "stationRating"));
+        }
+        if (!hotReview.isEmpty()) {
+            auto *hotReviewLabel = elided(hotReview, "stationHotReview");
+            hotReviewLabel->setStyleSheet(QStringLiteral(
+                "background-color:#fff0df;color:#c43f2c;border-radius:8px;"
+                "padding:4px 7px;font-size:11px;"));
+            column->addWidget(hotReviewLabel);
+        }
         column->addStretch();
         auto *bottom = new QHBoxLayout;
         bottom->setSpacing(8);

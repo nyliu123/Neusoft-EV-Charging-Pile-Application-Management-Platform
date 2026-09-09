@@ -19,6 +19,8 @@ public:
     static Result<AdminInfo> authenticate(const QString &username,
                                           const QString &password,
                                           QSqlDatabase &database);
+    static Result<bool> verifyPassword(qint64 adminId, const QString &password,
+                                       QSqlDatabase &database);
 };
 
 } // namespace ev

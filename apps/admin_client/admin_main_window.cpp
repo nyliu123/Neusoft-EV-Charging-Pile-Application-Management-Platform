@@ -9,6 +9,7 @@
 #include "admin_station_page.h"
 #include "admin_user_page.h"
 #include "admin_membership_page.h"
+#include "client_ui/slide_toast.h"
 
 #include <QApplication>
 #include <QHBoxLayout>
@@ -67,7 +68,7 @@ void AdminMainWindow::setupUi()
     new QListWidgetItem(appSymbolIcon(AppSymbol::Person), QStringLiteral("用户管理"), nav_);
     new QListWidgetItem(appSymbolIcon(AppSymbol::Receipt), QStringLiteral("订单管理"), nav_);
     new QListWidgetItem(appSymbolIcon(AppSymbol::Person), QStringLiteral("会员套餐"), nav_);
-    new QListWidgetItem(appSymbolIcon(AppSymbol::Receipt), QStringLiteral("咨询知识库"), nav_);
+    new QListWidgetItem(appSymbolIcon(AppSymbol::Receipt), QStringLiteral("AI助手配置"), nav_);
     sidebarLayout->addWidget(nav_, 1);
     auto *railFooter = new QLabel(QStringLiteral("轻充管理端\n电动汽车充电服务平台"), sidebar);
     railFooter->setObjectName(QStringLiteral("terminalSidebarFooter"));
@@ -115,7 +116,7 @@ void AdminMainWindow::setupUi()
     orderPage_ = new AdminOrderPage(&api_, this);
     stack_->addWidget(orderPage_);
     membershipPage_ = new AdminMembershipPage(&api_,this);stack_->addWidget(membershipPage_);
-    knowledgePage_ = new AdminKnowledgePage(&api_,this);stack_->addWidget(knowledgePage_);
+    aiPage_ = new AdminAiPage(&api_,this);stack_->addWidget(aiPage_);
 
     // Station detail (UML-041): stacked but not present in the navigation.
     stationDetailPage_ = new AdminStationDetailPage(&api_, this);
@@ -168,9 +169,8 @@ void AdminMainWindow::setupConnections()
     connect(client_, &PlatformClient::stateChanged, this,
             [this](PlatformClient::State state, const QString &detail) {
                 connectionLabel_->setText(QStringLiteral("连接状态：%1").arg(detail));
-                statusBar()->showMessage(
-                    state == PlatformClient::State::Ready
-                        ? QStringLiteral("服务端可用") : detail);
+                Q_UNUSED(state)
+                statusBar()->showMessage(detail);
             });
 }
 
@@ -181,7 +181,7 @@ void AdminMainWindow::applySession(const AdminSession &session)
     client_->activateSession(session.sessionId);
     setWindowTitle(QStringLiteral("汽车充电管理平台 管理端 - %1").arg(session.username));
     userLabel_->setText(QStringLiteral("管理员：%1").arg(session.username));
-    statusBar()->showMessage(QStringLiteral("登录成功"), 3000);
+    SlideToast::show(this,QStringLiteral("登录成功"));
 }
 
 void AdminMainWindow::onNavigationChanged(int index)
@@ -208,8 +208,8 @@ void AdminMainWindow::refreshCurrentPage()
         orderPage_->reloadAll();
     } else if (current == membershipPage_) {
         membershipPage_->reload();
-    } else if (current == knowledgePage_) {
-        knowledgePage_->reload();
+    } else if (current == aiPage_) {
+        aiPage_->reload();
     } else if (current == stationDetailPage_) {
         stationDetailPage_->reload();
     }

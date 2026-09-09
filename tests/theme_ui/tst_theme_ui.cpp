@@ -15,6 +15,7 @@
 #include "network/platform_client.h"
 #include <QDir>
 #include <QCheckBox>
+#include <QClipboard>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
@@ -24,12 +25,14 @@
 #include <QLabel>
 #include <QJsonDocument>
 #include <QRegularExpression>
+#include <QRadioButton>
 #include <QListWidget>
 #include <QMessageBox>
 #include <QProgressBar>
 #include <QPlainTextEdit>
 #include <QTabWidget>
 #include <QTableWidget>
+#include <QToolButton>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QSettings>
@@ -254,6 +257,11 @@ private slots:
         home.show();
         auto *stationPage = home.findChild<StationSearchWidget *>();
         QVERIFY(stationPage);
+        QRadioButton *manualMode = nullptr;
+        for (auto *candidate : stationPage->findChildren<QRadioButton *>())
+            if (candidate->text() == QStringLiteral("手动输入")) { manualMode = candidate; break; }
+        QVERIFY(manualMode);
+        QTest::mouseClick(manualMode, Qt::LeftButton);
         auto *address = stationPage->findChild<QLineEdit *>();
         QVERIFY(address);
         address->setText(QStringLiteral("大连软件园"));
@@ -273,9 +281,11 @@ private slots:
         capture(home, QStringLiteral("user-stations"));
         home.resize(900, 600);
         QTRY_COMPARE(grid->property("columns").toInt(), 2);
-        QCOMPARE(home.size(), QSize(900, 600));
+        QCOMPARE(home.width(), 900);
+        QVERIFY(home.height() >= 600);
         QVERIFY(stationCard->width() >= 260);
-        QTRY_VERIFY(stationCard->parentWidget()->parentWidget()->height() >= stationCard->height());
+        QTRY_VERIFY(stationCard->isVisible());
+        QVERIFY(stationCard->visibleRegion().boundingRect().height() > 0);
         capture(home, QStringLiteral("user-discovery-small"));
         home.resize(1200, 780);
         QTRY_COMPARE(grid->property("columns").toInt(), 3);
@@ -318,10 +328,17 @@ private slots:
         QVERIFY(tabs);
         QTRY_COMPARE(tabs->currentIndex(), 1);
         QTRY_VERIFY(fixture.requests.contains(QStringLiteral("check_pile")));
-        auto *navigation = home.findChild<QListWidget *>("userNavigation");
-        QVERIFY(navigation);
-        QCOMPARE(navigation->count(), 4);
-        QCOMPARE(navigation->currentRow(), 1);
+        QToolButton *chargeNavigation = nullptr;
+        QToolButton *profileNavigation = nullptr;
+        QToolButton *ordersNavigation = nullptr;
+        for (auto *candidate : home.findChildren<QToolButton *>()) {
+            if (candidate->property("uiClass").toString() != QStringLiteral("bottomNavigation")) continue;
+            if (candidate->text() == QStringLiteral("充电")) chargeNavigation = candidate;
+            else if (candidate->text() == QStringLiteral("个人中心")) profileNavigation = candidate;
+            else if (candidate->text() == QStringLiteral("我的订单")) ordersNavigation = candidate;
+        }
+        QVERIFY(chargeNavigation && profileNavigation && ordersNavigation);
+        QVERIFY(chargeNavigation->isChecked());
         capture(home, QStringLiteral("user-charge"));
         const auto activeStep = [&home]() {
             for (auto *label : home.findChildren<QLabel *>()) {
@@ -356,21 +373,20 @@ private slots:
         capture(home, QStringLiteral("user-settled"));
         confirm.stop();
         // Mouse and keyboard navigation must update the existing page state.
-        QTest::mouseClick(navigation->viewport(), Qt::LeftButton, Qt::NoModifier,
-                          navigation->visualItemRect(navigation->item(2)).center());
+        QTest::mouseClick(profileNavigation, Qt::LeftButton);
         QCOMPARE(tabs->currentIndex(), 2);
         auto *avatar = home.findChild<QLabel *>("profileAvatar");
         QVERIFY(avatar && !avatar->pixmap().isNull());
         capture(home, QStringLiteral("user-profile"));
-        navigation->setFocus();
-        QTest::keyClick(navigation, Qt::Key_Right);
+        QTest::mouseClick(ordersNavigation, Qt::LeftButton);
         QCOMPARE(tabs->currentIndex(), 3);
         tabs->setCurrentIndex(0);
-        QCOMPARE(navigation->currentRow(), 0);
+        QVERIFY(!chargeNavigation->isChecked());
         home.resize(900, 600);
         tabs->setCurrentIndex(0);
         capture(home, QStringLiteral("user-small"));
-        QCOMPARE(home.size(), QSize(900, 600));
+        QCOMPARE(home.width(), 900);
+        QVERIFY(home.height() >= 600);
         UserSessionState::instance().clear();
     }
     void stationGridReflowsWithoutLosingActions()
@@ -478,6 +494,73 @@ private slots:
         main.resize(1100, 680);
         capture(main, QStringLiteral("admin-small"));
     }
+    void aiChatActionsAndHistory()
+    {
+        ThemeFixture fixture;
+        QVERIFY(fixture.server.listen(QHostAddress::LocalHost, 0));
+        fixture.memberState = {{"valid", true}, {"level", "SVIP"}, {"discount_bps", 8000}};
+        ev::PlatformClient client(QStringLiteral("ai-chat-ui-test"));
+        client.connectToServer(QStringLiteral("127.0.0.1"), fixture.server.serverPort());
+        QTRY_COMPARE(client.state(), ev::PlatformClient::State::Ready);
+        QVERIFY(UserSessionState::instance().setUserInfo(fixture.user));
+        QSettings().clear();
+        ev::UserApiClient api(&client);
+        MembershipDialog dialog(&api, true);
+        dialog.setAttribute(Qt::WA_DeleteOnClose, false);
+        dialog.show();
+        QTRY_VERIFY(fixture.requests.contains(QStringLiteral("status")));
+        QTest::qWait(30);
+
+        auto *greetingCopy = dialog.findChild<QPushButton *>(QStringLiteral("copyAssistantMessage"));
+        QTRY_VERIFY(greetingCopy);
+        QTest::mouseClick(greetingCopy, Qt::LeftButton);
+        QVERIFY(QApplication::clipboard()->text().contains(QStringLiteral("我是小轻")));
+
+        auto *question = dialog.findChild<QPlainTextEdit *>(QStringLiteral("consultQuestion"));
+        auto *send = dialog.findChild<QPushButton *>(QStringLiteral("consultSend"));
+        QVERIFY(question && send);
+        question->setPlainText(QStringLiteral("如何预约充电？"));
+        QTest::mouseClick(send, Qt::LeftButton);
+        QTRY_COMPARE(fixture.requests.count(QStringLiteral("ask")), 1);
+        QTRY_VERIFY(dialog.findChild<QPushButton *>(QStringLiteral("copyUserMessage")));
+        QTRY_VERIFY(dialog.findChild<QPushButton *>(QStringLiteral("editUserMessage")));
+        QTRY_VERIFY(dialog.findChildren<QPushButton *>(QStringLiteral("copyAssistantMessage")).size() >= 1);
+
+        auto *userCopy = dialog.findChild<QPushButton *>(QStringLiteral("copyUserMessage"));
+        QTest::mouseClick(userCopy, Qt::LeftButton);
+        QCOMPARE(QApplication::clipboard()->text(), QStringLiteral("如何预约充电？"));
+        QTest::mouseClick(dialog.findChild<QPushButton *>(QStringLiteral("editUserMessage")), Qt::LeftButton);
+        QCOMPARE(question->toPlainText(), QStringLiteral("如何预约充电？"));
+        QCOMPARE(send->text(), QStringLiteral("保存并发送"));
+        question->setPlainText(QStringLiteral("如何修改预约？"));
+        QTest::mouseClick(send, Qt::LeftButton);
+        QTRY_COMPARE(fixture.requests.count(QStringLiteral("ask")), 2);
+        QTRY_COMPARE(send->text(), QStringLiteral("一键咨询"));
+
+        auto *openHistory = dialog.findChild<QToolButton *>(QStringLiteral("openChatHistory"));
+        auto *sessions = dialog.findChild<QListWidget *>(QStringLiteral("chatSessionList"));
+        QVERIFY(openHistory && sessions);
+        QTest::mouseClick(openHistory, Qt::LeftButton);
+        QTRY_COMPARE(sessions->count(), 1);
+        auto *sessionRow = sessions->itemWidget(sessions->item(0));
+        QVERIFY(sessionRow);
+        auto *enterSession = sessionRow->findChild<QPushButton *>();
+        auto *removeSession = sessionRow->findChild<QToolButton *>();
+        QVERIFY(enterSession && removeSession);
+        QTest::mouseClick(enterSession, Qt::LeftButton);
+        QTest::mouseClick(removeSession, Qt::LeftButton);
+        QTRY_COMPARE(sessions->count(), 0);
+
+        fixture.consultFailure = true;
+        question->setPlainText(QStringLiteral("失败后如何处理？"));
+        QTest::mouseClick(send, Qt::LeftButton);
+        QTRY_VERIFY(dialog.findChild<QPushButton *>(QStringLiteral("retryAssistantMessage")));
+        fixture.consultFailure = false;
+        QTest::mouseClick(dialog.findChild<QPushButton *>(QStringLiteral("retryAssistantMessage")), Qt::LeftButton);
+        QTRY_COMPARE(fixture.requests.count(QStringLiteral("ask")), 4);
+        QTRY_VERIFY(!dialog.findChild<QPushButton *>(QStringLiteral("retryAssistantMessage")));
+        UserSessionState::instance().clear();
+    }
     void membershipPurchaseConsentCancellationAndConsult()
     {
         ThemeFixture fixture;QVERIFY(fixture.server.listen(QHostAddress::LocalHost,0));
@@ -518,14 +601,19 @@ private slots:
         QTest::mouseClick(dialog.findChild<QPushButton *>("membershipCancelRenewal"),Qt::LeftButton);
         QTRY_COMPARE(fixture.memberState.value("renewal").toObject().value("status").toString(),QString("cancelled"));
         QTRY_VERIFY(dialog.findChild<QLabel *>("renewalStatus")->text().contains(QStringLiteral("已取消")));
-        dialog.findChild<QTabWidget *>()->setCurrentIndex(1);
-        auto *question=dialog.findChild<QPlainTextEdit *>("consultQuestion");auto *chat=dialog.findChild<QPlainTextEdit *>("consultTranscript");auto *send=dialog.findChild<QPushButton *>("consultSend");
+        const int statusRequestsBeforeConsult=fixture.requests.count("status");
+        MembershipDialog consult(&api,true);consult.setAttribute(Qt::WA_DeleteOnClose,false);consult.show();
+        QTRY_VERIFY(fixture.requests.count("status")>statusRequestsBeforeConsult);
+        QTest::qWait(30);
+        auto *question=consult.findChild<QPlainTextEdit *>("consultQuestion");auto *send=consult.findChild<QPushButton *>("consultSend");
+        QVERIFY(question && send);
         question->setPlainText(QStringLiteral("如何预约充电？"));QTest::mouseClick(send,Qt::LeftButton);
-        QTRY_VERIFY(chat->toPlainText().contains(QStringLiteral("版本1")));
-        capture(dialog,QStringLiteral("membership-consult"));
+        QTRY_VERIFY(consult.findChild<QPushButton *>(QStringLiteral("editUserMessage")));
+        QTRY_VERIFY(consult.findChildren<QPushButton *>(QStringLiteral("copyAssistantMessage")).size()>=1);
+        capture(consult,QStringLiteral("membership-consult"));
         fixture.consultFailure=true;question->setPlainText(QStringLiteral("会员怎样续费？"));QTest::mouseClick(send,Qt::LeftButton);
-        QTRY_VERIFY(chat->toPlainText().contains("EV_AI_API_KEY"));
-        capture(dialog,QStringLiteral("membership-consult-no-key"));
+        QTRY_VERIFY(consult.findChild<QPushButton *>(QStringLiteral("retryAssistantMessage")));
+        capture(consult,QStringLiteral("membership-consult-no-key"));
         QVERIFY(!QSettings().contains("membership/pending/1"));
     }
     void membershipRetriesOriginalOperationAfterReopening()

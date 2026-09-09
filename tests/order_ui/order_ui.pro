@@ -1,4 +1,4 @@
-QT += core gui widgets network webenginewidgets testlib
+QT += core gui widgets network webenginewidgets svg testlib
 TEMPLATE = app
 CONFIG += testcase
 TARGET = ev_order_ui_tests

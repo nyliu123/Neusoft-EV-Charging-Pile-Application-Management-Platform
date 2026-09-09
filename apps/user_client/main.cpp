@@ -3,6 +3,7 @@
 #include "user_home_widget.h"
 #include "user_session_state.h"
 #include "client_ui/client_style.h"
+#include "client_ui/item_full_text_filter.h"
 #include "client_ui/apple_widgets.h"
 #include "network/platform_client.h"
 
@@ -27,6 +28,7 @@ int main(int argc, char *argv[])
     QApplication::setApplicationName(QStringLiteral("ev_user_client"));
     QApplication::setApplicationVersion(QStringLiteral("0.1.0"));
     ev::installClientStyle(application);
+    ev::installItemFullTextFilter(application);
     QFile styleFile(QStringLiteral(":/styles/client.qss"));
     if (styleFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
         application.setStyleSheet(QString::fromUtf8(styleFile.readAll()));
@@ -115,9 +117,8 @@ int main(int argc, char *argv[])
     window.setCentralWidget(central);
     QObject::connect(&client, &ev::PlatformClient::stateChanged, &window,
                      [&window](ev::PlatformClient::State state, const QString &detail) {
-        window.statusBar()->showMessage(
-            state == ev::PlatformClient::State::Ready
-                ? QStringLiteral("服务端可用") : detail);
+        Q_UNUSED(state)
+        window.statusBar()->showMessage(detail);
     });
     QObject::connect(loginWidget, &PhoneLoginWidget::phoneAccepted,
                      &client, &ev::PlatformClient::login);

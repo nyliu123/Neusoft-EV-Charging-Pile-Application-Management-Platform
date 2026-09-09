@@ -131,6 +131,49 @@ QPushButton[uiClass="ratingStar"]:focus { border-color: #6475df; }
 QPushButton[uiClass="stationCard"][available="false"] QLabel[uiClass="stationPrice"] { color: #687286; }
 /* Discovery and navigation: a spacious product surface rather than a data-entry shell. */
 QFrame#userTopBar { background: #ffffff; border: 1px solid #edf0f6; border-radius: 18px; }
+QWidget#userBottomBar { background: transparent; border: none; }
+QToolButton[uiClass="bottomNavigation"] { min-height: 65px; padding: 5px 18px; background: transparent; border: none; border-radius: 14px; color: #626d82; font-size: 12px; }
+QToolButton[uiClass="bottomNavigation"]:hover { background: transparent; }
+QToolButton[uiClass="bottomNavigation"]:checked { background: transparent; color: #5264d6; font-weight: 600; }
+QToolButton#xiaoqingButton { padding: 0; background: transparent; border: none; color: #4659bf; font-weight: 600; }
+QToolButton#xiaoqingButton:hover { background: transparent; color: #4659bf; }
+QFrame#chatHistoryPanel { background: #f3f4f8; border: none; border-radius: 16px; }
+QListWidget#chatSessionList { background: transparent; border: none; outline: none; }
+QListWidget#chatSessionList::item { padding: 0; border-radius: 9px; color: #3d4558; }
+QListWidget#chatSessionList::item:selected { background: #ffffff; color: #202637; font-weight: 600; }
+QListWidget#chatSessionList::item:hover { background: #e9ebf2; }
+QListWidget#chatSessionList QWidget { background: transparent; }
+QPushButton[uiClass="chatSessionOpen"] { min-height: 20px; padding: 4px 2px; background: transparent; border: none; color: #3d4558; text-align: left; }
+QPushButton[uiClass="chatSessionOpen"]:hover { background: transparent; color: #202637; }
+QToolButton[uiClass="chatSessionDelete"] { background: transparent; border: none; color: #8991a2; font-size: 17px; }
+QToolButton[uiClass="chatSessionDelete"]:hover { background: #ffe8e8; color: #c53535; border-radius: 7px; }
+QToolButton#collapseHistory { background: transparent; border: none; color: #687286; font-size: 22px; }
+QToolButton#openChatHistory { background: #ffffff; border: 1px solid #e2e5ed; border-radius: 10px; }
+QToolButton#openChatHistory:hover, QToolButton#collapseHistory:hover { background: #f0f2f7; }
+QScrollArea#chatMessagesScroll { background: #ffffff; border: 1px solid #e8eaf0; border-radius: 16px; }
+QScrollArea#chatMessagesScroll > QWidget > QWidget { background: #ffffff; }
+QWidget[uiClass="chatMessageRow"] { background: transparent; }
+QWidget[uiClass="chatMessageGroup"] { background: transparent; }
+QWidget[uiClass="chatIdentity"] { background: transparent; }
+QFrame[uiClass="chatBubble"] { border: 1px solid #e6e8ee; border-radius: 16px; }
+QFrame[uiClass="chatBubble"][role="user"] { background: #5264d6; border-color: #5264d6; }
+QFrame[uiClass="chatBubble"][role="assistant"] { background: #f4f5f7; }
+QFrame[uiClass="chatBubble"][state="failed"] { background: #fff1f1; border: 1px solid #f0caca; }
+QLabel[uiClass="chatMessageText"] { color: #202637; font-size: 14px; background: transparent; }
+QFrame[uiClass="chatToolCard"] { background: #e9edff; border: none; border-radius: 9px; }
+QLabel[uiClass="chatToolStatus"] { color: #5264d6; font-size: 12px; background: transparent; border: none; }
+QPushButton[uiClass="chatToolDetails"] { color: #5264d6; font-size: 12px; background: transparent; border: none; padding: 2px 4px; }
+QPushButton[uiClass="chatToolDetails"]:hover { color: #3348c4; background: transparent; text-decoration: underline; }
+QFrame[uiClass="chatBubble"][role="user"] QLabel[uiClass="chatMessageText"], QFrame[uiClass="chatBubble"][role="user"] QLabel[uiClass="chatSender"] { color: #ffffff; }
+QLabel[uiClass="chatSender"] { color: #687286; font-size: 11px; font-weight: 600; background: transparent; }
+QLabel[uiClass="userChatAvatar"] { background: #202637; color: #ffffff; border-radius: 19px; font-weight: 600; }
+QLabel[uiClass="assistantChatAvatar"] { background: #ffffff; border: 1px solid #e2e5ed; border-radius: 19px; }
+QLabel[uiClass="chatEmptyHint"] { color: #687286; font-size: 16px; background: transparent; }
+QPushButton[uiClass="chatAction"] { min-height: 22px; padding: 2px 3px; border: none; background: transparent; color: #687286; font-size: 12px; font-weight: 500; }
+QPushButton[uiClass="chatAction"]:hover, QPushButton[uiClass="chatAction"]:pressed { color: #4659bf; background: transparent; border: none; }
+QLabel[uiClass="commentStars"] { color: #f2a900; font-size: 15px; background: transparent; }
+QFrame#chatComposer { background: #ffffff; border: 1px solid #dfe2ea; border-radius: 18px; }
+QFrame#chatComposer QPlainTextEdit { background: transparent; border: none; padding: 5px; }
 QListWidget#userNavigation { background: #f1f3f9; border: none; border-radius: 14px; padding: 5px; }
 QListWidget#userNavigation::item { padding: 0 13px; margin: 0; border: 1px solid transparent; border-radius: 10px; color: #626d82; }
 QListWidget#userNavigation::item:hover { background: #e9edf7; }
@@ -158,6 +201,7 @@ QPushButton[uiClass="stationCard"]:pressed { background: #f0f3ff; border-color: 
 QPushButton[uiClass="stationCard"]:focus { border: 2px solid #6475df; }
 QLabel[uiClass="stationTitle"] { color: #252c3d; font-size: 18px; font-weight: 600; }
 QLabel[uiClass="stationRating"] { color: #687286; font-size: 11px; }
+QLabel[uiClass="stationHotReview"] { background: #fff0df; color: #c43f2c; border-radius: 8px; padding: 4px 7px; font-size: 11px; }
 QLabel[uiClass="stationPrice"] { color: #2b3451; font-size: 25px; font-weight: 600; }
 QPushButton[uiClass="stationCard"][available="false"] QLabel[uiClass="stationPrice"] { color: #2b3451; }
 QLabel[uiClass="stationSymbol"] { background: #eff2fd; border-radius: 13px; }

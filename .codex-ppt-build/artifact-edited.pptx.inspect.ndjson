@@ -1,0 +1,450 @@
+{"kind":"deck","id":"pr/c4rs0k","name":"Deck"}
+{"kind":"layout","layoutId":"/ppt/slideMasters/slideMaster1.xml","name":"","type":"master","placeholders":[{"name":"title","type":"title","textPreview":"单击此处编辑母版标题样式"},{"name":"body","type":"body","textPreview":"编辑母版文本样式 | 第二级 | 第三级 | 第四级 | 第五级"},{"name":"dateTime","type":"dateTime"},{"name":"footer","type":"footer"},{"name":"slideNumber","type":"slideNumber"}]}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout1.xml","name":"封面样式1-首页","placeholders":[{"name":"subtitle","type":"subtitle"},{"name":"body","type":"body","textPreview":"编辑母版文本样式"},{"name":"body","type":"body","textPreview":"编辑母版文本样式"},{"name":"body","type":"body","textPreview":"单击此处 | 输入大标题"}]}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout2.xml","name":"封面样式1-尾页","placeholders":[{"name":"subtitle","type":"subtitle"},{"name":"body","type":"body","textPreview":"编辑母版文本样式"},{"name":"body","type":"body","textPreview":"编辑母版文本样式"},{"name":"body","type":"body","textPreview":"编辑母版文本样式 | 输入标题"}]}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout3.xml","name":"封面样式2-首页1","placeholders":[{"name":"title","type":"title","textPreview":"请在此输入标题 | 尽量回车保证标题为两行"},{"name":"body","type":"body","textPreview":"请在此输入你的副标题"},{"name":"body","type":"body","textPreview":"指导教师： XXX\t答辩学生： 芃苇"}]}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout4.xml","name":"封面样式2-首页2","placeholders":[{"name":"title","type":"title","textPreview":"请在此输入标题 | 尽量回车保证标题为两行"},{"name":"body","type":"body","textPreview":"请在此输入你的副标题"},{"name":"body","type":"body","textPreview":"指导教师： XXX\t答辩学生： 芃苇"}]}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout5.xml","name":"封面样式2-首页3","placeholders":[{"name":"title","type":"title","textPreview":"北京理工大学 | 毕业设计论文答辩模板"},{"name":"body","type":"body","textPreview":"指导教师： XXX\t答辩学生： 芃苇"}]}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout6.xml","name":"封面样式2-尾页"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout7.xml","name":"封面样式3-首页"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout8.xml","name":"封面样式3-尾页"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout9.xml","name":"封面样式4-首页"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout10.xml","name":"封面样式4-尾页"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout11.xml","name":"封面样式5-首页"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout12.xml","name":"封面样式5-尾页"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout13.xml","name":"封面样式6"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout14.xml","name":"封面样式7-首页"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout15.xml","name":"封面样式7-尾页"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout16.xml","name":"封面样式8","placeholders":[{"name":"body","type":"body","textPreview":"北京理工大学毕业答辩PPT模板"}]}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout17.xml","name":"封面样式9-首页"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout18.xml","name":"封面样式9-尾页"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout19.xml","name":"目录样式1","type":"blank"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout20.xml","name":"目录样式2-1"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout21.xml","name":"目录样式2-2"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout22.xml","name":"目录样式3-1"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout23.xml","name":"目录样式3-2"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout24.xml","name":"目录样式4"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout25.xml","name":"目录样式5"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout26.xml","name":"目录样式6-1"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout27.xml","name":"目录样式6-2","placeholders":[{"name":"body","type":"body","textPreview":"第几部分 ▶"},{"name":"body","type":"body","textPreview":"请在此处添加你的标题"},{"name":"body","type":"body","textPreview":"这里可以写一点点文字，介绍此章节主要内容 | 国外现状 | 国内现状 | … |"}]}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout28.xml","name":"内页样式1-常规","placeholders":[{"name":"title","type":"title","textPreview":"单击此处编辑母版标题样式"}]}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout29.xml","name":"内页样式1-一段一图"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout30.xml","name":"内页样式2-常规","placeholders":[{"name":"title","type":"title","textPreview":"单击此处编辑母版标题样式"}]}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout31.xml","name":"内页样式2-一段一图"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout32.xml","name":"内页样式3-常规","placeholders":[{"name":"title","type":"title","textPreview":"单击此处编辑母版标题样式"}]}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout33.xml","name":"内页样式3-一段一图"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout34.xml","name":"内页样式４-常规","placeholders":[{"name":"title","type":"title","textPreview":"单击此处编辑母版标题样式"}]}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout35.xml","name":"内页样式４-一段一图"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout36.xml","name":"内页样式5-常规","placeholders":[{"name":"title","type":"title","textPreview":"单击此处编辑母版标题样式"}]}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout37.xml","name":"内页样式5-一段一图"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout38.xml","name":"空白"}
+{"kind":"slide","id":"sl/y90nupkv","slide":1,"title":"Neusoft EV Charging Pile Application Management Platform","textShapes":3}
+{"kind":"textbox","id":"sh/547294r6","slide":1,"name":"Subtitle 1","placeholder":"subtitle","text":"Neusoft EV Charging Pile Application Management Platform","textPreview":"Neusoft EV Charging Pile Application Management Platform","textChars":56,"textLines":1,"bbox":[0,0,0,0]}
+{"kind":"shape","id":"sh/k3yl0zql","slide":1,"name":"Text Placeholder 2","placeholder":"body","bbox":[0,0,0,0]}
+{"kind":"textbox","id":"sh/7qp4be9c","slide":1,"name":"Text Placeholder 3","placeholder":"body","text":"答辩人：刘宁远  肖峣  秦志豪  刘禹晨  韩萧贤\n第 5 组\n时间：2026年9月","textPreview":"答辩人：刘宁远  肖峣  秦志豪  刘禹晨  韩萧贤 | 第 5 组 | 时间：2026年9月","textChars":43,"textLines":3,"bbox":[0,0,0,0]}
+{"kind":"textbox","id":"sh/65g3298r","slide":1,"name":"Text Placeholder 4","placeholder":"body","text":"东软电动汽车充电桩\n应用管理平台","textPreview":"东软电动汽车充电桩 | 应用管理平台","textChars":16,"textLines":2,"bbox":[0,0,0,0]}
+{"kind":"notes","id":"nt/y90nupkv","slide":1,"text":""}
+{"kind":"slide","id":"sl/hwbqtkby","slide":2,"title":"答辩内容概览","textShapes":19}
+{"kind":"shape","id":"sh/9072xkry","slide":2,"name":"Rectangle 1","bbox":[0,0,1279.97,115.2]}
+{"kind":"shape","id":"sh/ozy1ofad","slide":2,"name":"Rectangle 2","bbox":[48,28.8,7.68,57.6]}
+{"kind":"textbox","id":"sh/b29kza94","slide":2,"name":"TextBox 3","text":"答辩内容概览","textPreview":"答辩内容概览","textChars":6,"textLines":1,"bbox":[76.8,28.8,960,57.6]}
+{"kind":"textbox","id":"sh/a10jqpsj","slide":2,"name":"TextBox 4","text":"Contents","textPreview":"Contents","textChars":8,"textLines":1,"bbox":[76.8,74.88,768,28.8]}
+{"kind":"shape","id":"sh/x4r21kru","slide":2,"name":"Rounded Rectangle 5","bbox":[144,153.6,67.2,52.8]}
+{"kind":"textbox","id":"sh/w3i1sfa9","slide":2,"name":"TextBox 6","text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[144,158.4,67.2,43.2]}
+{"kind":"textbox","id":"sh/r65knqtk","slide":2,"name":"TextBox 7","text":"人员具体分工","textPreview":"人员具体分工","textChars":6,"textLines":1,"bbox":[240,155.52,480,48]}
+{"kind":"textbox","id":"sh/q5wjelsz","slide":2,"name":"TextBox 8","text":"团队成员与职责划分","textPreview":"团队成员与职责划分","textChars":9,"textLines":1,"bbox":[748.8,158.4,480,43.2]}
+{"kind":"shape","id":"sh/ove9o7yd","slide":2,"name":"Rounded Rectangle 9","bbox":[144,235.2,67.2,52.8]}
+{"kind":"textbox","id":"sh/9wnqhczy","slide":2,"name":"TextBox 10","text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[144,240,67.2,43.2]}
+{"kind":"textbox","id":"sh/mtwrmxg7","slide":2,"name":"TextBox 11","text":"项目背景与整体功能","textPreview":"项目背景与整体功能","textChars":9,"textLines":1,"bbox":[240,237.12,480,48]}
+{"kind":"textbox","id":"sh/nu58f2hs","slide":2,"name":"TextBox 12","text":"行业背景、系统架构与功能总览","textPreview":"行业背景、系统架构与功能总览","textChars":14,"textLines":1,"bbox":[748.8,240,480,43.2]}
+{"kind":"shape","id":"sh/wjy9sry9","slide":2,"name":"Rounded Rectangle 13","bbox":[144,316.8,67.2,52.8]}
+{"kind":"textbox","id":"sh/xk7qlczu","slide":2,"name":"TextBox 14","text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[144,321.6,67.2,43.2]}
+{"kind":"textbox","id":"sh/ahwrqhgj","slide":2,"name":"TextBox 15","text":"项目中使用的技术","textPreview":"项目中使用的技术","textChars":8,"textLines":1,"bbox":[240,318.72,480,48]}
+{"kind":"textbox","id":"sh/bip8jmho","slide":2,"name":"TextBox 16","text":"技术栈与核心设计","textPreview":"技术栈与核心设计","textChars":8,"textLines":1,"bbox":[748.8,321.6,480,43.2]}
+{"kind":"shape","id":"sh/cnupgny5","slide":2,"name":"Rounded Rectangle 17","bbox":[144,398.4,67.2,52.8]}
+{"kind":"textbox","id":"sh/do3q9szq","slide":2,"name":"TextBox 18","text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[144,403.2,67.2,43.2]}
+{"kind":"textbox","id":"sh/t8byxkn2","slide":2,"name":"TextBox 19","text":"项目核心界面展示","textPreview":"项目核心界面展示","textChars":8,"textLines":1,"bbox":[240,400.32,480,48]}
+{"kind":"textbox","id":"sh/s72xofmh","slide":2,"name":"TextBox 20","text":"用户端与管理端界面截图","textPreview":"用户端与管理端界面截图","textChars":11,"textLines":1,"bbox":[748.8,403.2,480,43.2]}
+{"kind":"shape","id":"sh/76twva5c","slide":2,"name":"Rounded Rectangle 21","bbox":[144,480,67.2,52.8]}
+{"kind":"textbox","id":"sh/65kfmpor","slide":2,"name":"TextBox 22","text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[144,484.8,67.2,43.2]}
+{"kind":"textbox","id":"sh/hcvy14ne","slide":2,"name":"TextBox 23","text":"项目心得","textPreview":"项目心得","textChars":4,"textLines":1,"bbox":[240,481.92,480,48]}
+{"kind":"textbox","id":"sh/gbmxszmt","slide":2,"name":"TextBox 24","text":"难点解决与技能提升","textPreview":"难点解决与技能提升","textChars":9,"textLines":1,"bbox":[748.8,484.8,480,43.2]}
+{"kind":"shape","id":"sh/fadgzu58","slide":2,"name":"Rounded Rectangle 25","bbox":[144,561.6,67.2,52.8]}
+{"kind":"textbox","id":"sh/u94fqp4n","slide":2,"name":"TextBox 26","text":"06","textPreview":"06","textChars":2,"textLines":1,"bbox":[144,566.4,67.2,43.2]}
+{"kind":"textbox","id":"sh/p0vy54na","slide":2,"name":"TextBox 27","text":"结束语及致谢","textPreview":"结束语及致谢","textChars":6,"textLines":1,"bbox":[240,563.52,480,48]}
+{"kind":"notes","id":"nt/hwbqtkby","slide":2,"text":""}
+{"kind":"slide","id":"sl/ofy9wn61","slide":3,"title":"人员具体分工","textShapes":18}
+{"kind":"shape","id":"sh/cza94vmx","slide":3,"name":"Rectangle 1","bbox":[28.8,0,105.6,96]}
+{"kind":"shape","id":"sh/d0jax03i","slide":3,"name":"Rectangle 2","bbox":[144,0,19.2,96]}
+{"kind":"textbox","id":"sh/298ryl4v","slide":3,"name":"TextBox 3","text":"人员具体分工","textPreview":"人员具体分工","textChars":6,"textLines":1,"bbox":[172.8,14.4,912,48]}
+{"kind":"textbox","id":"sh/3ah8rqlg","slide":3,"name":"TextBox 4","text":"第5组 · 原定职责分工，预留模块纳入后续计划","textPreview":"第5组 · 原定职责分工，预留模块纳入后续计划","textChars":23,"textLines":1,"bbox":[172.8,62.4,960,28.8]}
+{"kind":"textbox","id":"sh/obq90bml","slide":3,"name":"TextBox 5","text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[1180.8,662.4,57.6,38.4]}
+{"kind":"shape","id":"sh/pcjqtg36","slide":3,"name":"Rectangle 6","bbox":[28.8,652.8,1142.4,6.72]}
+{"kind":"shape","id":"sh/m5cra54z","slide":3,"name":"Rounded Rectangle 7","bbox":[48,139.2,1183.68,96]}
+{"kind":"shape","id":"sh/n6ls3alk","slide":3,"name":"Rectangle 8","bbox":[48,139.2,5.76,96]}
+{"kind":"textbox","id":"sh/n2l4fq98","slide":3,"name":"TextBox 9","text":"刘宁远","textPreview":"刘宁远","textChars":3,"textLines":1,"bbox":[76.8,146.88,124.8,43.2]}
+{"kind":"textbox","id":"sh/m1c3mlsn","slide":3,"name":"TextBox 10","text":"组长 / TL","textPreview":"组长 / TL","textChars":7,"textLines":1,"bbox":[76.8,187.2,124.8,33.6]}
+{"kind":"textbox","id":"sh/943mhgre","slide":3,"name":"TextBox 11","text":"需求矩阵与交付管理；编码与分支规范；用户端登录注册闭环（UML-010~013）；个人订单查询；用户管理（列表/搜索/冻结）；服务端连接与会话管理；模型部署规划；测试数据与日志","textPreview":"需求矩阵与交付管理；编码与分支规范；用户端登录注册闭环（UML-010~013）；个人订单查询；用户管理（列表/搜索/冻结）；服务端连接与会话管理；模型部署规划；测试数据与日志","textChars":88,"textLines":1,"bbox":[220.8,148.8,988.8,81.6]}
+{"kind":"shape","id":"sh/83ulovat","slide":3,"name":"Rounded Rectangle 12","bbox":[48,249.6,1183.68,96]}
+{"kind":"shape","id":"sh/v6l4jq94","slide":3,"name":"Rectangle 13","bbox":[48,249.6,5.76,96]}
+{"kind":"textbox","id":"sh/a5c3ql8z","slide":3,"name":"TextBox 14","text":"肖峣","textPreview":"肖峣","textChars":2,"textLines":1,"bbox":[76.8,257.28,124.8,43.2]}
+{"kind":"textbox","id":"sh/x8nml0ra","slide":3,"name":"TextBox 15","text":"需求 / PM助理","textPreview":"需求 / PM助理","textChars":9,"textLines":1,"bbox":[76.8,297.6,124.8,33.6]}
+{"kind":"textbox","id":"sh/w7ulsvqp","slide":3,"name":"TextBox 16","text":"项目范围与需求矩阵；充电站查询（定位/排序/卡片/详情）；地图接口适配；经营看板（核心指标/营收趋势/桩状态）；预测模块规划（负荷/空闲桩）；运行环境与开发工具配置","textPreview":"项目范围与需求矩阵；充电站查询（定位/排序/卡片/详情）；地图接口适配；经营看板（核心指标/营收趋势/桩状态）；预测模块规划（负荷/空闲桩）；运行环境与开发工具配置","textChars":82,"textLines":1,"bbox":[220.8,259.2,988.8,81.6]}
+{"kind":"shape","id":"sh/ja54na9g","slide":3,"name":"Rounded Rectangle 17","bbox":[48,360,1183.68,96]}
+{"kind":"shape","id":"sh/i9w3u58v","slide":3,"name":"Rectangle 18","bbox":[48,360,5.76,96]}
+{"kind":"textbox","id":"sh/e10f2twf","slide":3,"name":"TextBox 19","text":"秦志豪","textPreview":"秦志豪","textChars":3,"textLines":1,"bbox":[76.8,367.68,124.8,43.2]}
+{"kind":"textbox","id":"sh/f29gbyx0","slide":3,"name":"TextBox 20","text":"系统设计","textPreview":"系统设计","textChars":4,"textLines":1,"bbox":[76.8,408,124.8,33.6]}
+{"kind":"textbox","id":"sh/03ix43e5","slide":3,"name":"TextBox 21","text":"总体架构设计；数据库设计（业务表/索引/约束）；TCP通信协议设计（帧格式/消息类型/错误码）；充电全流程（预约/充电/计费/结算）；订单管理；离线分析规划；可靠性与安全传输","textPreview":"总体架构设计；数据库设计（业务表/索引/约束）；TCP通信协议设计（帧格式/消息类型/错误码）；充电全流程（预约/充电/计费/结算）；订单管理；离线分析规划；可靠性与安全传输","textChars":87,"textLines":1,"bbox":[220.8,369.6,988.8,81.6]}
+{"kind":"shape","id":"sh/14ryd8fq","slide":3,"name":"Rounded Rectangle 22","bbox":[48,470.4,1183.68,96]}
+{"kind":"shape","id":"sh/6d0fytg3","slide":3,"name":"Rectangle 23","bbox":[48,470.4,5.76,96]}
+{"kind":"textbox","id":"sh/re9g7yxo","slide":3,"name":"TextBox 24","text":"刘禹晨","textPreview":"刘禹晨","textChars":3,"textLines":1,"bbox":[76.8,478.08,124.8,43.2]}
+{"kind":"textbox","id":"sh/sfix03y9","slide":3,"name":"TextBox 25","text":"配置管理 / SCML","textPreview":"配置管理 / SCML","textChars":11,"textLines":1,"bbox":[76.8,518.4,124.8,33.6]}
+{"kind":"textbox","id":"sh/tgry9ofu","slide":3,"name":"TextBox 26","text":"成果物版本管理；用户信息维护（展示/头像/昵称/充值）；充电桩管理（列表/远程重启）；管理员登录验证；数据库访问层（CRUD/事务/完整性）；数据安全（参数化查询/密码保护）；模型评估规划","textPreview":"成果物版本管理；用户信息维护（展示/头像/昵称/充值）；充电桩管理（列表/远程重启）；管理员登录验证；数据库访问层（CRUD/事务/完整性）；数据安全（参数化查询/密码保护）；模型评估规划","textChars":94,"textLines":1,"bbox":[220.8,480,988.8,81.6]}
+{"kind":"shape","id":"sh/a9kfadwn","slide":3,"name":"Rounded Rectangle 27","bbox":[48,580.8,1183.68,96]}
+{"kind":"shape","id":"sh/batgjixs","slide":3,"name":"Rectangle 28","bbox":[48,580.8,5.76,96]}
+{"kind":"textbox","id":"sh/l4fi9cza","slide":3,"name":"TextBox 29","text":"韩萧贤","textPreview":"韩萧贤","textChars":3,"textLines":1,"bbox":[76.8,588.48,124.8,43.2]}
+{"kind":"textbox","id":"sh/k3m1g7yp","slide":3,"name":"TextBox 30","text":"测试 / 界面","textPreview":"测试 / 界面","textChars":7,"textLines":1,"bbox":[76.8,628.8,124.8,33.6]}
+{"kind":"textbox","id":"sh/z2d07mh4","slide":3,"name":"TextBox 31","text":"每日集成与回归测试；地图导航（加载/出行方式/路线规划）；充电站管理（列表/详情/新增）；智能应用规划（推荐/预警）；Web大屏接口规划；界面可用性与性能体验；过程评审","textPreview":"每日集成与回归测试；地图导航（加载/出行方式/路线规划）；充电站管理（列表/详情/新增）；智能应用规划（推荐/预警）；Web大屏接口规划；界面可用性与性能体验；过程评审","textChars":84,"textLines":1,"bbox":[220.8,590.4,988.8,81.6]}
+{"kind":"notes","id":"nt/ofy9wn61","slide":3,"text":""}
+{"kind":"slide","id":"sl/jyx0ra1s","slide":4,"title":"项目背景","textShapes":12}
+{"kind":"shape","id":"sh/1cj2d8b6","slide":4,"name":"Rectangle 1","bbox":[28.8,0,105.6,96]}
+{"kind":"shape","id":"sh/0ba143al","slide":4,"name":"Rectangle 2","bbox":[144,0,19.2,96]}
+{"kind":"textbox","id":"sh/rm1k7yt4","slide":4,"name":"TextBox 3","text":"项目背景","textPreview":"项目背景","textChars":4,"textLines":1,"bbox":[172.8,14.4,912,48]}
+{"kind":"textbox","id":"sh/ql8jytsj","slide":4,"name":"TextBox 4","text":"面向充电服务与日常运营，完成本地客户端/服务端教学演示","textPreview":"面向充电服务与日常运营，完成本地客户端/服务端教学演示","textChars":27,"textLines":1,"bbox":[172.8,62.4,960,28.8]}
+{"kind":"textbox","id":"sh/doj29oba","slide":4,"name":"TextBox 5","text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[1180.8,662.4,57.6,38.4]}
+{"kind":"shape","id":"sh/sna103ap","slide":4,"name":"Rectangle 6","bbox":[28.8,652.8,1142.4,6.72]}
+{"kind":"shape","id":"sh/3ihk3et8","slide":4,"name":"Rounded Rectangle 7","bbox":[67.2,153.6,355.2,211.2]}
+{"kind":"shape","id":"sh/ih8ju9sn","slide":4,"name":"Rectangle 8","bbox":[67.2,153.6,355.2,5.76]}
+{"kind":"textbox","id":"sh/kbm987y5","slide":4,"name":"TextBox 9","text":"站点分布不均","textPreview":"站点分布不均","textChars":6,"textLines":1,"bbox":[96,177.6,307.2,48]}
+{"kind":"textbox","id":"sh/5cva1cfq","slide":4,"name":"TextBox 10","text":"充电桩地理分布零散，用户难以快速找到可用充电资源","textPreview":"充电桩地理分布零散，用户难以快速找到可用充电资源","textChars":24,"textLines":1,"bbox":[96,230.4,307.2,115.2]}
+{"kind":"shape","id":"sh/i94r6xgz","slide":4,"name":"Rounded Rectangle 11","bbox":[460.8,153.6,355.2,211.2]}
+{"kind":"shape","id":"sh/jadsz2xk","slide":4,"name":"Rectangle 12","bbox":[460.8,153.6,355.2,5.76]}
+{"kind":"textbox","id":"sh/w72947yt","slide":4,"name":"TextBox 13","text":"设备利用率低","textPreview":"设备利用率低","textChars":6,"textLines":1,"bbox":[489.6,177.6,307.2,48]}
+{"kind":"textbox","id":"sh/x8vaxsfe","slide":4,"name":"TextBox 14","text":"缺乏实时监控与数据分析，设备闲置与过载并存","textPreview":"缺乏实时监控与数据分析，设备闲置与过载并存","textChars":21,"textLines":1,"bbox":[489.6,230.4,307.2,115.2]}
+{"kind":"shape","id":"sh/a5kr2xg3","slide":4,"name":"Rounded Rectangle 15","bbox":[854.4,153.6,355.2,211.2]}
+{"kind":"shape","id":"sh/v6tsv2xo","slide":4,"name":"Rectangle 16","bbox":[854.4,153.6,355.2,5.76]}
+{"kind":"textbox","id":"sh/g36tgryd","slide":4,"name":"TextBox 17","text":"运营数据分散","textPreview":"运营数据分散","textChars":6,"textLines":1,"bbox":[883.2,177.6,307.2,48]}
+{"kind":"textbox","id":"sh/h4fa9wfy","slide":4,"name":"TextBox 18","text":"用户服务、设备管控、经营分析各自孤立，缺少统一平台","textPreview":"用户服务、设备管控、经营分析各自孤立，缺少统一平台","textChars":25,"textLines":1,"bbox":[883.2,230.4,307.2,115.2]}
+{"kind":"shape","id":"sh/p0batw72","slide":4,"name":"Rounded Rectangle 19","bbox":[67.2,393.6,1152,153.6]}
+{"kind":"textbox","id":"sh/oz29krqh","slide":4,"name":"TextBox 20","text":"解决方案","textPreview":"解决方案","textChars":4,"textLines":1,"bbox":[96,408,1056,38.4]}
+{"kind":"textbox","id":"sh/3ytsrmpw","slide":4,"name":"TextBox 21","text":"以用户端、管理端和服务端协同完成查站、预约、模拟充电与结算，采用 Linux、\nQt 6、TCP 和 SQLite，扩展会员权益与 AI 咨询。真实设备、真实支付不在当前范围内。","textPreview":"以用户端、管理端和服务端协同完成查站、预约、模拟充电与结算，采用 Linux、 | Qt 6、TCP 和 SQLite，扩展会员权益与 AI 咨询。真实设备、真实支付不在当前范围内。","textChars":89,"textLines":2,"bbox":[96,446.4,1104,96]}
+{"kind":"textbox","id":"sh/2xkrih8b","slide":4,"name":"TextBox 22","text":"项目目标：体会从需求理解到软件发布的完整流程，掌握 Linux 下 Qt 应用开发、Socket 通信与多线程编程。","textPreview":"项目目标：体会从需求理解到软件发布的完整流程，掌握 Linux 下 Qt 应用开发、Socket 通信与多线程编程。","textChars":58,"textLines":1,"bbox":[67.2,576,1152,38.4]}
+{"kind":"notes","id":"nt/jyx0ra1s","slide":4,"text":""}
+{"kind":"slide","id":"sl/i107q5of","slide":5,"title":"系统整体架构","textShapes":14}
+{"kind":"shape","id":"sh/dgbulwnm","slide":5,"name":"Rectangle 1","bbox":[28.8,0,105.6,96]}
+{"kind":"shape","id":"sh/cf2tcr61","slide":5,"name":"Rectangle 2","bbox":[144,0,19.2,96]}
+{"kind":"textbox","id":"sh/z2tcnm5s","slide":5,"name":"TextBox 3","text":"系统整体架构","textPreview":"系统整体架构","textChars":6,"textLines":1,"bbox":[172.8,14.4,912,48]}
+{"kind":"textbox","id":"sh/yhkbe1o7","slide":5,"name":"TextBox 4","text":"三进程独立运行，分层依赖，统一 TCP 入口","textPreview":"三进程独立运行，分层依赖，统一 TCP 入口","textChars":22,"textLines":1,"bbox":[172.8,62.4,960,28.8]}
+{"kind":"textbox","id":"sh/l4bupwny","slide":5,"name":"TextBox 5","text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[1180.8,662.4,57.6,38.4]}
+{"kind":"shape","id":"sh/032tgr6d","slide":5,"name":"Rectangle 6","bbox":[28.8,652.8,1142.4,6.72]}
+{"kind":"shape","id":"sh/n6dcr65o","slide":5,"name":"Rounded Rectangle 7","bbox":[144,144,1008,81.6]}
+{"kind":"shape","id":"sh/m5kbi1oj","slide":5,"name":"Rectangle 8","bbox":[144,144,7.68,81.6]}
+{"kind":"textbox","id":"sh/w32dkbuh","slide":5,"name":"TextBox 9","text":"应用层","textPreview":"应用层","textChars":3,"textLines":1,"bbox":[172.8,148.8,172.8,72]}
+{"kind":"textbox","id":"sh/x4vedgvm","slide":5,"name":"TextBox 10","text":"ev_user_client（用户端）| ev_admin_client（管理端）| ev_server（服务端）","textPreview":"ev_user_client（用户端）| ev_admin_client（管理端）| ev_server（服务端）","textChars":57,"textLines":1,"bbox":[364.8,148.8,748.8,72]}
+{"kind":"shape","id":"sh/ahkvi1cb","slide":5,"name":"Rounded Rectangle 11","bbox":[144,244.8,1008,81.6]}
+{"kind":"shape","id":"sh/v2twb6dw","slide":5,"name":"Rectangle 12","bbox":[144,244.8,7.68,81.6]}
+{"kind":"textbox","id":"sh/k7mxovud","slide":5,"name":"TextBox 13","text":"服务层","textPreview":"服务层","textChars":3,"textLines":1,"bbox":[172.8,249.6,172.8,72]}
+{"kind":"textbox","id":"sh/58vehgvy","slide":5,"name":"TextBox 14","text":"会话鉴权 · 充电与订单 · 计费引擎 · 会员权益 · 知识服务","textPreview":"会话鉴权 · 充电与订单 · 计费引擎 · 会员权益 · 知识服务","textChars":33,"textLines":1,"bbox":[364.8,249.6,748.8,72]}
+{"kind":"shape","id":"sh/i54fmlc7","slide":5,"name":"Rounded Rectangle 15","bbox":[144,345.6,1008,81.6]}
+{"kind":"shape","id":"sh/j6dwfqds","slide":5,"name":"Rectangle 16","bbox":[144,345.6,7.68,81.6]}
+{"kind":"textbox","id":"sh/sb6xsvu9","slide":5,"name":"TextBox 17","text":"网络层","textPreview":"网络层","textChars":3,"textLines":1,"bbox":[172.8,350.4,172.8,72]}
+{"kind":"textbox","id":"sh/tcfel0vu","slide":5,"name":"TextBox 18","text":"TCP 帧协议 · 帧编解码器 · 粘包处理 · PlatformClient 连接管理","textPreview":"TCP 帧协议 · 帧编解码器 · 粘包处理 · PlatformClient 连接管理","textChars":44,"textLines":1,"bbox":[364.8,350.4,748.8,72]}
+{"kind":"shape","id":"sh/hgrmpwj2","slide":5,"name":"Rounded Rectangle 19","bbox":[144,446.4,1008,81.6]}
+{"kind":"shape","id":"sh/gfi5grih","slide":5,"name":"Rectangle 20","bbox":[144,446.4,7.68,81.6]}
+{"kind":"textbox","id":"sh/fe94nm1w","slide":5,"name":"TextBox 21","text":"数据层","textPreview":"数据层","textChars":3,"textLines":1,"bbox":[172.8,451.2,172.8,72]}
+{"kind":"textbox","id":"sh/ud0ne10b","slide":5,"name":"TextBox 22","text":"SQLite · 核心业务及会员扩展表 · Repository · 事务与约束","textPreview":"SQLite · 核心业务及会员扩展表 · Repository · 事务与约束","textChars":40,"textLines":1,"bbox":[364.8,451.2,748.8,72]}
+{"kind":"shape","id":"sh/pkr6tgjy","slide":5,"name":"Rounded Rectangle 23","bbox":[144,547.2,1008,81.6]}
+{"kind":"shape","id":"sh/4ji5kbid","slide":5,"name":"Rectangle 24","bbox":[144,547.2,7.68,81.6]}
+{"kind":"textbox","id":"sh/3i94r61s","slide":5,"name":"TextBox 25","text":"适配层","textPreview":"适配层","textChars":3,"textLines":1,"bbox":[172.8,552,172.8,72]}
+{"kind":"textbox","id":"sh/2h0ni107","slide":5,"name":"TextBox 26","text":"OpenStreetMap 地图适配 · AI 咨询适配 · 离线分析预留","textPreview":"OpenStreetMap 地图适配 · AI 咨询适配 · 离线分析预留","textChars":37,"textLines":1,"bbox":[364.8,552,748.8,72]}
+{"kind":"textbox","id":"sh/5o7mhcju","slide":5,"name":"TextBox 27","text":"依赖↓","textPreview":"依赖↓","textChars":3,"textLines":1,"bbox":[48,144,86.4,81.6]}
+{"kind":"notes","id":"nt/i107q5of","slide":5,"text":""}
+{"kind":"slide","id":"sl/x8f69ofe","slide":6,"title":"整体功能介绍","textShapes":27}
+{"kind":"shape","id":"sh/yhg7epsj","slide":6,"name":"Rectangle 1","bbox":[28.8,0,105.6,96]}
+{"kind":"shape","id":"sh/zi98nu94","slide":6,"name":"Rectangle 2","bbox":[144,0,19.2,96]}
+{"kind":"textbox","id":"sh/87ipkzal","slide":6,"name":"TextBox 3","text":"整体功能介绍","textPreview":"整体功能介绍","textChars":6,"textLines":1,"bbox":[172.8,14.4,912,48]}
+{"kind":"textbox","id":"sh/98rqt4r6","slide":6,"name":"TextBox 4","text":"当前功能覆盖充电业务闭环，分析与 Web 大屏仍为预留模块","textPreview":"当前功能覆盖充电业务闭环，分析与 Web 大屏仍为预留模块","textChars":29,"textLines":1,"bbox":[172.8,62.4,960,28.8]}
+{"kind":"textbox","id":"sh/ml07i9sv","slide":6,"name":"TextBox 5","text":"06","textPreview":"06","textChars":2,"textLines":1,"bbox":[1180.8,662.4,57.6,38.4]}
+{"kind":"shape","id":"sh/7m98ru9g","slide":6,"name":"Rectangle 6","bbox":[28.8,652.8,1142.4,6.72]}
+{"kind":"shape","id":"sh/oryp8fah","slide":6,"name":"Rounded Rectangle 7","bbox":[48,144,283.2,508.8]}
+{"kind":"shape","id":"sh/pc76hkr2","slide":6,"name":"Rectangle 8","bbox":[48,144,283.2,48]}
+{"kind":"textbox","id":"sh/h4bupgn6","slide":6,"name":"TextBox 9","text":"充电用户端","textPreview":"充电用户端","textChars":5,"textLines":1,"bbox":[48,145.92,283.2,44.16]}
+{"kind":"textbox","id":"sh/w32twb6l","slide":6,"name":"TextBox 10","text":"· 手机号免密登录与自动注册","textPreview":"· 手机号免密登录与自动注册","textChars":14,"textLines":1,"bbox":[67.2,206.4,249.6,48]}
+{"kind":"textbox","id":"sh/v2tcn650","slide":6,"name":"TextBox 11","text":"· 查站、距离排序与站点评价","textPreview":"· 查站、距离排序与站点评价","textChars":14,"textLines":1,"bbox":[67.2,259.2,249.6,48]}
+{"kind":"textbox","id":"sh/u1kbu1ov","slide":6,"name":"TextBox 12","text":"· 预约、模拟充电与订单查询","textPreview":"· 预约、模拟充电与订单查询","textChars":14,"textLines":1,"bbox":[67.2,312,249.6,48]}
+{"kind":"textbox","id":"sh/5svutgni","slide":6,"name":"TextBox 13","text":"· 内嵌地图与三种出行方式","textPreview":"· 内嵌地图与三种出行方式","textChars":13,"textLines":1,"bbox":[67.2,364.8,249.6,48]}
+{"kind":"textbox","id":"sh/47mt0b6x","slide":6,"name":"TextBox 14","text":"· 个人中心、钱包与会员权益","textPreview":"· 个人中心、钱包与会员权益","textChars":14,"textLines":1,"bbox":[67.2,417.6,249.6,48]}
+{"kind":"shape","id":"sh/j6dcr65c","slide":6,"name":"Rounded Rectangle 15","bbox":[355.2,144,283.2,508.8]}
+{"kind":"shape","id":"sh/i54bylor","slide":6,"name":"Rectangle 16","bbox":[355.2,144,283.2,48]}
+{"kind":"textbox","id":"sh/twfux0ne","slide":6,"name":"TextBox 17","text":"PC运营管理端","textPreview":"PC运营管理端","textChars":7,"textLines":1,"bbox":[355.2,145.92,283.2,44.16]}
+{"kind":"textbox","id":"sh/svmt4v6t","slide":6,"name":"TextBox 18","text":"· 管理员登录与角色鉴权","textPreview":"· 管理员登录与角色鉴权","textChars":12,"textLines":1,"bbox":[374.4,206.4,249.6,48]}
+{"kind":"textbox","id":"sh/cbe5g3ih","slide":6,"name":"TextBox 19","text":"· 经营看板与近7日营收趋势","textPreview":"· 经营看板与近7日营收趋势","textChars":14,"textLines":1,"bbox":[374.4,259.2,249.6,48]}
+{"kind":"textbox","id":"sh/dcnm98zm","slide":6,"name":"TextBox 20","text":"· 桩管理与模拟远程重启","textPreview":"· 桩管理与模拟远程重启","textChars":12,"textLines":1,"bbox":[374.4,312,249.6,48]}
+{"kind":"textbox","id":"sh/qpwnet0b","slide":6,"name":"TextBox 21","text":"· 站点、用户与订单管理","textPreview":"· 站点、用户与订单管理","textChars":12,"textLines":1,"bbox":[374.4,364.8,249.6,48]}
+{"kind":"textbox","id":"sh/bq547yhw","slide":6,"name":"TextBox 22","text":"· 会员套餐与 AI 助手配置","textPreview":"· 会员套餐与 AI 助手配置","textChars":15,"textLines":1,"bbox":[374.4,417.6,249.6,48]}
+{"kind":"shape","id":"sh/0fy5k3id","slide":6,"name":"Rounded Rectangle 23","bbox":[662.4,144,283.2,508.8]}
+{"kind":"shape","id":"sh/lg76d8zy","slide":6,"name":"Rectangle 24","bbox":[662.4,144,283.2,48]}
+{"kind":"textbox","id":"sh/ydgnit07","slide":6,"name":"TextBox 25","text":"数据与接口层","textPreview":"数据与接口层","textChars":6,"textLines":1,"bbox":[662.4,145.92,283.2,44.16]}
+{"kind":"textbox","id":"sh/zep4byhs","slide":6,"name":"TextBox 26","text":"· SQLite 核心表与增量迁移","textPreview":"· SQLite 核心表与增量迁移","textChars":17,"textLines":1,"bbox":[681.6,206.4,249.6,48]}
+{"kind":"textbox","id":"sh/gju58ji9","slide":6,"name":"TextBox 27","text":"· TCP Socket 通信与帧协议","textPreview":"· TCP Socket 通信与帧协议","textChars":19,"textLines":1,"bbox":[681.6,259.2,249.6,48]}
+{"kind":"textbox","id":"sh/1k3mhozu","slide":6,"name":"TextBox 28","text":"· 分连接缓冲与事件驱动","textPreview":"· 分连接缓冲与事件驱动","textChars":12,"textLines":1,"bbox":[681.6,312,249.6,48]}
+{"kind":"textbox","id":"sh/jet8nm1c","slide":6,"name":"TextBox 29","text":"· 地图与模型接口适配","textPreview":"· 地图与模型接口适配","textChars":11,"textLines":1,"bbox":[681.6,364.8,249.6,48]}
+{"kind":"textbox","id":"sh/idk7ehkr","slide":6,"name":"TextBox 30","text":"· 事务、幂等与优惠快照","textPreview":"· 事务、幂等与优惠快照","textChars":12,"textLines":1,"bbox":[681.6,417.6,249.6,48]}
+{"kind":"shape","id":"sh/50bqpcj2","slide":6,"name":"Rounded Rectangle 31","bbox":[969.6,144,283.2,508.8]}
+{"kind":"shape","id":"sh/4f2pgr2h","slide":6,"name":"Rectangle 32","bbox":[969.6,144,283.2,48]}
+{"kind":"textbox","id":"sh/va98j210","slide":6,"name":"TextBox 33","text":"会员、AI 与扩展","textPreview":"会员、AI 与扩展","textChars":9,"textLines":1,"bbox":[969.6,145.92,283.2,44.16]}
+{"kind":"textbox","id":"sh/u907axkf","slide":6,"name":"TextBox 34","text":"· VIP/SVIP 共12种套餐","textPreview":"· VIP/SVIP 共12种套餐","textChars":17,"textLines":1,"bbox":[988.8,206.4,249.6,48]}
+{"kind":"textbox","id":"sh/hcrqlcj6","slide":6,"name":"TextBox 35","text":"· SVIP 知识与业务数据咨询","textPreview":"· SVIP 知识与业务数据咨询","textChars":16,"textLines":1,"bbox":[988.8,259.2,249.6,48]}
+{"kind":"textbox","id":"sh/wbipc72l","slide":6,"name":"TextBox 36","text":"· 自动续费授权与取消","textPreview":"· 自动续费授权与取消","textChars":11,"textLines":1,"bbox":[988.8,312,249.6,48]}
+{"kind":"textbox","id":"sh/7698f214","slide":6,"name":"TextBox 37","text":"· 预留：离线预测与推荐","textPreview":"· 预留：离线预测与推荐","textChars":12,"textLines":1,"bbox":[988.8,364.8,249.6,48]}
+{"kind":"textbox","id":"sh/m5076xkj","slide":6,"name":"TextBox 38","text":"· 预留：Web 大屏与预警","textPreview":"· 预留：Web 大屏与预警","textChars":14,"textLines":1,"bbox":[988.8,417.6,249.6,48]}
+{"kind":"notes","id":"nt/x8f69ofe","slide":6,"text":""}
+{"kind":"slide","id":"sl/gnmp4jqx","slide":7,"title":"项目中使用的技术","textShapes":35}
+{"kind":"shape","id":"sh/cb2tkvap","slide":7,"name":"Rectangle 1","bbox":[28.8,0,105.6,96]}
+{"kind":"shape","id":"sh/dcbud0ra","slide":7,"name":"Rectangle 2","bbox":[144,0,19.2,96]}
+{"kind":"textbox","id":"sh/ydkbm5sv","slide":7,"name":"TextBox 3","text":"项目中使用的技术","textPreview":"项目中使用的技术","textChars":8,"textLines":1,"bbox":[172.8,14.4,912,48]}
+{"kind":"textbox","id":"sh/zedcfa9g","slide":7,"name":"TextBox 4","text":"基于 Linux + Qt 6 的 C++ 桌面应用技术栈","textPreview":"基于 Linux + Qt 6 的 C++ 桌面应用技术栈","textChars":29,"textLines":1,"bbox":[172.8,62.4,960,28.8]}
+{"kind":"textbox","id":"sh/kzmdova1","slide":7,"name":"TextBox 5","text":"07","textPreview":"07","textChars":2,"textLines":1,"bbox":[1180.8,662.4,57.6,38.4]}
+{"kind":"shape","id":"sh/l0vuh0rm","slide":7,"name":"Rectangle 6","bbox":[28.8,652.8,1142.4,6.72]}
+{"kind":"shape","id":"sh/eh0ba1sr","slide":7,"name":"Rounded Rectangle 7","bbox":[48,144,283.2,225.6]}
+{"kind":"shape","id":"sh/fi9c369c","slide":7,"name":"Rounded Rectangle 8","bbox":[67.2,163.2,76.8,76.8]}
+{"kind":"textbox","id":"sh/baxkjqlk","slide":7,"name":"TextBox 9","text":"C++","textPreview":"C++","textChars":3,"textLines":1,"bbox":[67.2,165.12,76.8,72.96]}
+{"kind":"textbox","id":"sh/a9ojq5kz","slide":7,"name":"TextBox 10","text":"C++17","textPreview":"C++17","textChars":5,"textLines":1,"bbox":[158.4,163.2,163.2,38.4]}
+{"kind":"textbox","id":"sh/xcz2l03q","slide":7,"name":"TextBox 11","text":"核心语言","textPreview":"核心语言","textChars":4,"textLines":1,"bbox":[158.4,199.68,163.2,33.6]}
+{"kind":"textbox","id":"sh/cbq1sv25","slide":7,"name":"TextBox 12","text":"实现桌面端、领域服务与业务计算，使用现代 C++ 特性","textPreview":"实现桌面端、领域服务与业务计算，使用现代 C++ 特性","textChars":27,"textLines":1,"bbox":[67.2,254.4,244.8,105.6]}
+{"kind":"shape","id":"sh/n6x0fqlo","slide":7,"name":"Rounded Rectangle 13","bbox":[355.2,144,283.2,225.6]}
+{"kind":"shape","id":"sh/25ojml43","slide":7,"name":"Rounded Rectangle 14","bbox":[374.4,163.2,76.8,76.8]}
+{"kind":"textbox","id":"sh/p8fih03e","slide":7,"name":"TextBox 15","text":"Qt ","textPreview":"Qt","textChars":3,"textLines":1,"bbox":[374.4,165.12,76.8,72.96]}
+{"kind":"textbox","id":"sh/o761ov2t","slide":7,"name":"TextBox 16","text":"Qt 6.2+","textPreview":"Qt 6.2+","textChars":7,"textLines":1,"bbox":[465.6,163.2,163.2,38.4]}
+{"kind":"textbox","id":"sh/f2d0b6lc","slide":7,"name":"TextBox 17","text":"GUI 框架","textPreview":"GUI 框架","textChars":6,"textLines":1,"bbox":[465.6,199.68,163.2,33.6]}
+{"kind":"textbox","id":"sh/eh4jil4r","slide":7,"name":"TextBox 18","text":"Widgets 界面，Network/Sql/Test 模块及 WebEngine 内嵌地图","textPreview":"Widgets 界面，Network/Sql/Test 模块及 WebEngine 内嵌地图","textChars":46,"textLines":1,"bbox":[374.4,254.4,244.8,105.6]}
+{"kind":"shape","id":"sh/id4ju1oz","slide":7,"name":"Rounded Rectangle 19","bbox":[662.4,144,283.2,225.6]}
+{"kind":"shape","id":"sh/jedkn654","slide":7,"name":"Rounded Rectangle 20","bbox":[681.6,163.2,76.8,76.8]}
+{"kind":"textbox","id":"sh/4fm1wb6p","slide":7,"name":"TextBox 21","text":"SQL","textPreview":"SQL","textChars":3,"textLines":1,"bbox":[681.6,165.12,76.8,72.96]}
+{"kind":"textbox","id":"sh/50v2pgna","slide":7,"name":"TextBox 22","text":"SQLite","textPreview":"SQLite","textChars":6,"textLines":1,"bbox":[772.8,163.2,163.2,38.4]}
+{"kind":"textbox","id":"sh/q143ylov","slide":7,"name":"TextBox 23","text":"数据库","textPreview":"数据库","textChars":3,"textLines":1,"bbox":[772.8,199.68,163.2,33.6]}
+{"kind":"textbox","id":"sh/r2dkrq5g","slide":7,"name":"TextBox 24","text":"轻量级业务存储，Repository 访问，增量迁移扩展会员数据","textPreview":"轻量级业务存储，Repository 访问，增量迁移扩展会员数据","textChars":32,"textLines":1,"bbox":[681.6,254.4,244.8,105.6]}
+{"kind":"shape","id":"sh/s3ml0v61","slide":7,"name":"Rounded Rectangle 25","bbox":[969.6,144,283.2,225.6]}
+{"kind":"shape","id":"sh/d4f2t0nm","slide":7,"name":"Rounded Rectangle 26","bbox":[988.8,163.2,76.8,76.8]}
+{"kind":"textbox","id":"sh/e5o32lor","slide":7,"name":"TextBox 27","text":"TCP","textPreview":"TCP","textChars":3,"textLines":1,"bbox":[988.8,165.12,76.8,72.96]}
+{"kind":"textbox","id":"sh/f6xkvq5c","slide":7,"name":"TextBox 28","text":"TCP Socket","textPreview":"TCP Socket","textChars":10,"textLines":1,"bbox":[1080,163.2,163.2,38.4]}
+{"kind":"textbox","id":"sh/p0zmlk7u","slide":7,"name":"TextBox 29","text":"网络通信","textPreview":"网络通信","textChars":4,"textLines":1,"bbox":[1080,199.68,163.2,33.6]}
+{"kind":"textbox","id":"sh/ozq5szq9","slide":7,"name":"TextBox 30","text":"自定义二进制帧协议（msg_type+payload_length+JSON），粘包处理","textPreview":"自定义二进制帧协议（msg_type+payload_length+JSON），粘包处理","textChars":44,"textLines":1,"bbox":[988.8,254.4,244.8,105.6]}
+{"kind":"shape","id":"sh/nyh4jupo","slide":7,"name":"Rounded Rectangle 31","bbox":[48,403.2,283.2,225.6]}
+{"kind":"shape","id":"sh/2x8nqp83","slide":7,"name":"Rounded Rectangle 32","bbox":[67.2,422.4,76.8,76.8]}
+{"kind":"textbox","id":"sh/x4j6p47q","slide":7,"name":"TextBox 33","text":"事件驱动","textPreview":"事件驱动","textChars":4,"textLines":1,"bbox":[67.2,424.32,76.8,72.96]}
+{"kind":"textbox","id":"sh/c3a5wzq5","slide":7,"name":"TextBox 34","text":"事件驱动","textPreview":"事件驱动","textChars":4,"textLines":1,"bbox":[158.4,422.4,163.2,38.4]}
+{"kind":"textbox","id":"sh/b2h4nupk","slide":7,"name":"TextBox 35","text":"连接调度","textPreview":"连接调度","textChars":4,"textLines":1,"bbox":[158.4,458.88,163.2,33.6]}
+{"kind":"textbox","id":"sh/a18nup8z","slide":7,"name":"TextBox 36","text":"服务端事件驱动监听，充电模拟线程，会话心跳定时器","textPreview":"服务端事件驱动监听，充电模拟线程，会话心跳定时器","textChars":24,"textLines":1,"bbox":[67.2,513.6,244.8,105.6]}
+{"kind":"shape","id":"sh/lsj6t47m","slide":7,"name":"Rounded Rectangle 37","bbox":[355.2,403.2,283.2,225.6]}
+{"kind":"shape","id":"sh/kra50jqh","slide":7,"name":"Rounded Rectangle 38","bbox":[374.4,422.4,76.8,76.8]}
+{"kind":"textbox","id":"sh/wneps3ap","slide":7,"name":"TextBox 39","text":"QSS","textPreview":"QSS","textChars":3,"textLines":1,"bbox":[374.4,424.32,76.8,72.96]}
+{"kind":"textbox","id":"sh/honq18ru","slide":7,"name":"TextBox 40","text":"QSS","textPreview":"QSS","textChars":3,"textLines":1,"bbox":[465.6,422.4,163.2,38.4]}
+{"kind":"textbox","id":"sh/ulc7qdsj","slide":7,"name":"TextBox 41","text":"界面样式","textPreview":"界面样式","textChars":4,"textLines":1,"bbox":[465.6,458.88,163.2,33.6]}
+{"kind":"textbox","id":"sh/vm58zi94","slide":7,"name":"TextBox 42","text":"统一桌面端 QSS 样式表，卡片式 UI 设计，圆角与配色方案","textPreview":"统一桌面端 QSS 样式表，卡片式 UI 设计，圆角与配色方案","textChars":31,"textLines":1,"bbox":[374.4,513.6,244.8,105.6]}
+{"kind":"shape","id":"sh/8jupo3ad","slide":7,"name":"Rounded Rectangle 43","bbox":[662.4,403.2,283.2,225.6]}
+{"kind":"shape","id":"sh/9k3qx8ry","slide":7,"name":"Rounded Rectangle 44","bbox":[681.6,422.4,76.8,76.8]}
+{"kind":"textbox","id":"sh/mxc7mts7","slide":7,"name":"TextBox 45","text":"qma","textPreview":"qma","textChars":3,"textLines":1,"bbox":[681.6,424.32,76.8,72.96]}
+{"kind":"textbox","id":"sh/7yl8vy9s","slide":7,"name":"TextBox 46","text":"qmake","textPreview":"qmake","textChars":5,"textLines":1,"bbox":[772.8,422.4,163.2,38.4]}
+{"kind":"textbox","id":"sh/sfy907ah","slide":7,"name":"TextBox 47","text":"构建系统","textPreview":"构建系统","textChars":4,"textLines":1,"bbox":[772.8,458.88,163.2,33.6]}
+{"kind":"textbox","id":"sh/tg7q9sr2","slide":7,"name":"TextBox 48","text":"SUBDIRS 多子项目结构，分支独立调试，影子构建","textPreview":"SUBDIRS 多子项目结构，分支独立调试，影子构建","textChars":26,"textLines":1,"bbox":[681.6,513.6,244.8,105.6]}
+{"kind":"shape","id":"sh/na9sz6tk","slide":7,"name":"Rounded Rectangle 49","bbox":[969.6,403.2,283.2,225.6]}
+{"kind":"shape","id":"sh/290bq1cz","slide":7,"name":"Rounded Rectangle 50","bbox":[988.8,422.4,76.8,76.8]}
+{"kind":"textbox","id":"sh/pcra1wba","slide":7,"name":"TextBox 51","text":"Git","textPreview":"Git","textChars":3,"textLines":1,"bbox":[988.8,424.32,76.8,72.96]}
+{"kind":"textbox","id":"sh/obitsrup","slide":7,"name":"TextBox 52","text":"Git","textPreview":"Git","textChars":3,"textLines":1,"bbox":[1080,422.4,163.2,38.4]}
+{"kind":"textbox","id":"sh/betc36tg","slide":7,"name":"TextBox 53","text":"版本管理","textPreview":"版本管理","textChars":4,"textLines":1,"bbox":[1080,458.88,163.2,33.6]}
+{"kind":"textbox","id":"sh/adkbu1cv","slide":7,"name":"TextBox 54","text":"多人协作功能分支模式，PR 审核，主分支保护","textPreview":"多人协作功能分支模式，PR 审核，主分支保护","textChars":22,"textLines":1,"bbox":[988.8,513.6,244.8,105.6]}
+{"kind":"notes","id":"nt/gnmp4jqx","slide":7,"text":""}
+{"kind":"slide","id":"sl/fu1gfa1s","slide":8,"title":"核心设计：TCP 帧协议","textShapes":10}
+{"kind":"shape","id":"sh/18byd4zy","slide":8,"name":"Rectangle 1","bbox":[28.8,0,105.6,96]}
+{"kind":"shape","id":"sh/g72x4zyd","slide":8,"name":"Rectangle 2","bbox":[144,0,19.2,96]}
+{"kind":"textbox","id":"sh/ri9g7uhw","slide":8,"name":"TextBox 3","text":"核心设计：TCP 帧协议","textPreview":"核心设计：TCP 帧协议","textChars":12,"textLines":1,"bbox":[172.8,14.4,912,48]}
+{"kind":"textbox","id":"sh/6h0fypgb","slide":8,"name":"TextBox 4","text":"长度前缀解决拆包与粘包，当前 TCP 协议用于本地教学环境","textPreview":"长度前缀解决拆包与粘包，当前 TCP 协议用于本地教学环境","textChars":29,"textLines":1,"bbox":[172.8,62.4,960,28.8]}
+{"kind":"textbox","id":"sh/tkby9kzm","slide":8,"name":"TextBox 5","text":"08","textPreview":"08","textChars":2,"textLines":1,"bbox":[1180.8,662.4,57.6,38.4]}
+{"kind":"shape","id":"sh/sjix0zy1","slide":8,"name":"Rectangle 6","bbox":[28.8,652.8,1142.4,6.72]}
+{"kind":"shape","id":"sh/je9g3ahk","slide":8,"name":"Rounded Rectangle 7","bbox":[96,153.6,1084.8,115.2]}
+{"kind":"shape","id":"sh/id0fu50z","slide":8,"name":"Rectangle 8","bbox":[115.2,172.8,240,76.8]}
+{"kind":"textbox","id":"sh/o7ydoret","slide":8,"name":"TextBox 9","text":"msg_type\n(4 bytes)","textPreview":"msg_type | (4 bytes)","textChars":18,"textLines":2,"bbox":[115.2,172.8,240,76.8]}
+{"kind":"shape","id":"sh/98rehwve","slide":8,"name":"Rectangle 10","bbox":[364.8,172.8,288,76.8]}
+{"kind":"textbox","id":"sh/m5gvmhwn","slide":8,"name":"TextBox 11","text":"payload_length\n(4 bytes)","textPreview":"payload_length | (4 bytes)","textChars":24,"textLines":2,"bbox":[364.8,172.8,288,76.8]}
+{"kind":"shape","id":"sh/n6pwfmd8","slide":8,"name":"Rectangle 12","bbox":[662.4,172.8,499.2,76.8]}
+{"kind":"textbox","id":"sh/0jydkreh","slide":8,"name":"TextBox 13","text":"UTF-8 JSON Payload\n(max 10 MiB)","textPreview":"UTF-8 JSON Payload | (max 10 MiB)","textChars":31,"textLines":2,"bbox":[662.4,172.8,499.2,76.8]}
+{"kind":"textbox","id":"sh/1k7edwv2","slide":8,"name":"TextBox 14","text":"协议特点","textPreview":"协议特点","textChars":4,"textLines":1,"bbox":[96,297.6,480,38.4]}
+{"kind":"textbox","id":"sh/ehgvihwr","slide":8,"name":"TextBox 15","text":"● 大端字节序，跨平台一致\n● 消息类型枚举统一管理\n● 请求-响应配对（request_id 追踪）\n● 粘包处理：缓冲区累积 + 帧解码状态机\n● 超长正文及非法 JSON 直接拒绝","textPreview":"● 大端字节序，跨平台一致 | ● 消息类型枚举统一管理 | ● 请求-响应配对（request_id 追踪） | ● 粘包处理：缓冲区累积 + 帧解码状态机 | ● 超长正文及非法 JSON 直接拒绝","textChars":93,"textLines":5,"bbox":[96,340.8,528,288]}
+{"kind":"textbox","id":"sh/zipwbmdc","slide":8,"name":"TextBox 16","text":"通信流程","textPreview":"通信流程","textChars":4,"textLines":1,"bbox":[672,297.6,480,38.4]}
+{"kind":"textbox","id":"sh/kfixwbe1","slide":8,"name":"TextBox 17","text":"● 客户端连接后发送 HealthRequest\n● HealthResponse 校验协议版本\n● 登录成功后分配 Session ID\n● 业务请求携带 Session ID 鉴权\n● 每30秒心跳续期，退出清理会话","textPreview":"● 客户端连接后发送 HealthRequest | ● HealthResponse 校验协议版本 | ● 登录成功后分配 Session ID | ● 业务请求携带 Session ID 鉴权 | ● 每30秒心跳续期，退出清理会话","textChars":110,"textLines":5,"bbox":[672,340.8,528,288]}
+{"kind":"notes","id":"nt/fu1gfa1s","slide":8,"text":""}
+{"kind":"slide","id":"sl/udsvah03","slide":9,"title":"核心界面 · 用户端 — 登录","textShapes":5}
+{"kind":"shape","id":"sh/1cfmhgne","slide":9,"name":"Rectangle 1","bbox":[28.8,0,105.6,96]}
+{"kind":"shape","id":"sh/0b65obm9","slide":9,"name":"Rectangle 2","bbox":[144,0,19.2,96]}
+{"kind":"textbox","id":"sh/nex4jq5k","slide":9,"name":"TextBox 3","text":"核心界面 · 用户端 — 登录","textPreview":"核心界面 · 用户端 — 登录","textChars":15,"textLines":1,"bbox":[172.8,14.4,912,48]}
+{"kind":"textbox","id":"sh/mdonql4z","slide":9,"name":"TextBox 4","text":"手机号免密登录，输入11位手机号即可登录或自动注册","textPreview":"手机号免密登录，输入11位手机号即可登录或自动注册","textChars":25,"textLines":1,"bbox":[172.8,62.4,960,28.8]}
+{"kind":"textbox","id":"sh/9gzml0nq","slide":9,"name":"TextBox 5","text":"09","textPreview":"09","textChars":2,"textLines":1,"bbox":[1180.8,662.4,57.6,38.4]}
+{"kind":"shape","id":"sh/ofq5svm5","slide":9,"name":"Rectangle 6","bbox":[28.8,652.8,1142.4,6.72]}
+{"kind":"shape","id":"sh/ah8nu54b","slide":9,"name":"Rounded Rectangle 8","bbox":[835.2,144,393.6,480]}
+{"kind":"textbox","id":"sh/oza1gfyh","slide":9,"name":"TextBox 9","text":"功能说明","textPreview":"功能说明","textChars":4,"textLines":1,"bbox":[864,163.2,336,38.4]}
+{"kind":"textbox","id":"sh/p0ji9kf2","slide":9,"name":"TextBox 10","text":"● 输入11位手机号，实时格式校验\n● 已存在用户 → 直接登录\n● 未注册手机号 → 自动创建新用户\n● 冻结账号登录被拦截并提示\n● 登录成功后窗口扩展至主页\n● 会话心跳每30秒自动续期\n● 主动退出 / 会话失效自动回登录页","textPreview":"● 输入11位手机号，实时格式校验 | ● 已存在用户 → 直接登录 | ● 未注册手机号 → 自动创建新用户 | ● 冻结账号登录被拦截并提示 | ● 登录成功后窗口扩展至主页 | ● 会话心跳每30秒自动续期 | ● 主动退出 / 会话失效自动回登录页","textChars":116,"textLines":7,"bbox":[864,211.2,336,384]}
+{"kind":"image","id":"im/hcz65kbq","slide":9,"name":"图片 11","bbox":[113.13,146.33,683.07,476.27]}
+{"kind":"notes","id":"nt/udsvah03","slide":9,"text":""}
+{"kind":"slide","id":"sl/m90b6t0r","slide":10,"title":"核心界面 · 用户端 — 充电站查询","textShapes":5}
+{"kind":"shape","id":"sh/xc3mho32","slide":10,"name":"Rectangle 1","bbox":[28.8,0,105.6,96]}
+{"kind":"shape","id":"sh/cbu58j2h","slide":10,"name":"Rectangle 2","bbox":[144,0,19.2,96]}
+{"kind":"textbox","id":"sh/zelojyl8","slide":10,"name":"TextBox 3","text":"核心界面 · 用户端 — 充电站查询","textPreview":"核心界面 · 用户端 — 充电站查询","textChars":18,"textLines":1,"bbox":[172.8,14.4,912,48]}
+{"kind":"textbox","id":"sh/ydcnatkn","slide":10,"name":"TextBox 4","text":"选择省份或输入地址，按距离排序展示附近充电站","textPreview":"选择省份或输入地址，按距离排序展示附近充电站","textChars":22,"textLines":1,"bbox":[172.8,62.4,960,28.8]}
+{"kind":"textbox","id":"sh/l036l83y","slide":10,"name":"TextBox 5","text":"10","textPreview":"10","textChars":2,"textLines":1,"bbox":[1180.8,662.4,57.6,38.4]}
+{"kind":"shape","id":"sh/kzu5c32t","slide":10,"name":"Rectangle 6","bbox":[28.8,652.8,1142.4,6.72]}
+{"kind":"shape","id":"sh/m1cnetkj","slide":10,"name":"Rounded Rectangle 8","bbox":[835.2,144,393.6,480]}
+{"kind":"textbox","id":"sh/s7yt4b21","slide":10,"name":"TextBox 9","text":"功能说明","textPreview":"功能说明","textChars":4,"textLines":1,"bbox":[864,163.2,336,38.4]}
+{"kind":"textbox","id":"sh/d87uxg3m","slide":10,"name":"TextBox 10","text":"● 下拉选择省份或手动输入地址\n● 地址转经纬度（OpenStreetMap）\n● Haversine 公式计算直线距离\n● 按距离由近及远排序\n● 卡片显示站名/价格/空闲数/距离\n● 点击卡片进入站点详情","textPreview":"● 下拉选择省份或手动输入地址 | ● 地址转经纬度（OpenStreetMap） | ● Haversine 公式计算直线距离 | ● 按距离由近及远排序 | ● 卡片显示站名/价格/空闲数/距离 | ● 点击卡片进入站点详情","textChars":104,"textLines":6,"bbox":[864,211.2,336,384]}
+{"kind":"image","id":"im/h47i1oj2","slide":10,"name":"图片 11","bbox":[95.67,144,719.4,489]}
+{"kind":"notes","id":"nt/m90b6t0r","slide":10,"text":""}
+{"kind":"slide","id":"sl/jetc3ut0","slide":11,"title":"核心界面 · 用户端 — 站点详情","textShapes":5}
+{"kind":"shape","id":"sh/xcryxg7y","slide":11,"name":"Rectangle 1","bbox":[28.8,0,105.6,96]}
+{"kind":"shape","id":"sh/wbih4b6d","slide":11,"name":"Rectangle 2","bbox":[144,0,19.2,96]}
+{"kind":"textbox","id":"sh/n69grmpw","slide":11,"name":"TextBox 3","text":"核心界面 · 用户端 — 站点详情","textPreview":"核心界面 · 用户端 — 站点详情","textChars":17,"textLines":1,"bbox":[172.8,14.4,912,48]}
+{"kind":"textbox","id":"sh/250zy18b","slide":11,"name":"TextBox 4","text":"查看站点与可用桩，支持驾车、步行、骑行内嵌路线预览","textPreview":"查看站点与可用桩，支持驾车、步行、骑行内嵌路线预览","textChars":25,"textLines":1,"bbox":[172.8,62.4,960,28.8]}
+{"kind":"textbox","id":"sh/98rytw72","slide":11,"name":"TextBox 5","text":"11","textPreview":"11","textChars":2,"textLines":1,"bbox":[1180.8,662.4,57.6,38.4]}
+{"kind":"shape","id":"sh/o7ih0r6h","slide":11,"name":"Rectangle 6","bbox":[28.8,652.8,1142.4,6.72]}
+{"kind":"shape","id":"sh/61kzalof","slide":11,"name":"Rounded Rectangle 8","bbox":[835.2,144,393.6,480]}
+{"kind":"textbox","id":"sh/ofqtgnyt","slide":11,"name":"TextBox 9","text":"功能说明","textPreview":"功能说明","textChars":4,"textLines":1,"bbox":[864,163.2,336,38.4]}
+{"kind":"textbox","id":"sh/9gza9sze","slide":11,"name":"TextBox 10","text":"● 展示站名、地址、单价\n● 表格列出空闲充电桩详情\n● 桩编号 / 类型（快充·慢充）/ 功率\n● 驾车 / 步行 / 骑行方式切换\n● 预估距离与耗时计算\n● 点击「选择」进入预约充电流程\n● QWebEngineView 内嵌地图导航","textPreview":"● 展示站名、地址、单价 | ● 表格列出空闲充电桩详情 | ● 桩编号 / 类型（快充·慢充）/ 功率 | ● 驾车 / 步行 / 骑行方式切换 | ● 预估距离与耗时计算 | ● 点击「选择」进入预约充电流程 | ● QWebEngineView 内嵌地图导航","textChars":120,"textLines":7,"bbox":[864,211.2,336,384]}
+{"kind":"image","id":"im/dsn6xw32","slide":11,"name":"图片 11","bbox":[96.73,144,706.2,480]}
+{"kind":"notes","id":"nt/jetc3ut0","slide":11,"text":""}
+{"kind":"slide","id":"sl/8f2psfyx","slide":12,"title":"核心界面 · 用户端 — 个人中心","textShapes":5}
+{"kind":"shape","id":"sh/1gbm9s3a","slide":12,"name":"Rectangle 1","bbox":[28.8,0,105.6,96]}
+{"kind":"shape","id":"sh/0f2lgnmp","slide":12,"name":"Rectangle 2","bbox":[144,0,19.2,96]}
+{"kind":"textbox","id":"sh/ra943il8","slide":12,"name":"TextBox 3","text":"核心界面 · 用户端 — 个人中心","textPreview":"核心界面 · 用户端 — 个人中心","textChars":17,"textLines":1,"bbox":[172.8,14.4,912,48]}
+{"kind":"textbox","id":"sh/q903ad4n","slide":12,"name":"TextBox 4","text":"维护资料与模拟钱包，个人中心提供会员和 AI 咨询入口","textPreview":"维护资料与模拟钱包，个人中心提供会员和 AI 咨询入口","textChars":27,"textLines":1,"bbox":[172.8,62.4,960,28.8]}
+{"kind":"textbox","id":"sh/dcbm583y","slide":12,"name":"TextBox 5","text":"12","textPreview":"12","textChars":2,"textLines":1,"bbox":[1180.8,662.4,57.6,38.4]}
+{"kind":"shape","id":"sh/sb2lcnmd","slide":12,"name":"Rectangle 6","bbox":[28.8,652.8,1142.4,6.72]}
+{"kind":"shape","id":"sh/a543mx4r","slide":12,"name":"Rounded Rectangle 8","bbox":[835.2,144,393.6,480]}
+{"kind":"textbox","id":"sh/wvupgz6t","slide":12,"name":"TextBox 9","text":"功能说明","textPreview":"功能说明","textChars":4,"textLines":1,"bbox":[864,163.2,336,38.4]}
+{"kind":"textbox","id":"sh/xw3q94ne","slide":12,"name":"TextBox 10","text":"● 展示头像、昵称、钱包余额\n● 支持本地头像上传与昵称修改\n● 会员中心查看套餐与权益期限\n● 输入金额模拟钱包充值\n● SVIP 可进入 AI 咨询助手\n● 服务端刷新保证数据一致性\n● 退出登录清除会话状态","textPreview":"● 展示头像、昵称、钱包余额 | ● 支持本地头像上传与昵称修改 | ● 会员中心查看套餐与权益期限 | ● 输入金额模拟钱包充值 | ● SVIP 可进入 AI 咨询助手 | ● 服务端刷新保证数据一致性 | ● 退出登录清除会话状态","textChars":106,"textLines":7,"bbox":[864,211.2,336,384]}
+{"kind":"image","id":"im/dsv6903i","slide":12,"name":"图片 13","bbox":[91.73,144,706.2,480]}
+{"kind":"notes","id":"nt/8f2psfyx","slide":12,"text":""}
+{"kind":"slide","id":"sl/hgzapcr6","slide":13,"title":"核心界面 · 管理端 — 登录","textShapes":5}
+{"kind":"shape","id":"sh/q50nydsj","slide":13,"name":"Rectangle 1","bbox":[28.8,0,105.6,96]}
+{"kind":"shape","id":"sh/bq9orito","slide":13,"name":"Rectangle 2","bbox":[144,0,19.2,96]}
+{"kind":"textbox","id":"sh/o3i5w3ad","slide":13,"name":"TextBox 3","text":"核心界面 · 管理端 — 登录","textPreview":"核心界面 · 管理端 — 登录","textChars":15,"textLines":1,"bbox":[172.8,14.4,912,48]}
+{"kind":"textbox","id":"sh/p4r6p8by","slide":13,"name":"TextBox 4","text":"管理员账号密码验证，登录后进入运营管理工作空间","textPreview":"管理员账号密码验证，登录后进入运营管理工作空间","textChars":23,"textLines":1,"bbox":[172.8,62.4,960,28.8]}
+{"kind":"textbox","id":"sh/21gnuts7","slide":13,"name":"TextBox 5","text":"13","textPreview":"13","textChars":2,"textLines":1,"bbox":[1180.8,662.4,57.6,38.4]}
+{"kind":"shape","id":"sh/32ponyts","slide":13,"name":"Rectangle 6","bbox":[28.8,652.8,1142.4,6.72]}
+{"kind":"shape","id":"sh/1076lobm","slide":13,"name":"Rounded Rectangle 8","bbox":[835.2,144,393.6,480]}
+{"kind":"textbox","id":"sh/hcfy9k3u","slide":13,"name":"TextBox 9","text":"功能说明","textPreview":"功能说明","textChars":4,"textLines":1,"bbox":[864,163.2,336,38.4]}
+{"kind":"textbox","id":"sh/gb6x0zm9","slide":13,"name":"TextBox 10","text":"● 账号密码身份验证（admin / admin123）\n● 密码使用加盐哈希存储，不明文记录\n● 非空校验 + 长度校验\n● 异步请求，按钮禁用 + 「登录中...」状态\n● 登录成功保存 Session，进入管理后台\n● 失败提示「用户名或密码错误」\n● 密码可见性切换按钮","textPreview":"● 账号密码身份验证（admin / admin123） | ● 密码使用加盐哈希存储，不明文记录 | ● 非空校验 + 长度校验 | ● 异步请求，按钮禁用 + 「登录中...」状态 | ● 登录成功保存 Session，进入管理后台 | ● 失败提示「用户名或密码错误」...","textChars":139,"textLines":7,"bbox":[864,211.2,336,384]}
+{"kind":"image","id":"im/wza1svux","slide":13,"name":"图片 11","bbox":[87.6,144.13,711.6,483.4]}
+{"kind":"notes","id":"nt/hgzapcr6","slide":13,"text":""}
+{"kind":"slide","id":"sl/6lsnupw7","slide":14,"title":"核心界面 · 管理端 — 经营看板","textShapes":6}
+{"kind":"shape","id":"sh/xc7eds76","slide":14,"name":"Rectangle 1","bbox":[28.8,0,105.6,96]}
+{"kind":"shape","id":"sh/wbydknq1","slide":14,"name":"Rectangle 2","bbox":[144,0,19.2,96]}
+{"kind":"textbox","id":"sh/jepwf2pc","slide":14,"name":"TextBox 3","text":"核心界面 · 管理端 — 经营看板","textPreview":"核心界面 · 管理端 — 经营看板","textChars":17,"textLines":1,"bbox":[172.8,14.4,912,48]}
+{"kind":"textbox","id":"sh/idgvmx8r","slide":14,"name":"TextBox 4","text":"累计业务指标、近7日营收趋势与充电桩状态分布","textPreview":"累计业务指标、近7日营收趋势与充电桩状态分布","textChars":22,"textLines":1,"bbox":[172.8,62.4,960,28.8]}
+{"kind":"textbox","id":"sh/5grehs7i","slide":14,"name":"TextBox 5","text":"14","textPreview":"14","textChars":2,"textLines":1,"bbox":[1180.8,662.4,57.6,38.4]}
+{"kind":"shape","id":"sh/kfidonqx","slide":14,"name":"Rectangle 6","bbox":[28.8,652.8,1142.4,6.72]}
+{"kind":"textbox","id":"sh/c3e1gjyd","slide":14,"name":"TextBox 9","text":"（需补充截图）","textPreview":"（需补充截图）","textChars":7,"textLines":1,"bbox":[48,631.68,748.8,33.6]}
+{"kind":"shape","id":"sh/x4ni9ofy","slide":14,"name":"Rounded Rectangle 10","bbox":[835.2,144,393.6,480]}
+{"kind":"textbox","id":"sh/a1wze9g7","slide":14,"name":"TextBox 11","text":"功能说明","textPreview":"功能说明","textChars":4,"textLines":1,"bbox":[864,163.2,336,38.4]}
+{"kind":"textbox","id":"sh/b2507exs","slide":14,"name":"TextBox 12","text":"● 累计充电量 / 营收 / 用户数 / 次数\n● 近7日营收趋势折线图\n● 桩状态分布与故障提示入口\n● 数量及占比百分比展示\n● 刷新按钮手动更新数据\n● 连接状态实时显示","textPreview":"● 累计充电量 / 营收 / 用户数 / 次数 | ● 近7日营收趋势折线图 | ● 桩状态分布与故障提示入口 | ● 数量及占比百分比展示 | ● 刷新按钮手动更新数据 | ● 连接状态实时显示","textChars":88,"textLines":6,"bbox":[864,211.2,336,384]}
+{"kind":"image","id":"im/rq1cvq1g","slide":14,"name":"图片 14","bbox":[62.67,144,734.13,479.67]}
+{"kind":"notes","id":"nt/6lsnupw7","slide":14,"text":""}
+{"kind":"slide","id":"sl/vaxsvy10","slide":15,"title":"核心界面 · 管理端 — 充电桩管理","textShapes":7}
+{"kind":"shape","id":"sh/547mhg3m","slide":15,"name":"Rectangle 1","bbox":[28.8,0,105.6,96]}
+{"kind":"shape","id":"sh/k3y5ov21","slide":15,"name":"Rectangle 2","bbox":[144,0,19.2,96]}
+{"kind":"textbox","id":"sh/76p4jqls","slide":15,"name":"TextBox 3","text":"核心界面 · 管理端 — 充电桩管理","textPreview":"核心界面 · 管理端 — 充电桩管理","textChars":18,"textLines":1,"bbox":[172.8,14.4,912,48]}
+{"kind":"textbox","id":"sh/65gnqlk7","slide":15,"name":"TextBox 4","text":"充电桩列表展示与远程重启操作","textPreview":"充电桩列表展示与远程重启操作","textChars":14,"textLines":1,"bbox":[172.8,62.4,960,28.8]}
+{"kind":"textbox","id":"sh/t87ml0ji","slide":15,"name":"TextBox 5","text":"15","textPreview":"15","textChars":2,"textLines":1,"bbox":[1180.8,662.4,57.6,38.4]}
+{"kind":"shape","id":"sh/s7y5sv2x","slide":15,"name":"Rectangle 6","bbox":[28.8,652.8,1142.4,6.72]}
+{"kind":"shape","id":"sh/na5476l8","slide":15,"name":"Rounded Rectangle 7","bbox":[48,144,748.8,480]}
+{"kind":"textbox","id":"sh/m9c3e1kn","slide":15,"name":"TextBox 8","text":"[ 待补充截图 ]","textPreview":"[ 待补充截图 ]","textChars":9,"textLines":1,"bbox":[48,355.2,748.8,57.6]}
+{"kind":"textbox","id":"sh/wrm9kvep","slide":15,"name":"TextBox 9","text":"（需补充截图）","textPreview":"（需补充截图）","textChars":7,"textLines":1,"bbox":[48,631.68,748.8,33.6]}
+{"kind":"shape","id":"sh/hsvat0fa","slide":15,"name":"Rounded Rectangle 10","bbox":[835.2,144,393.6,480]}
+{"kind":"textbox","id":"sh/upkrilwj","slide":15,"name":"TextBox 11","text":"功能说明","textPreview":"功能说明","textChars":4,"textLines":1,"bbox":[864,163.2,336,38.4]}
+{"kind":"textbox","id":"sh/vqdsrqx4","slide":15,"name":"TextBox 12","text":"● 电桩编号 / 所属电站 / 类型\n● 功率(kW) / 当前状态 / 累计充电次数\n● 累计充电时长统计\n● 选中电桩可执行远程重启\n● 模拟向电桩发送重启指令\n● 用于处理死机等异常场景","textPreview":"● 电桩编号 / 所属电站 / 类型 | ● 功率(kW) / 当前状态 / 累计充电次数 | ● 累计充电时长统计 | ● 选中电桩可执行远程重启 | ● 模拟向电桩发送重启指令 | ● 用于处理死机等异常场景","textChars":96,"textLines":6,"bbox":[864,211.2,336,384]}
+{"kind":"notes","id":"nt/vaxsvy10","slide":15,"text":""}
+{"kind":"slide","id":"sl/gny5sjyp","slide":16,"title":"核心界面 · 管理端 — 充电站 / 用户 / 订单管理","textShapes":15}
+{"kind":"shape","id":"sh/8z2h8bq1","slide":16,"name":"Rectangle 1","bbox":[28.8,0,105.6,96]}
+{"kind":"shape","id":"sh/9kby1g7m","slide":16,"name":"Rectangle 2","bbox":[144,0,19.2,96]}
+{"kind":"textbox","id":"sh/ytkf2h8j","slide":16,"name":"TextBox 3","text":"核心界面 · 管理端 — 充电站 / 用户 / 订单管理","textPreview":"核心界面 · 管理端 — 充电站 / 用户 / 订单管理","textChars":28,"textLines":1,"bbox":[172.8,14.4,912,48]}
+{"kind":"textbox","id":"sh/zutgvm94","slide":16,"name":"TextBox 4","text":"三大管理模块覆盖运营全流程","textPreview":"三大管理模块覆盖运营全流程","textChars":13,"textLines":1,"bbox":[172.8,62.4,960,28.8]}
+{"kind":"textbox","id":"sh/kv2h4rqp","slide":16,"name":"TextBox 5","text":"16","textPreview":"16","textChars":2,"textLines":1,"bbox":[1180.8,662.4,57.6,38.4]}
+{"kind":"shape","id":"sh/lwbyxwra","slide":16,"name":"Rectangle 6","bbox":[28.8,652.8,1142.4,6.72]}
+{"kind":"shape","id":"sh/ip4zel83","slide":16,"name":"Rounded Rectangle 7","bbox":[48,144,345.6,480]}
+{"kind":"shape","id":"sh/3qdg7qpo","slide":16,"name":"Rectangle 8","bbox":[48,144,345.6,43.2]}
+{"kind":"textbox","id":"sh/fm1gzq5o","slide":16,"name":"TextBox 9","text":"充电站管理","textPreview":"充电站管理","textChars":5,"textLines":1,"bbox":[48,145.92,345.6,39.36]}
+{"kind":"shape","id":"sh/e1sf65o3","slide":16,"name":"Rounded Rectangle 10","bbox":[67.2,201.6,307.2,211.2]}
+{"kind":"textbox","id":"sh/1ojy10ne","slide":16,"name":"TextBox 11","text":"[ 待补充截图 ]","textPreview":"[ 待补充截图 ]","textChars":9,"textLines":1,"bbox":[67.2,278.4,307.2,57.6]}
+{"kind":"textbox","id":"sh/gnax8v6t","slide":16,"name":"TextBox 12","text":"（需补充截图）","textPreview":"（需补充截图）","textChars":7,"textLines":1,"bbox":[67.2,420.48,307.2,33.6]}
+{"kind":"textbox","id":"sh/nqlg3a5k","slide":16,"name":"TextBox 13","text":"● 充电站列表（ID/站名/地址/经纬度）\n● 站内设备实时状态明细\n● 新增充电站（站名/地址/电桩数）","textPreview":"● 充电站列表（ID/站名/地址/经纬度） | ● 站内设备实时状态明细 | ● 新增充电站（站名/地址/电桩数）","textChars":53,"textLines":3,"bbox":[67.2,432,307.2,172.8]}
+{"kind":"shape","id":"sh/2pcfa5oz","slide":16,"name":"Rounded Rectangle 14","bbox":[463.68,144,345.6,480]}
+{"kind":"shape","id":"sh/ps3y5knq","slide":16,"name":"Rectangle 15","bbox":[463.68,144,345.6,43.2]}
+{"kind":"textbox","id":"sh/oruhcf65","slide":16,"name":"TextBox 16","text":"用户管理","textPreview":"用户管理","textChars":4,"textLines":1,"bbox":[463.68,145.92,345.6,39.36]}
+{"kind":"shape","id":"sh/bulg7u5g","slide":16,"name":"Rounded Rectangle 17","bbox":[482.88,201.6,307.2,211.2]}
+{"kind":"textbox","id":"sh/atczepob","slide":16,"name":"TextBox 18","text":"[ 待补充截图 ]","textPreview":"[ 待补充截图 ]","textChars":9,"textLines":1,"bbox":[482.88,278.4,307.2,57.6]}
+{"kind":"textbox","id":"sh/mpgj6t8j","slide":16,"name":"TextBox 19","text":"（需补充截图）","textPreview":"（需补充截图）","textChars":7,"textLines":1,"bbox":[482.88,420.48,307.2,33.6]}
+{"kind":"textbox","id":"sh/7qp0zepo","slide":16,"name":"TextBox 20","text":"● 用户列表（ID/手机号/昵称/余额）\n● 手机号模糊搜索\n● 冻结 / 解冻用户账号","textPreview":"● 用户列表（ID/手机号/昵称/余额） | ● 手机号模糊搜索 | ● 冻结 / 解冻用户账号","textChars":44,"textLines":3,"bbox":[482.88,432,307.2,172.8]}
+{"kind":"shape","id":"sh/8by18jq9","slide":16,"name":"Rounded Rectangle 21","bbox":[880.32,144,345.6,480]}
+{"kind":"shape","id":"sh/9c7i1o7u","slide":16,"name":"Rectangle 22","bbox":[880.32,144,345.6,43.2]}
+{"kind":"textbox","id":"sh/ylwj2987","slide":16,"name":"TextBox 23","text":"订单管理","textPreview":"订单管理","textChars":4,"textLines":1,"bbox":[880.32,145.92,345.6,39.36]}
+{"kind":"shape","id":"sh/zm50veps","slide":16,"name":"Rounded Rectangle 24","bbox":[899.52,201.6,307.2,211.2]}
+{"kind":"textbox","id":"sh/kne14jqd","slide":16,"name":"TextBox 25","text":"[ 待补充截图 ]","textPreview":"[ 待补充截图 ]","textChars":9,"textLines":1,"bbox":[899.52,278.4,307.2,57.6]}
+{"kind":"textbox","id":"sh/lo7ixo7y","slide":16,"name":"TextBox 26","text":"（需补充截图）","textPreview":"（需补充截图）","textChars":7,"textLines":1,"bbox":[899.52,420.48,307.2,33.6]}
+{"kind":"textbox","id":"sh/ih0jedob","slide":16,"name":"TextBox 27","text":"● 订单列表与筛选\n● 订单状态追踪\n● 充电量与费用明细","textPreview":"● 订单列表与筛选 | ● 订单状态追踪 | ● 充电量与费用明细","textChars":29,"textLines":3,"bbox":[899.52,432,307.2,172.8]}
+{"kind":"notes","id":"nt/gny5sjyp","slide":16,"text":""}
+{"kind":"slide","id":"sl/14bup87q","slide":17,"title":"项目难点与解决方案","textShapes":21}
+{"kind":"shape","id":"sh/1c7e50ni","slide":17,"name":"Rectangle 1","bbox":[28.8,0,105.6,96]}
+{"kind":"shape","id":"sh/gbedwfmx","slide":17,"name":"Rectangle 2","bbox":[144,0,19.2,96]}
+{"kind":"textbox","id":"sh/rm5czq50","slide":17,"name":"TextBox 3","text":"项目难点与解决方案","textPreview":"项目难点与解决方案","textChars":9,"textLines":1,"bbox":[172.8,14.4,912,48]}
+{"kind":"textbox","id":"sh/6lwvql4v","slide":17,"name":"TextBox 4","text":"在实战中遇到并攻克的技术挑战","textPreview":"在实战中遇到并攻克的技术挑战","textChars":14,"textLines":1,"bbox":[172.8,62.4,960,28.8]}
+{"kind":"textbox","id":"sh/t8ne10n6","slide":17,"name":"TextBox 5","text":"17","textPreview":"17","textChars":2,"textLines":1,"bbox":[1180.8,662.4,57.6,38.4]}
+{"kind":"shape","id":"sh/snedsvml","slide":17,"name":"Rectangle 6","bbox":[28.8,652.8,1142.4,6.72]}
+{"kind":"shape","id":"sh/jilcvq54","slide":17,"name":"Rounded Rectangle 7","bbox":[48,144,374.4,235.2]}
+{"kind":"shape","id":"sh/ihcvml4j","slide":17,"name":"Rectangle 8","bbox":[48,144,7.68,235.2]}
+{"kind":"textbox","id":"sh/4by9or6l","slide":17,"name":"TextBox 9","text":"TCP 粘包处理","textPreview":"TCP 粘包处理","textChars":8,"textLines":1,"bbox":[72,153.6,336,38.4]}
+{"kind":"textbox","id":"sh/pc7qhwn6","slide":17,"name":"TextBox 10","text":"问题：自定义帧协议中，多个消息可能合并到达","textPreview":"问题：自定义帧协议中，多个消息可能合并到达","textChars":21,"textLines":1,"bbox":[72,196.8,336,76.8]}
+{"kind":"textbox","id":"sh/29grm1of","slide":17,"name":"TextBox 11","text":"方案：实现帧解码状态机：缓冲区累积→解析长度前缀→截取完整帧→处理残余字节","textPreview":"方案：实现帧解码状态机：缓冲区累积→解析长度前缀→截取完整帧→处理残余字节","textChars":37,"textLines":1,"bbox":[72,273.6,336,96]}
+{"kind":"shape","id":"sh/3ap8fm50","slide":17,"name":"Rounded Rectangle 12","bbox":[451.2,144,374.4,235.2]}
+{"kind":"shape","id":"sh/gnepkr69","slide":17,"name":"Rectangle 13","bbox":[451.2,144,7.68,235.2]}
+{"kind":"textbox","id":"sh/honqdwnu","slide":17,"name":"TextBox 14","text":"事件调度与状态冲突","textPreview":"事件调度与状态冲突","textChars":9,"textLines":1,"bbox":[475.2,153.6,336,38.4]}
+{"kind":"textbox","id":"sh/ulw7ihoj","slide":17,"name":"TextBox 15","text":"问题：多客户端请求与充电计时交错，可能争抢同一电桩","textPreview":"问题：多客户端请求与充电计时交错，可能争抢同一电桩","textChars":25,"textLines":1,"bbox":[475.2,196.8,336,76.8]}
+{"kind":"textbox","id":"sh/fm58bm54","slide":17,"name":"TextBox 16","text":"方案：事件循环配合定时器调度；电桩状态条件更新与数据库事务裁决冲突","textPreview":"方案：事件循环配合定时器调度；电桩状态条件更新与数据库事务裁决冲突","textChars":33,"textLines":1,"bbox":[475.2,273.6,336,96]}
+{"kind":"shape","id":"sh/0ji9wb6t","slide":17,"name":"Rounded Rectangle 17","bbox":[854.4,144,374.4,235.2]}
+{"kind":"shape","id":"sh/14rqpgne","slide":17,"name":"Rectangle 18","bbox":[854.4,144,7.68,235.2]}
+{"kind":"textbox","id":"sh/90nq9gfi","slide":17,"name":"TextBox 19","text":"客户端状态一致性","textPreview":"客户端状态一致性","textChars":8,"textLines":1,"bbox":[878.4,153.6,336,38.4]}
+{"kind":"textbox","id":"sh/8ze9gbyx","slide":17,"name":"TextBox 20","text":"问题：客户端缓存与服务端真实状态可能不同步","textPreview":"问题：客户端缓存与服务端真实状态可能不同步","textChars":21,"textLines":1,"bbox":[878.4,196.8,336,76.8]}
+{"kind":"textbox","id":"sh/ny5876xc","slide":17,"name":"TextBox 21","text":"方案：身份/余额/订单状态以服务端为准；心跳续期+失效回登录页机制","textPreview":"方案：身份/余额/订单状态以服务端为准；心跳续期+失效回登录页机制","textChars":33,"textLines":1,"bbox":[878.4,273.6,336,96]}
+{"kind":"shape","id":"sh/mxw7e1gr","slide":17,"name":"Rounded Rectangle 22","bbox":[48,408,374.4,235.2]}
+{"kind":"shape","id":"sh/lwnq5gf6","slide":17,"name":"Rectangle 23","bbox":[48,408,7.68,235.2]}
+{"kind":"textbox","id":"sh/0vepcbyl","slide":17,"name":"TextBox 24","text":"地图接口集成","textPreview":"地图接口集成","textChars":6,"textLines":1,"bbox":[72,417.6,336,38.4]}
+{"kind":"textbox","id":"sh/zul836xg","slide":17,"name":"TextBox 25","text":"问题：地址转坐标依赖外部API，网络不可用时影响核心流程","textPreview":"问题：地址转坐标依赖外部API，网络不可用时影响核心流程","textChars":28,"textLines":1,"bbox":[72,460.8,336,76.8]}
+{"kind":"textbox","id":"sh/ytc7a1gv","slide":17,"name":"TextBox 26","text":"方案：适配器隔离地图请求；缓存与教学坐标回退；路线失败显示提示","textPreview":"方案：适配器隔离地图请求；缓存与教学坐标回退；路线失败显示提示","textChars":31,"textLines":1,"bbox":[72,537.6,336,96]}
+{"kind":"shape","id":"sh/d83q1wfa","slide":17,"name":"Rounded Rectangle 27","bbox":[451.2,408,374.4,235.2]}
+{"kind":"shape","id":"sh/c7up8ryp","slide":17,"name":"Rectangle 28","bbox":[451.2,408,7.68,235.2]}
+{"kind":"textbox","id":"sh/2dsn2xwn","slide":17,"name":"TextBox 29","text":"Git 多人协作","textPreview":"Git 多人协作","textChars":8,"textLines":1,"bbox":[475.2,417.6,336,38.4]}
+{"kind":"textbox","id":"sh/3e1ob2d8","slide":17,"name":"TextBox 30","text":"问题：5人同时开发，分支冲突与主干稳定性","textPreview":"问题：5人同时开发，分支冲突与主干稳定性","textChars":20,"textLines":1,"bbox":[475.2,460.8,336,76.8]}
+{"kind":"textbox","id":"sh/oza547ed","slide":17,"name":"TextBox 31","text":"方案：功能分支模式+PR审核；shared-identifiers清单管理公共接口；独立端口与数据库","textPreview":"方案：功能分支模式+PR审核；shared-identifiers清单管理公共接口；独立端口与数据库","textChars":50,"textLines":1,"bbox":[475.2,537.6,336,96]}
+{"kind":"shape","id":"sh/p0j6dcvy","slide":17,"name":"Rounded Rectangle 32","bbox":[854.4,408,374.4,235.2]}
+{"kind":"shape","id":"sh/e98nydwb","slide":17,"name":"Rectangle 33","bbox":[854.4,408,7.68,235.2]}
+{"kind":"textbox","id":"sh/fah47idw","slide":17,"name":"TextBox 34","text":"密码安全存储","textPreview":"密码安全存储","textChars":6,"textLines":1,"bbox":[878.4,417.6,336,38.4]}
+{"kind":"textbox","id":"sh/gbq50neh","slide":17,"name":"TextBox 35","text":"问题：管理员密码不能明文存储","textPreview":"问题：管理员密码不能明文存储","textChars":14,"textLines":1,"bbox":[878.4,460.8,336,76.8]}
+{"kind":"textbox","id":"sh/1cj69sv2","slide":17,"name":"TextBox 36","text":"方案：加盐哈希存储（PasswordHasher）；参数化查询防注入；验证时比对哈希值","textPreview":"方案：加盐哈希存储（PasswordHasher）；参数化查询防注入；验证时比对哈希值","textChars":43,"textLines":1,"bbox":[878.4,537.6,336,96]}
+{"kind":"notes","id":"nt/14bup87q","slide":17,"text":""}
+{"kind":"slide","id":"sl/y5wne50z","slide":18,"title":"技能提升与项目收获","textShapes":7}
+{"kind":"shape","id":"sh/wrelszu9","slide":18,"name":"Rectangle 1","bbox":[28.8,0,105.6,96]}
+{"kind":"shape","id":"sh/hsn2l4bu","slide":18,"name":"Rectangle 2","bbox":[144,0,19.2,96]}
+{"kind":"textbox","id":"sh/itw3upcf","slide":18,"name":"TextBox 3","text":"技能提升与项目收获","textPreview":"技能提升与项目收获","textChars":9,"textLines":1,"bbox":[172.8,14.4,912,48]}
+{"kind":"textbox","id":"sh/je5knut0","slide":18,"name":"TextBox 4","text":"通过本次项目获得的软硬件技能成长","textPreview":"通过本次项目获得的软硬件技能成长","textChars":16,"textLines":1,"bbox":[172.8,62.4,960,28.8]}
+{"kind":"textbox","id":"sh/4felwzu5","slide":18,"name":"TextBox 5","text":"18","textPreview":"18","textChars":2,"textLines":1,"bbox":[1180.8,662.4,57.6,38.4]}
+{"kind":"shape","id":"sh/5gnmp4bq","slide":18,"name":"Rectangle 6","bbox":[28.8,652.8,1142.4,6.72]}
+{"kind":"shape","id":"sh/6hw3y9sb","slide":18,"name":"Rounded Rectangle 7","bbox":[48,144,576,508.8]}
+{"kind":"shape","id":"sh/rip4retw","slide":18,"name":"Rectangle 8","bbox":[48,144,576,48]}
+{"kind":"textbox","id":"sh/fapkr6pw","slide":18,"name":"TextBox 9","text":"硬技能","textPreview":"硬技能","textChars":3,"textLines":1,"bbox":[48,145.92,576,44.16]}
+{"kind":"textbox","id":"sh/upg3i18r","slide":18,"name":"TextBox 10","text":"● C++17 现代语法与面向对象设计实践\n● Qt 6 框架深度使用（Widgets/Network/Sql）\n● TCP Socket 编程与自定义协议设计\n● 事件驱动调度与并发状态一致性\n● SQLite 数据库设计与 Repository 模式\n● QSS 样式表与 UI/UX 设计能力\n● Linux 环境下开发工具链使用\n● qmake 多子项目构建与影子构建","textPreview":"● C++17 现代语法与面向对象设计实践 | ● Qt 6 框架深度使用（Widgets/Network/Sql） | ● TCP Socket 编程与自定义协议设计 | ● 事件驱动调度与并发状态一致性 | ● SQLite 数据库设计与 Repository 模式 |...","textChars":188,"textLines":8,"bbox":[76.8,206.4,528,432]}
+{"kind":"shape","id":"sh/1cr2tg72","slide":18,"name":"Rounded Rectangle 11","bbox":[655.68,144,576,508.8]}
+{"kind":"shape","id":"sh/gbylkbqh","slide":18,"name":"Rectangle 12","bbox":[655.68,144,576,48]}
+{"kind":"textbox","id":"sh/7mpknmp0","slide":18,"name":"TextBox 13","text":"软技能","textPreview":"软技能","textChars":3,"textLines":1,"bbox":[655.68,145.92,576,44.16]}
+{"kind":"textbox","id":"sh/6lg3e18f","slide":18,"name":"TextBox 14","text":"● 需求分析与需求矩阵编制\n● 软件工程全流程实践（需求→设计→开发→测试→发布）\n● Git 多人协作与 PR 审核工作流\n● 团队沟通与任务分工协调\n● 技术文档撰写（设计说明书、共享标识符）\n● 问题定位与独立排查能力\n● 代码规范与代码审查意识\n● 项目时间管理与里程碑把控","textPreview":"● 需求分析与需求矩阵编制 | ● 软件工程全流程实践（需求→设计→开发→测试→发布） | ● Git 多人协作与 PR 审核工作流 | ● 团队沟通与任务分工协调 | ● 技术文档撰写（设计说明书、共享标识符） | ● 问题定位与独立排查能力 | ● 代码规范与代码审查意...","textChars":141,"textLines":8,"bbox":[684.48,206.4,528,432]}
+{"kind":"notes","id":"nt/y5wne50z","slide":18,"text":""}
+{"kind":"slide","id":"sl/nid43ytk","slide":19,"title":"组名：五联网（第 5 组）","textShapes":2}
+{"kind":"textbox","id":"sh/8v2pobax","slide":19,"name":"Text Placeholder 2","placeholder":"body","text":"组名：五联网（第 5 组）\n答辩人：刘宁远  肖峣  秦志豪  刘禹晨  韩萧贤\n时间：2026年9月10日\n","textPreview":"组名：五联网（第 5 组） | 答辩人：刘宁远  肖峣  秦志豪  刘禹晨  韩萧贤 | 时间：2026年9月10日 |","textChars":55,"textLines":4,"bbox":[127.67,492.47,765.07,121.53]}
+{"kind":"textbox","id":"sh/ahk7qls3","slide":19,"name":"Text Placeholder 4","placeholder":"body","text":"谢谢观看！","textPreview":"谢谢观看！","textChars":5,"textLines":1,"bbox":[0,0,0,0]}
+{"kind":"notes","id":"nt/nid43ytk","slide":19,"text":""}

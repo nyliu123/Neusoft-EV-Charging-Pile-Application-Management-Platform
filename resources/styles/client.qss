@@ -260,6 +260,13 @@ QPushButton[uiClass="stationCard"][available="false"] {
     border-color: #f1c7c5;
 }
 
+QLabel[uiClass="stationHotReview"] {
+    background-color: #fff0df;
+    color: #c43f2c;
+    border-radius: 8px;
+    padding: 4px 7px;
+}
+
 QTabWidget::pane {
     background-color: #ffffff;
     border: 1px solid #e3e7ee;

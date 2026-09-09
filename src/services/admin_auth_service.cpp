@@ -54,4 +54,33 @@ Result<AdminInfo> AdminAuthService::authenticate(const QString &username,
     return Result<AdminInfo>::ok(info);
 }
 
+Result<bool> AdminAuthService::verifyPassword(qint64 adminId, const QString &password,
+                                               QSqlDatabase &database)
+{
+    if (adminId <= 0 || password.isEmpty()) {
+        return Result<bool>::fail(ErrorCode::InvalidInput,
+                                  QStringLiteral("请输入管理员密码"));
+    }
+    QSqlQuery query(database);
+    query.prepare(QStringLiteral("SELECT password FROM admins WHERE admin_id = ?"));
+    query.addBindValue(adminId);
+    if (!query.exec()) {
+        return Result<bool>::fail(ErrorCode::StorageError, query.lastError().text());
+    }
+    if (!query.next()) {
+        return Result<bool>::fail(ErrorCode::Unauthorized,
+                                  QStringLiteral("管理员身份无效"));
+    }
+    PasswordHash hash;
+    if (!PasswordHasher::deserialize(query.value(0).toString(), hash)) {
+        return Result<bool>::fail(ErrorCode::InternalError,
+                                  QStringLiteral("管理员密码数据损坏"));
+    }
+    if (!PasswordHasher::verify(password, hash)) {
+        return Result<bool>::fail(ErrorCode::Unauthorized,
+                                  QStringLiteral("管理员密码错误"));
+    }
+    return Result<bool>::ok(true);
+}
+
 } // namespace ev

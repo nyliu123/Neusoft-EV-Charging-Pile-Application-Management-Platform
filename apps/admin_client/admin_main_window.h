@@ -21,7 +21,7 @@ class AdminStationDetailPage;
 class AdminStationPage;
 class AdminUserPage;
 class AdminMembershipPage;
-class AdminKnowledgePage;
+class AdminAiPage;
 
 // Shell window: left navigation, stacked pages, connection status and the
 // logout / session-expired re-login flow (UML-034). The station detail page
@@ -60,7 +60,7 @@ private:
     AdminUserPage *userPage_ = nullptr;
     AdminOrderPage *orderPage_ = nullptr;
     AdminMembershipPage *membershipPage_ = nullptr;
-    AdminKnowledgePage *knowledgePage_ = nullptr;
+    AdminAiPage *aiPage_ = nullptr;
     AdminStationDetailPage *stationDetailPage_ = nullptr;
 };
 

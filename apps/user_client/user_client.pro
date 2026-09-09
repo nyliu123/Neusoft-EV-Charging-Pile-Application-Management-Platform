@@ -1,4 +1,4 @@
-QT += core gui widgets network webenginewidgets
+QT += core gui widgets network webenginewidgets svg
 
 TEMPLATE = app
 TARGET = ev_user_client

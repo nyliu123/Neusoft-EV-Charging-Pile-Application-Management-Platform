@@ -143,10 +143,6 @@ void OrderListWidget::renderOrders(const QJsonArray &orders)
             hint->setProperty("uiClass", "orderSettlementHint");
             layout->addWidget(hint);
         }
-        auto *toggle = new QPushButton(QStringLiteral("查看详情"), card);
-        toggle->setCheckable(true);
-        toggle->setProperty("uiClass", "text");
-        layout->addWidget(toggle, 0, Qt::AlignLeft);
         const auto duration = order.value(QStringLiteral("duration_hours"));
         auto *details = plainLabel(QStringLiteral("开始时间：%1\n结束时间：%2\n充电时长：%3")
             .arg(displayTime(order.value(QStringLiteral("start_time"))),
@@ -156,6 +152,10 @@ void OrderListWidget::renderOrders(const QJsonArray &orders)
         details->setObjectName(QStringLiteral("orderDetails"));
         layout->addWidget(details);
         details->hide();
+        auto *toggle = new QPushButton(QStringLiteral("查看详情"), card);
+        toggle->setCheckable(true);
+        toggle->setProperty("uiClass", "text");
+        layout->addWidget(toggle, 0, Qt::AlignLeft);
         connect(toggle, &QPushButton::toggled, details, [details, toggle](bool expanded) {
             details->setVisible(expanded);
             toggle->setText(expanded ? QStringLiteral("收起详情") : QStringLiteral("查看详情"));

@@ -59,7 +59,7 @@ MembershipService::JsonResult MembershipService::plans(QSqlDatabase &db, bool ad
 
 MembershipService::JsonResult MembershipService::snapshot(QSqlDatabase &db, qint64 user, qint64 at) const {
     return guard(db, false, [&] {
-        auto q = query(db, "SELECT level,discount_bps,version,starts_at,expires_at FROM membership_entitlements WHERE user_id=? AND starts_at<=? AND expires_at>? ORDER BY starts_at DESC LIMIT 1", {user,at,at});
+        auto q = query(db, "SELECT level,discount_bps,version,starts_at,expires_at,plan_id FROM membership_entitlements WHERE user_id=? AND starts_at<=? AND expires_at>? ORDER BY starts_at DESC LIMIT 1", {user,at,at});
         QJsonObject result = q.next() ? row(q) : QJsonObject{{"level","NORMAL"},{"discount_bps",10000},{"version",0},{"starts_at",0},{"expires_at",0}};
         result.insert("valid", result.value("level").toString() != "NORMAL");
         return JsonResult::ok(result);
@@ -106,7 +106,6 @@ MembershipService::JsonResult MembershipService::purchase(QSqlDatabase &db, qint
         const bool recurring = p.value("recurring").toInt() == 1;
         if (recurring && !terms.value("renewal_consent").toBool()) return JsonResult::fail(ErrorCode::InvalidInput, QStringLiteral("连续套餐需要单独同意续费价格和周期"));
         const auto last = lastEntitlement(db,user,at);
-        if (!last.isEmpty() && last.value("level") != p.value("level")) return JsonResult::fail(ErrorCode::StateConflict, QStringLiteral("当前会员尚未到期，暂不支持跨等级购买"));
         const qint64 start = last.isEmpty() ? at : last.value("expires_at").toInteger();
         const qint64 end = addMonths(start,p.value("months").toInt());
         if (end <= start || end > at + 20LL*366*86400) return JsonResult::fail(ErrorCode::InvalidInput, QStringLiteral("会员期限超出支持范围"));

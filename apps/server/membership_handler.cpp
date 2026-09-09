@@ -5,9 +5,56 @@
 #include "services/knowledge_service.h"
 #include "services/user_service.h"
 #include <QPointer>
+#include <QJsonArray>
+#include <QSqlQuery>
 #include <QTcpSocket>
 
 namespace ev {
+namespace {
+QString approvedSelect(const QString &tool,const QJsonObject &arguments)
+{
+    if(tool=="query_current_user")return QStringLiteral("SELECT user_id,phone,nickname,balance,register_time,status FROM users WHERE user_id=?");
+    if(tool=="query_stations")return QStringLiteral("SELECT station_id,station_name,address,longitude,latitude,price_per_kwh FROM charging_stations WHERE ?='' OR station_name LIKE ? OR address LIKE ? ORDER BY station_id LIMIT ?");
+    if(tool=="query_piles")return QStringLiteral("SELECT p.pile_id,p.station_id,s.station_name,p.pile_number,p.pile_type,p.power_kw,p.status,p.total_charge_count,p.total_charge_duration FROM charging_piles p JOIN charging_stations s ON s.station_id=p.station_id WHERE (?<=0 OR p.station_id=?) AND (?='' OR p.status=?) ORDER BY p.pile_id LIMIT ?");
+    if(tool=="query_station_comments"&&arguments.value("summary_only").toBool()&&!arguments.value("mine_only").toBool())return QStringLiteral("SELECT c.station_id,s.station_name,ROUND(AVG(c.rating),2),COUNT(*),MAX(c.created_at) FROM station_comments c JOIN charging_stations s ON s.station_id=c.station_id WHERE (?<=0 OR c.station_id=?) GROUP BY c.station_id,s.station_name ORDER BY AVG(c.rating) DESC,COUNT(*) DESC,c.station_id LIMIT ?");
+    if(tool=="query_station_comments")return QStringLiteral("SELECT c.comment_id,c.station_id,s.station_name,COALESCE(NULLIF(TRIM(u.nickname),''),'匿名用户'),c.content,c.rating,c.created_at,(SELECT COUNT(*) FROM comment_likes l WHERE l.comment_id=c.comment_id) FROM station_comments c JOIN charging_stations s ON s.station_id=c.station_id LEFT JOIN users u ON u.user_id=c.user_id WHERE (?<=0 OR c.station_id=?) AND (?=0 OR c.user_id=?) ORDER BY c.created_at DESC,c.comment_id DESC LIMIT ?");
+    return {};
+}
+QJsonObject approvedToolCall(QJsonObject requested,qint64 userId)
+{
+    const QString tool=requested.value("tool").toString();const QJsonObject arguments=requested.value("arguments").toObject();const QString sql=approvedSelect(tool,arguments);if(sql.isEmpty()){requested.remove("sql");return requested;}requested.insert("sql",sql);QJsonArray bindings;
+    if(tool=="query_current_user")bindings.append(userId);
+    else if(tool=="query_stations"){const QString keyword=arguments.value("keyword").toString().trimmed().left(60);bindings={keyword,"%"+keyword+"%","%"+keyword+"%",qBound(1,arguments.value("limit").toInt(20),50)};}
+    else if(tool=="query_piles"){const qint64 stationId=arguments.value("station_id").toInteger();QString status=arguments.value("status").toString();if(!QStringList{"idle","in_use","reserved","fault"}.contains(status))status.clear();bindings={stationId,stationId,status,status,qBound(1,arguments.value("limit").toInt(50),100)};}
+    else if(tool=="query_station_comments"){const qint64 stationId=arguments.value("station_id").toInteger();const bool mineOnly=arguments.value("mine_only").toBool();const int limit=qBound(1,arguments.value("limit").toInt(20),50);if(arguments.value("summary_only").toBool()&&!mineOnly)bindings={stationId,stationId,limit};else bindings={stationId,stationId,mineOnly?1:0,userId,limit};}
+    requested.insert("bindings",bindings);return requested;
+}
+QJsonObject executeReadOnlyTool(QSqlDatabase &database,qint64 userId,const QJsonObject &requested)
+{
+    const QString tool=requested.value("tool").toString();const QJsonObject arguments=requested.value("arguments").toObject();QJsonObject context{{"tool_call",requested}};QJsonArray rows;
+    if(tool=="none" || tool.isEmpty()){context.insert("rows",rows);return context;}
+    const QString sql=requested.value("sql").toString();if(sql.isEmpty()||sql!=approvedSelect(tool,arguments)||!sql.trimmed().startsWith("SELECT",Qt::CaseInsensitive)||sql.contains(';')){context.insert("tool_error",QStringLiteral("SELECT语句未通过白名单校验"));context.insert("rows",rows);return context;}
+    if(tool=="query_current_user"){
+        QSqlQuery q(database);q.prepare(sql);q.addBindValue(userId);
+        if(q.exec()&&q.next())rows.append(QJsonObject{{"user_id",q.value(0).toLongLong()},{"phone",q.value(1).toString()},{"nickname",q.value(2).toString()},{"balance",q.value(3).toDouble()},{"register_time",q.value(4).toString()},{"status",q.value(5).toString()}});
+    }else if(tool=="query_stations"){
+        const QString keyword=arguments.value("keyword").toString().trimmed().left(60);const int limit=qBound(1,arguments.value("limit").toInt(20),50);const QString like="%"+keyword+"%";
+        QSqlQuery q(database);q.prepare(sql);q.addBindValue(keyword);q.addBindValue(like);q.addBindValue(like);q.addBindValue(limit);
+        if(q.exec())while(q.next())rows.append(QJsonObject{{"station_id",q.value(0).toLongLong()},{"station_name",q.value(1).toString()},{"address",q.value(2).toString()},{"longitude",q.value(3).toDouble()},{"latitude",q.value(4).toDouble()},{"price_per_kwh",q.value(5).toDouble()}});
+    }else if(tool=="query_piles"){
+        const qint64 stationId=arguments.value("station_id").toInteger();QString status=arguments.value("status").toString();if(!QStringList{"idle","in_use","reserved","fault"}.contains(status))status.clear();const int limit=qBound(1,arguments.value("limit").toInt(50),100);
+        QSqlQuery q(database);q.prepare(sql);q.addBindValue(stationId);q.addBindValue(stationId);q.addBindValue(status);q.addBindValue(status);q.addBindValue(limit);
+        if(q.exec())while(q.next())rows.append(QJsonObject{{"pile_id",q.value(0).toLongLong()},{"station_id",q.value(1).toLongLong()},{"station_name",q.value(2).toString()},{"pile_number",q.value(3).toString()},{"pile_type",q.value(4).toString()},{"power_kw",q.value(5).toDouble()},{"status",q.value(6).toString()},{"total_charge_count",q.value(7).toInt()},{"total_charge_duration",q.value(8).toDouble()}});
+    }else if(tool=="query_station_comments"){
+        const qint64 stationId=arguments.value("station_id").toInteger();const bool mineOnly=arguments.value("mine_only").toBool();const bool summaryOnly=arguments.value("summary_only").toBool();const int limit=qBound(1,arguments.value("limit").toInt(20),50);
+        QSqlQuery q(database);
+        if(summaryOnly&&!mineOnly){q.prepare(sql);q.addBindValue(stationId);q.addBindValue(stationId);q.addBindValue(limit);if(q.exec())while(q.next())rows.append(QJsonObject{{"station_id",q.value(0).toLongLong()},{"station_name",q.value(1).toString()},{"average_rating",q.value(2).toDouble()},{"comment_count",q.value(3).toInt()},{"latest_comment_at",q.value(4).toString()}});}
+        else{q.prepare(sql);q.addBindValue(stationId);q.addBindValue(stationId);q.addBindValue(mineOnly?1:0);q.addBindValue(userId);q.addBindValue(limit);if(q.exec())while(q.next())rows.append(QJsonObject{{"comment_id",q.value(0).toLongLong()},{"station_id",q.value(1).toLongLong()},{"station_name",q.value(2).toString()},{"display_name",q.value(3).toString()},{"content",q.value(4).toString()},{"rating",q.value(5).toInt()},{"created_at",q.value(6).toString()},{"like_count",q.value(7).toInt()}});}
+    }else{context.insert("tool_error",QStringLiteral("工具不在允许列表中"));}
+    context.insert("rows",rows);
+    return context;
+}
+}
 Result<qint64> ServerApplication::authenticateFeatureUser(QTcpSocket *socket,const Frame &frame) {
     if(frame.payload.value("protocol_version").toInteger()!=ProtocolVersion)
         return Result<qint64>::fail(ErrorCode::ProtocolError,QStringLiteral("协议版本不兼容"));
@@ -55,11 +102,23 @@ void ServerApplication::processConsultRequest(QTcpSocket *socket,const Frame &fr
     auto knowledge=KnowledgeService().retrieve(mainDatabase_,question);
     if(!knowledge.success){respond(knowledge);return;}
     const auto sources=knowledge.data.value("sources").toArray();
-    if(sources.isEmpty()){respond(R::ok({{"answer",QStringLiteral("当前已发布知识中没有找到这个问题的依据。请询问充电操作、费用、会员或订单问题，或联系管理员补充知识。")},{"sources",QJsonArray{}},{"generated",false}}));return;}
     consultBusy_.insert(auth.data); consultLastAt_.insert(session,now);
     const auto history=consultHistory_.value(session);
     const auto epoch=consultEpoch_.value(session);
-    consultApiAdapter_->ask(question,sources,history,[this,guard=QPointer<QTcpSocket>(socket),frame,auth,session,question,sources,respond,epoch](R r) mutable {
+    QJsonObject aiSettings;
+    QSqlQuery settingsQuery(mainDatabase_);
+    if(settingsQuery.exec("SELECT api_key,base_url,model,system_prompt FROM ai_settings WHERE settings_id=1") && settingsQuery.next()){
+        aiSettings={{"api_key",settingsQuery.value(0).toString()},{"base_url",settingsQuery.value(1).toString()},{"model",settingsQuery.value(2).toString()},{"system_prompt",settingsQuery.value(3).toString()}};
+    }
+    auto answer=[this,guard=QPointer<QTcpSocket>(socket),frame,auth,session,question,sources,history,aiSettings,respond,epoch](const QJsonObject &toolCall) mutable {
+    const QString tool=toolCall.value("tool").toString();
+    const QHash<QString,QString> toolNames{{"query_current_user",QStringLiteral("个人资料")},{"query_stations",QStringLiteral("充电站信息")},{"query_piles",QStringLiteral("充电桩信息")},{"query_station_comments",QStringLiteral("用户评价")}};
+    if(toolNames.contains(tool))respond(R::ok({{"partial",true},{"event","tool"},{"phase","started"},{"tool",tool},{"tool_name",toolNames.value(tool)}}));
+    const QJsonObject databaseContext=executeReadOnlyTool(mainDatabase_,auth.data,toolCall);
+    if(toolNames.contains(tool))respond(R::ok({{"partial",true},{"event","tool"},{"phase","completed"},{"tool",tool},{"tool_name",toolNames.value(tool)},{"row_count",databaseContext.value("rows").toArray().size()},{"tool_call",toolCall},{"tool_result",databaseContext}}));
+    consultApiAdapter_->ask(question,sources,history,aiSettings,databaseContext,
+        [this,guard,session,respond,epoch](const QString &delta){if(guard&&connectionSessions_.value(guard).contains(session)&&consultEpoch_.value(session)==epoch)respond(R::ok({{"partial",true},{"delta",delta}}));},
+        [this,guard,frame,auth,session,question,sources,respond,epoch](R r) mutable {
         consultBusy_.remove(auth.data);
         if(!guard || !connectionSessions_.value(guard).contains(session)) return;
         if(consultEpoch_.value(session)!=epoch){respond(R::fail(ErrorCode::StateConflict,QStringLiteral("会话已清空，请重新提问")));return;}
@@ -86,6 +145,15 @@ void ServerApplication::processConsultRequest(QTcpSocket *socket,const Frame &fr
             while(h.size()>6)h.removeFirst();
         }
         respond(r);
+    });
+    };
+    consultApiAdapter_->planTool(question,history,aiSettings,[this,auth,question,respond,answer=std::move(answer)](R plan) mutable {
+        if(!plan.success){consultBusy_.remove(auth.data);respond(plan);return;}
+        QJsonObject selected=plan.data;const QString planned=selected.value("tool").toString();
+        const bool asksRatings=question.contains(QStringLiteral("评价"))||question.contains(QStringLiteral("评分"))||question.contains(QStringLiteral("口碑"))||question.contains(QStringLiteral("热评"));
+        if(asksRatings&&(planned=="query_stations"||planned=="none")){selected={{"tool","query_station_comments"},{"arguments",QJsonObject{{"summary_only",true},{"limit",50}}}};}
+        else if(planned=="query_station_comments"&&(question.contains(QStringLiteral("最好"))||question.contains(QStringLiteral("最高")))){auto arguments=selected.value("arguments").toObject();if(arguments.value("station_id").toInteger()<=0)arguments.insert("summary_only",true);selected.insert("arguments",arguments);}
+        answer(approvedToolCall(selected,auth.data));
     });
 }
 }

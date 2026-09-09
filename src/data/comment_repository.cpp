@@ -32,7 +32,7 @@ Result<QHash<qint64, StationRatingSummary>> CommentRepository::loadSummaries(
     while (aggregate.next()) {
         StationRatingSummary summary;
         summary.ratingCount = aggregate.value(1).toInt();
-        summary.avgRating = aggregate.value(2).toDouble() * 2.0;
+        summary.avgRating = aggregate.value(2).toDouble();
         summaries.insert(aggregate.value(0).toLongLong(), summary);
     }
 
@@ -86,7 +86,7 @@ Result<std::optional<StationRatingSummary>> CommentRepository::findSummary(
 
     StationRatingSummary summary;
     summary.ratingCount = aggregate.value(0).toInt();
-    summary.avgRating = aggregate.value(1).toDouble() * 2.0;
+    summary.avgRating = aggregate.value(1).toDouble();
 
     QSqlQuery hot(database);
     hot.prepare(QStringLiteral(

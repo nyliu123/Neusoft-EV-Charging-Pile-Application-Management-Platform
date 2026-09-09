@@ -10,8 +10,8 @@ namespace ev {
 
 class CommentService final {
 public:
-    // Tier label for a 0..10 average rating:
-    // ≥9 夯 / ≥7 顶级 / ≥5 人上人 / ≥3 拉 / else 拉完了.
+    // Tier label for a 0..5 average rating:
+    // ≥4.5 夯 / ≥3.5 顶级 / ≥2.5 人上人 / ≥1.5 拉 / else 拉完了.
     static QString tierLabel(double avgRating);
     // Wire shape: { avg, count, tier, hot{nickname, content} }; avg/tier/hot
     // are null when the station has no comments.

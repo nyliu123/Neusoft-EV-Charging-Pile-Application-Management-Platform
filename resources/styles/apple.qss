@@ -109,6 +109,7 @@ QLabel[uiClass="orderSettlementHint"] { color: #a54e1c; font-weight: 600; }
 QLabel[uiClass="loadingOverlay"] { background: rgba(250,250,252,240); color: #0066cc; font-size: 16px; }
 QLabel[uiClass="stationMeta"], QLabel[uiClass="navigationPreview"] { background: #edf4ff; border: 1px solid #d6e5f9; border-radius: 12px; padding: 14px; color: #3b5a80; }
 QLabel[uiClass="stationSymbol"] { background: #f0f4fb; border-radius: 12px; }
+QLabel[uiClass="stationHotReview"] { background: #fff0df; color: #c43f2c; border-radius: 8px; padding: 4px 7px; font-size: 11px; }
 QLabel[uiClass="stationPrice"] { color: #237746; font-size: 12px; }
 QLabel[uiClass="stationDistance"] { color: #1d1d1f; font-size: 20px; font-weight: 600; }
 QLabel[uiClass="linkCaption"] { color: #0066cc; font-size: 12px; }

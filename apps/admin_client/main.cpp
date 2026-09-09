@@ -2,6 +2,7 @@
 #include "admin_main_window.h"
 #include "admin_session.h"
 #include "client_ui/client_style.h"
+#include "client_ui/item_full_text_filter.h"
 #include "network/platform_client.h"
 
 #include <QApplication>
@@ -19,6 +20,7 @@ int main(int argc, char *argv[])
     QApplication::setApplicationName(QStringLiteral("ev_admin_client"));
     QApplication::setApplicationVersion(QStringLiteral("0.1.0"));
     ev::installClientStyle(application);
+    ev::installItemFullTextFilter(application);
     QFile styleFile(QStringLiteral(":/styles/client.qss"));
     if (styleFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
         application.setStyleSheet(QString::fromUtf8(styleFile.readAll()));

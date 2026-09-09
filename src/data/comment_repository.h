@@ -17,7 +17,7 @@ struct CommentRecord {
     qint64 userId = 0;
     QString displayName;   // nickname, falling back to the phone number
     QString content;
-    int rating = 0;        // 0..5 stars (= 0..10 points)
+    int rating = 0;        // 0..5 stars
     int likeCount = 0;
     bool likedByViewer = false;
     bool isMine = false;
@@ -25,7 +25,7 @@ struct CommentRecord {
 };
 
 struct StationRatingSummary {
-    double avgRating = 0.0;   // 0..10 (stars × 2)
+    double avgRating = 0.0;   // 0..5 stars
     int ratingCount = 0;
     std::optional<CommentRecord> hotComment;   // most liked comment
 };

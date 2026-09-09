@@ -146,16 +146,13 @@ UserInfoWidget::UserInfoWidget(ev::UserApiClient *api, QWidget *parent)
     operationLayout->addWidget(operationHint);
     auto *membership = new QPushButton(QStringLiteral("会员中心"), operationCard);
     membership->setObjectName("membershipEntry");membership->setProperty("uiClass","primary");
-    auto *consult = new QPushButton(QStringLiteral("AI咨询"), operationCard);
-    consult->setObjectName("consultEntry");consult->setProperty("uiClass","secondary");
-    operationLayout->addWidget(membership);operationLayout->addWidget(consult);
-    const auto openMembership = [this](bool ai) {
-        auto *dialog = new MembershipDialog(api_,ai,this);
+    operationLayout->addWidget(membership);
+    const auto openMembership = [this] {
+        auto *dialog = new MembershipDialog(api_,false,this);
         connect(dialog,&QDialog::finished,this,[this]{refreshFromServer();});
         dialog->show();
     };
-    connect(membership,&QPushButton::clicked,this,[openMembership]{openMembership(false);});
-    connect(consult,&QPushButton::clicked,this,[openMembership]{openMembership(true);});
+    connect(membership,&QPushButton::clicked,this,openMembership);
     mainLayout->addWidget(operationCard);
     mainLayout->addStretch();
 
@@ -352,6 +349,8 @@ void UserInfoWidget::recharge()
             dialog.reject();
         }
     });
+    connect(edit,&QLineEdit::returnPressed,confirm,&QPushButton::click);
+    confirm->setDefault(true);
     if (dialog.exec() == QDialog::Accepted) {
         refreshFromSession();
         QMessageBox::information(this, QStringLiteral("充值成功"),

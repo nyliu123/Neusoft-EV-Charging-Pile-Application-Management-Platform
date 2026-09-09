@@ -3,6 +3,7 @@
 #include "services/session_manager.h"
 #include "services/membership_service.h"
 #include "services/knowledge_service.h"
+#include "services/admin_auth_service.h"
 
 #include <QDate>
 #include <QDebug>
@@ -10,6 +11,7 @@
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QVariantList>
+#include <QUrl>
 #include <utility>
 
 namespace ev {
@@ -21,6 +23,12 @@ AdminHandler::AdminHandler(QSqlDatabase database, SessionManager &sessionManager
 
 QJsonObject AdminHandler::processQuery(const QString &type, const QJsonObject &params)
 {
+    if(type==QStringLiteral("ai_settings")){
+        QSqlQuery query(database_);
+        if(!query.exec(QStringLiteral("SELECT api_key,base_url,model,system_prompt,updated_at FROM ai_settings WHERE settings_id=1")) || !query.next())
+            return failBody(type,ErrorCode::StorageError,QStringLiteral("无法读取AI助手配置"));
+        return okBody(type,{{QStringLiteral("has_api_key"),!query.value(0).toString().isEmpty()},{QStringLiteral("base_url"),query.value(1).toString()},{QStringLiteral("model"),query.value(2).toString()},{QStringLiteral("system_prompt"),query.value(3).toString()},{QStringLiteral("updated_at"),query.value(4).toLongLong()}});
+    }
     if(type=="membership_plans" || type=="knowledge_list") {
         const auto r=type=="membership_plans" ? MembershipService().plans(database_,true) : KnowledgeService().list(database_);
         return r.success ? okBody(type,r.data) : failBody(type,r.code,r.message);
@@ -79,8 +87,35 @@ QJsonObject AdminHandler::queryDashboardOverview(const QJsonObject &params)
     });
 }
 
-QJsonObject AdminHandler::processAction(const QString &type, const QJsonObject &params)
+QJsonObject AdminHandler::processAction(const QString &type, const QJsonObject &params,
+                                        qint64 authenticatedAdminId)
 {
+    if(type==QStringLiteral("ai_settings_reveal")){
+        const auto verified=AdminAuthService::verifyPassword(
+            authenticatedAdminId,params.value("password").toString(),database_);
+        if(!verified.success)return failBody(type,verified.code,verified.message);
+        QSqlQuery query(database_);
+        if(!query.exec(QStringLiteral("SELECT api_key FROM ai_settings WHERE settings_id=1")) || !query.next())
+            return failBody(type,ErrorCode::StorageError,QStringLiteral("无法读取 API Key"));
+        return okBody(type,{{QStringLiteral("api_key"),query.value(0).toString()}});
+    }
+    if(type==QStringLiteral("ai_settings_update")){
+        const QString apiKey=params.value("api_key").toString().trimmed();
+        QString baseUrl=params.value("base_url").toString().trimmed();while(baseUrl.endsWith('/'))baseUrl.chop(1);
+        const QString model=params.value("model").toString().trimmed();
+        const QString systemPrompt=params.value("system_prompt").toString().trimmed();
+        const QUrl url(baseUrl);
+        if(!url.isValid() || url.scheme()!=QStringLiteral("https") || url.host().isEmpty() || !url.userInfo().isEmpty() || url.hasQuery() || url.hasFragment())
+            return failBody(type,ErrorCode::InvalidInput,QStringLiteral("Base URL 必须是有效的 HTTPS 地址"));
+        if(model.isEmpty() || model.size()>100)return failBody(type,ErrorCode::InvalidInput,QStringLiteral("模型名称不能为空且不能超过100字"));
+        if(systemPrompt.isEmpty() || systemPrompt.size()>6000)return failBody(type,ErrorCode::InvalidInput,QStringLiteral("系统提示词不能为空且不能超过6000字"));
+        if(!apiKey.isEmpty() && (apiKey.size()<8 || apiKey.size()>500))return failBody(type,ErrorCode::InvalidInput,QStringLiteral("API Key 格式无效"));
+        QSqlQuery query(database_);
+        query.prepare(QStringLiteral("UPDATE ai_settings SET api_key=CASE WHEN ?='' THEN api_key ELSE ? END,base_url=?,model=?,system_prompt=?,updated_at=strftime('%s','now') WHERE settings_id=1"));
+        query.addBindValue(apiKey);query.addBindValue(apiKey);query.addBindValue(baseUrl);query.addBindValue(model);query.addBindValue(systemPrompt);
+        if(!query.exec())return failBody(type,ErrorCode::StorageError,QStringLiteral("保存AI助手配置失败"));
+        return okBody(type,{},QStringLiteral("AI助手基础设置已保存"));
+    }
     if(type=="membership_update" || type=="knowledge_save" || type=="knowledge_publish" || type=="knowledge_disable") {
         const auto r=type=="membership_update" ? MembershipService().updatePlan(database_,params)
             : type=="knowledge_save" ? KnowledgeService().save(database_,params)

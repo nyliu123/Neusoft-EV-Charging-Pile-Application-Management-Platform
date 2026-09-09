@@ -79,6 +79,7 @@ private:
     QString sessionId_;
     QString heartbeatRequestId_;
     QString logoutRequestId_;
+    bool sessionRecoveryPending_ = false;
 };
 
 } // namespace ev

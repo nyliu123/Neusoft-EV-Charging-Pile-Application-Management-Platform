@@ -17,6 +17,12 @@ timezone=Asia/Shanghai
 worker_threads=20
 log_level=info
 
+[ai]
+provider=moonshot
+model=kimi-k2.6
+base_url=https://api.moonshot.cn/v1
+api_key=
+
 [external]
 map_provider=openstreetmap
 map_api_key=

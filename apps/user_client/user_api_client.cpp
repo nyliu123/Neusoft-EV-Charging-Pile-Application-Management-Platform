@@ -222,7 +222,7 @@ bool UserApiClient::sendRequest(const QString &type, const QJsonObject &params,
     pending_.insert(requestId,
                     {QPointer<QObject>(context), std::move(callback), responseType});
     if(requestType==quint32(MessageType::MembershipRequest) || requestType==quint32(MessageType::ConsultRequest)) {
-        QTimer::singleShot(requestType==quint32(MessageType::ConsultRequest)?35000:15000,this,[this,requestId]{
+        QTimer::singleShot(requestType==quint32(MessageType::ConsultRequest)?90000:15000,this,[this,requestId]{
             auto it=pending_.find(requestId); if(it==pending_.end())return;
             const auto item=it.value();pending_.erase(it);
             if(item.context)item.callback(false,{},QStringLiteral("请求超时。购买请使用原操作重试，避免重复开通。"));
@@ -260,11 +260,15 @@ void UserApiClient::handleFrame(quint32 messageType, const QJsonObject &payload)
         return;
     }
     const Pending pending = it.value();
-    pending_.erase(it);
 
     const bool success = payload.value(QStringLiteral("success")).toBool();
     const QString code = payload.value(QStringLiteral("code")).toString();
     const QString message = payload.value(QStringLiteral("message")).toString();
+    const QJsonObject result = payload.value(QStringLiteral("data")).toObject()
+                                   .value(QStringLiteral("result")).toObject();
+    const bool partial=messageType==static_cast<quint32>(MessageType::ConsultResponse)
+        && success && result.value(QStringLiteral("partial")).toBool();
+    if(!partial)pending_.erase(it);
     if (!success && (code == QStringLiteral("UNAUTHORIZED")
                      || code == QStringLiteral("ACCOUNT_FROZEN"))) {
         client_->invalidateSession(message);
@@ -273,8 +277,6 @@ void UserApiClient::handleFrame(quint32 messageType, const QJsonObject &payload)
     if (pending.context.isNull()) {
         return;
     }
-    const QJsonObject result = payload.value(QStringLiteral("data")).toObject()
-                                   .value(QStringLiteral("result")).toObject();
     pending.callback(success, result, message);
 }
 

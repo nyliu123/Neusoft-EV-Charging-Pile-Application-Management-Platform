@@ -20,16 +20,16 @@ QString nowText()
 
 QString CommentService::tierLabel(double avgRating)
 {
-    if (avgRating >= 9.0) {
+    if (avgRating >= 4.5) {
         return QStringLiteral("夯");
     }
-    if (avgRating >= 7.0) {
+    if (avgRating >= 3.5) {
         return QStringLiteral("顶级");
     }
-    if (avgRating >= 5.0) {
+    if (avgRating >= 2.5) {
         return QStringLiteral("人上人");
     }
-    if (avgRating >= 3.0) {
+    if (avgRating >= 1.5) {
         return QStringLiteral("拉");
     }
     return QStringLiteral("拉完了");

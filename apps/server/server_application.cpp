@@ -140,11 +140,8 @@ void ServerApplication::acceptPendingConnections()
             readClient(socket);
         });
         connect(socket, &QTcpSocket::disconnected, this, [this, socket] {
-            for (const auto &id : connectionSessions_.value(socket)) {
-                consultHistory_.remove(id); consultLastAt_.remove(id); consultEpoch_.remove(id); adminSessions_.remove(id);
-            }
             chargingSessionManager_.detachSocket(socket);
-            sessionManager_.removeAll(connectionSessions_.take(socket));
+            connectionSessions_.remove(socket);
             receiveBuffers_.remove(socket);
             qInfo().noquote() << "client disconnected:" << socket->peerAddress().toString();
             socket->deleteLater();
@@ -966,10 +963,13 @@ void ServerApplication::processSessionHeartbeat(QTcpSocket *socket, const Frame 
     }
     const QJsonObject requestData = frame.payload.value(QStringLiteral("data")).toObject();
     const QString sessionId = requestData.value(QStringLiteral("session_id")).toString();
-    const bool validForConnection = connectionSessions_.value(socket).contains(sessionId);
-    const bool valid = validForConnection && sessionManager_.validateAndTouch(sessionId);
+    const bool valid = sessionManager_.validateAndTouch(sessionId);
     if (!valid) {
         connectionSessions_[socket].remove(sessionId);
+        adminSessions_.remove(sessionId);
+        consultHistory_.remove(sessionId);
+        consultLastAt_.remove(sessionId);
+        consultEpoch_.remove(sessionId);
         const QJsonObject response {
             {QStringLiteral("protocol_version"), static_cast<qint64>(ProtocolVersion)},
             {QStringLiteral("request_id"), requestId},
@@ -983,6 +983,14 @@ void ServerApplication::processSessionHeartbeat(QTcpSocket *socket, const Frame 
             static_cast<quint32>(MessageType::SessionHeartbeatResponse), response));
         return;
     }
+
+    for (auto sessions = connectionSessions_.begin();
+         sessions != connectionSessions_.end(); ++sessions) {
+        if (sessions.key() != socket) {
+            sessions.value().remove(sessionId);
+        }
+    }
+    connectionSessions_[socket].insert(sessionId);
 
     const QJsonObject response {
         {QStringLiteral("protocol_version"), static_cast<qint64>(ProtocolVersion)},
@@ -1049,10 +1057,11 @@ void ServerApplication::processAdminRequest(QTcpSocket *socket, const Frame &fra
     const QString type = requestData.value(QStringLiteral("type")).toString();
     const QString sessionId = requestData.value(QStringLiteral("session_id")).toString();
 
+    const qint64 authenticatedAdminId = sessionManager_.authenticatedUserId(sessionId);
     const bool valid = !sessionId.isEmpty()
         && adminSessions_.contains(sessionId)
         && connectionSessions_.value(socket).contains(sessionId)
-        && sessionManager_.validateAndTouch(sessionId);
+        && authenticatedAdminId > 0;
 
     QJsonObject response;
     if (!valid) {
@@ -1068,7 +1077,7 @@ void ServerApplication::processAdminRequest(QTcpSocket *socket, const Frame &fra
     } else {
         const QJsonObject params = requestData.value(QStringLiteral("params")).toObject();
         response = isAction
-            ? adminHandler_->processAction(type, params)
+            ? adminHandler_->processAction(type, params, authenticatedAdminId)
             : adminHandler_->processQuery(type, params);
     }
 

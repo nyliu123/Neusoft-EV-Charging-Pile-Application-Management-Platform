@@ -1,9 +1,20 @@
 <RCC>
     <qresource prefix="/images">
         <file alias="default-avatar.svg">../../resources/images/default-avatar.svg</file>
+        <file alias="xiaoqing.png">../../resources/images/xiaoqing.png</file>
+    </qresource>
+    <qresource prefix="/icons">
+        <file alias="chat-menu.svg">../../resources/icons/chat-menu.svg</file>
+        <file alias="chat-back.svg">../../resources/icons/chat-back.svg</file>
+        <file alias="eye.svg">../../resources/icons/eye.svg</file>
+        <file alias="eye-off.svg">../../resources/icons/eye-off.svg</file>
+        <file alias="copy.svg">../../resources/icons/copy.svg</file>
+        <file alias="edit.svg">../../resources/icons/edit.svg</file>
+        <file alias="retry.svg">../../resources/icons/retry.svg</file>
+        <file alias="trash-red.svg">../../resources/icons/trash-red.svg</file>
     </qresource>
     <qresource prefix="/styles">
-        <!-- Shared by every page in the user client, including station search. -->
+        <!-- Shared modern UI styles, including avatar-aligned assistant chat. -->
         <file alias="client.qss">../../resources/styles/modern.qss</file>
     </qresource>
 </RCC>
