@@ -9,6 +9,10 @@ PLATFORM_ROOT = $$clean_path($$PWD/../..)
 include($$PLATFORM_ROOT/config/common.pri)
 
 INCLUDEPATH += $$PLATFORM_ROOT/src
+HEADERS += membership_service.h sql_support.h
+SOURCES += membership_service.cpp
+HEADERS += knowledge_service.h
+SOURCES += knowledge_service.cpp
 
 HEADERS += \
     order_service.h \

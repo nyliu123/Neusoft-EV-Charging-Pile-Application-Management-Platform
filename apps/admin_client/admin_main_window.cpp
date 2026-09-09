@@ -1,4 +1,5 @@
 #include "admin_main_window.h"
+#include "client_ui/apple_widgets.h"
 
 #include "admin_dashboard_page.h"
 #include "admin_login_dialog.h"
@@ -7,6 +8,7 @@
 #include "admin_station_detail_page.h"
 #include "admin_station_page.h"
 #include "admin_user_page.h"
+#include "admin_membership_page.h"
 
 #include <QApplication>
 #include <QHBoxLayout>
@@ -35,37 +37,57 @@ AdminMainWindow::AdminMainWindow(PlatformClient *client, const AdminSession &ses
 void AdminMainWindow::setupUi()
 {
     setWindowTitle(QStringLiteral("汽车充电管理平台 管理端"));
-    resize(1200, 760);
+    resize(1280, 800);
+    setMinimumSize(1100, 680);
 
     auto *central = new QWidget(this);
     auto *bodyLayout = new QHBoxLayout(central);
-    bodyLayout->setContentsMargins(0, 0, 0, 0);
-    bodyLayout->setSpacing(0);
+    bodyLayout->setContentsMargins(18, 18, 18, 18);
+    bodyLayout->setSpacing(22);
 
-    // Left navigation.
-    nav_ = new QListWidget(central);
+    // Persistent, familiar desktop navigation with immediate selection feedback.
+    auto *sidebar = new QFrame(central);
+    sidebar->setObjectName(QStringLiteral("terminalSidebar"));
+    sidebar->setFixedWidth(188);
+    auto *sidebarLayout = new QVBoxLayout(sidebar);
+    sidebarLayout->setContentsMargins(12, 22, 12, 10);
+    sidebarLayout->setSpacing(20);
+    sidebarLayout->addWidget(makeAppleBrand(sidebar));
+    auto *workspaceLabel = new QLabel(QStringLiteral("管理工作空间"), sidebar);
+    workspaceLabel->setProperty("uiClass", "eyebrow");
+    sidebarLayout->addWidget(workspaceLabel);
+    nav_ = new QListWidget(sidebar);
     nav_->setObjectName(QStringLiteral("sidebarNavigation"));
-    nav_->setFixedWidth(190);
-    nav_->addItem(QStringLiteral("经营看板"));
-    nav_->addItem(QStringLiteral("充电桩管理"));
-    nav_->addItem(QStringLiteral("充电站管理"));
-    nav_->addItem(QStringLiteral("用户管理"));
-    nav_->addItem(QStringLiteral("订单管理"));
-    bodyLayout->addWidget(nav_);
+    nav_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    nav_->setAccessibleName(QStringLiteral("管理功能导航"));
+    nav_->setIconSize(QSize(20, 20));
+    new QListWidgetItem(appSymbolIcon(AppSymbol::Overview), QStringLiteral("经营看板"), nav_);
+    new QListWidgetItem(appSymbolIcon(AppSymbol::Bolt), QStringLiteral("充电桩管理"), nav_);
+    new QListWidgetItem(appSymbolIcon(AppSymbol::Station), QStringLiteral("充电站管理"), nav_);
+    new QListWidgetItem(appSymbolIcon(AppSymbol::Person), QStringLiteral("用户管理"), nav_);
+    new QListWidgetItem(appSymbolIcon(AppSymbol::Receipt), QStringLiteral("订单管理"), nav_);
+    new QListWidgetItem(appSymbolIcon(AppSymbol::Person), QStringLiteral("会员套餐"), nav_);
+    new QListWidgetItem(appSymbolIcon(AppSymbol::Receipt), QStringLiteral("咨询知识库"), nav_);
+    sidebarLayout->addWidget(nav_, 1);
+    auto *railFooter = new QLabel(QStringLiteral("轻充管理端\n电动汽车充电服务平台"), sidebar);
+    railFooter->setObjectName(QStringLiteral("terminalSidebarFooter"));
+    railFooter->setWordWrap(true);
+    sidebarLayout->addWidget(railFooter);
+    bodyLayout->addWidget(sidebar);
 
     // Right side: header + page stack.
     auto *rightLayout = new QVBoxLayout();
-    rightLayout->setContentsMargins(20, 14, 20, 16);
+    rightLayout->setContentsMargins(0, 0, 0, 0);
     rightLayout->setSpacing(12);
 
     auto *headerLayout = new QHBoxLayout();
-    auto *headerTitle = new QLabel(QStringLiteral("运营管理端"), central);
-    headerTitle->setProperty("uiClass", "sectionTitle");
+    auto *headerTitle = new QLabel(QStringLiteral("工作空间 / 运营管理"), central);
+    headerTitle->setProperty("uiClass", "eyebrow");
     headerLayout->addWidget(headerTitle);
     headerLayout->addStretch();
 
     logoutButton_ = new QPushButton(QStringLiteral("退出登录"), central);
-    logoutButton_->setProperty("uiClass", "danger");
+    logoutButton_->setProperty("uiClass", "text");
     logoutButton_->setCursor(Qt::PointingHandCursor);
     headerLayout->addWidget(logoutButton_);
     rightLayout->addLayout(headerLayout);
@@ -92,6 +114,8 @@ void AdminMainWindow::setupUi()
 
     orderPage_ = new AdminOrderPage(&api_, this);
     stack_->addWidget(orderPage_);
+    membershipPage_ = new AdminMembershipPage(&api_,this);stack_->addWidget(membershipPage_);
+    knowledgePage_ = new AdminKnowledgePage(&api_,this);stack_->addWidget(knowledgePage_);
 
     // Station detail (UML-041): stacked but not present in the navigation.
     stationDetailPage_ = new AdminStationDetailPage(&api_, this);
@@ -110,7 +134,8 @@ void AdminMainWindow::setupUi()
     nav_->setCurrentRow(0);
 
     // Status bar.
-    connectionLabel_ = new QLabel(QStringLiteral("连接状态：连接中"), this);
+    connectionLabel_ = new QLabel(client_->state() == PlatformClient::State::Ready
+        ? QStringLiteral("连接状态：服务端可用") : QStringLiteral("连接状态：尚未就绪"), this);
     statusBar()->addPermanentWidget(connectionLabel_);
     userLabel_ = new QLabel(this);
     statusBar()->addPermanentWidget(userLabel_);
@@ -181,6 +206,10 @@ void AdminMainWindow::refreshCurrentPage()
         userPage_->reload();
     } else if (current == orderPage_) {
         orderPage_->reloadAll();
+    } else if (current == membershipPage_) {
+        membershipPage_->reload();
+    } else if (current == knowledgePage_) {
+        knowledgePage_->reload();
     } else if (current == stationDetailPage_) {
         stationDetailPage_->reload();
     }

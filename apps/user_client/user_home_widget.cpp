@@ -1,4 +1,5 @@
 #include "user_home_widget.h"
+#include "client_ui/apple_widgets.h"
 
 #include "charge_flow_widget.h"
 #include "user_info_widget.h"
@@ -11,6 +12,8 @@
 #include <QPushButton>
 #include <QTimer>
 #include <QTabWidget>
+#include <QTabBar>
+#include <QListWidget>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 
@@ -18,18 +21,46 @@ UserHomeWidget::UserHomeWidget(ev::UserApiClient *api, QWidget *parent)
     : QWidget(parent)
 {
     auto *layout = new QVBoxLayout(this);
-
+    layout->setContentsMargins(24, 14, 24, 14);
+    layout->setSpacing(16);
+    auto *header = new QFrame(this);
+    header->setObjectName(QStringLiteral("userTopBar"));
+    auto *toolbar = new QHBoxLayout(header);
+    toolbar->setContentsMargins(14, 5, 14, 5);
+    toolbar->setSpacing(12);
+    auto *brand = ev::makeAppleBrand(header);
+    brand->setFixedWidth(142);
+    toolbar->addWidget(brand);
+    toolbar->addStretch();
+    auto *navigation = new QListWidget(header);
+    navigation->setObjectName(QStringLiteral("userNavigation"));
+    navigation->setAccessibleName(QStringLiteral("用户功能导航"));
+    navigation->setIconSize(QSize(18, 18));
+    navigation->setFlow(QListView::LeftToRight);
+    navigation->setWrapping(false);
+    navigation->setMovement(QListView::Static);
+    navigation->setResizeMode(QListView::Adjust);
+    navigation->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    navigation->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    navigation->setFixedSize(518, 46);
+    const QStringList destinations {QStringLiteral("找桩"), QStringLiteral("充电"),
+        QStringLiteral("个人中心"), QStringLiteral("我的订单")};
+    const ev::AppSymbol symbols[] {ev::AppSymbol::Compass, ev::AppSymbol::Bolt,
+        ev::AppSymbol::Person, ev::AppSymbol::Receipt};
+    for (int i = 0; i < destinations.size(); ++i) {
+        auto *item = new QListWidgetItem(ev::appSymbolIcon(symbols[i]), destinations.at(i), navigation);
+        item->setSizeHint(QSize(126, 36));
+    }
+    toolbar->addWidget(navigation);
+    toolbar->addStretch();
+    logoutButton_ = new QPushButton(QStringLiteral("退出登录"), header);
+    logoutButton_->setProperty("uiClass", "text");
+    toolbar->addWidget(logoutButton_);
+    layout->addWidget(header);
     successMessage_ = new QLabel(this);
     successMessage_->setProperty("uiClass", "successBanner");
     successMessage_->hide();
     layout->addWidget(successMessage_);
-
-    auto *toolbar = new QHBoxLayout;
-    toolbar->addStretch();
-    logoutButton_ = new QPushButton(QStringLiteral("退出登录"), this);
-    logoutButton_->setProperty("uiClass", "danger");
-    toolbar->addWidget(logoutButton_);
-    layout->addLayout(toolbar);
     connect(logoutButton_, &QPushButton::clicked, this, [this] {
         const auto answer = QMessageBox::question(this, QStringLiteral("退出登录"),
             QStringLiteral("确定退出当前用户账号？"),
@@ -61,6 +92,12 @@ UserHomeWidget::UserHomeWidget(ev::UserApiClient *api, QWidget *parent)
     connect(orderListWidget_, &OrderListWidget::backRequested, this, [this] {
         tabs_->setCurrentWidget(stationSearchWidget_);
     });
+    // Keep the established tab API and all page signals; the navigation is a second view
+    // of the same selection state, including programmatic charge/profile jumps.
+    tabs->tabBar()->hide();
+    connect(navigation, &QListWidget::currentRowChanged, tabs, &QTabWidget::setCurrentIndex);
+    connect(tabs, &QTabWidget::currentChanged, navigation, QOverload<int>::of(&QListWidget::setCurrentRow));
+    navigation->setCurrentRow(tabs->currentIndex());
     layout->addWidget(tabs, 1);
 
     connect(stationSearchWidget_, &StationSearchWidget::pileChosen, this, [this, tabs](qint64 pileId) {

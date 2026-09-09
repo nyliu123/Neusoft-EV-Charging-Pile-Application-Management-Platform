@@ -3,6 +3,7 @@
 #include "user_home_widget.h"
 #include "user_session_state.h"
 #include "client_ui/client_style.h"
+#include "client_ui/apple_widgets.h"
 #include "network/platform_client.h"
 
 #include <QApplication>
@@ -77,8 +78,9 @@ int main(int argc, char *argv[])
 
     QMainWindow window;
     window.setObjectName(QStringLiteral("userClientWindow"));
-    window.setWindowTitle(QStringLiteral("汽车充电管理平台 用户端"));
-    window.resize(460, 380);
+    window.setWindowTitle(QStringLiteral("轻充 · 用户端"));
+    window.setMinimumSize(900, 600);
+    window.resize(1000, 660);
 
     auto *central = new QWidget(&window);
     central->setObjectName(QStringLiteral("userClientShell"));
@@ -86,11 +88,18 @@ int main(int argc, char *argv[])
     layout->setContentsMargins(0, 0, 0, 0);
     auto *pages = new QStackedWidget(central);
     auto *loginPage = new QWidget(pages);
-    auto *loginLayout = new QVBoxLayout(loginPage);
-    loginLayout->addStretch();
-    auto *loginWidget = new PhoneLoginWidget(loginPage);
-    loginLayout->addWidget(loginWidget, 0, Qt::AlignCenter);
-    loginLayout->addStretch();
+    auto *loginLayout = new QHBoxLayout(loginPage);
+    loginLayout->setContentsMargins(20, 20, 20, 20);
+    loginLayout->setSpacing(0);
+    loginLayout->addWidget(new ev::AppleIdentityPanel(false, loginPage), 1);
+    auto *loginArea = new QWidget(loginPage);
+    auto *formLayout = new QVBoxLayout(loginArea);
+    formLayout->setContentsMargins(30, 28, 30, 28);
+    auto *loginWidget = new PhoneLoginWidget(loginArea);
+    formLayout->addStretch();
+    formLayout->addWidget(loginWidget, 0, Qt::AlignHCenter);
+    formLayout->addStretch();
+    loginLayout->addWidget(loginArea, 1);
     auto *userApi = new ev::UserApiClient(&client, &window);
     QObject::connect(userApi, &ev::UserApiClient::sessionExpired, &window,
                      [] {
@@ -125,7 +134,7 @@ int main(int argc, char *argv[])
         }
         homeWidget->refresh();
         pages->setCurrentWidget(homeWidget);
-        window.resize(1000, 680);
+        window.resize(1200, 780);
         homeWidget->showWelcome(isNewUser);
         window.statusBar()->showMessage(
             isNewUser ? QStringLiteral("注册成功，欢迎加入！")
@@ -147,7 +156,7 @@ int main(int argc, char *argv[])
         UserSessionState::instance().clear();
         loginWidget->resetForLogin();
         pages->setCurrentWidget(loginPage);
-        window.resize(460, 380);
+        window.resize(1000, 660);
         window.statusBar()->showMessage(QStringLiteral("已退出登录"), 3000);
     });
     QObject::connect(&client, &ev::PlatformClient::sessionExpired, &window,
@@ -155,7 +164,7 @@ int main(int argc, char *argv[])
         UserSessionState::instance().clear();
         homeWidget->setLogoutInProgress(false);
         pages->setCurrentWidget(loginPage);
-        window.resize(460, 380);
+        window.resize(1000, 660);
         loginWidget->showLoginError(message.isEmpty()
             ? QStringLiteral("登录已过期，请重新登录") : message);
     });

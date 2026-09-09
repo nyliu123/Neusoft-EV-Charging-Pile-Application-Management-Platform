@@ -1,6 +1,7 @@
 #include "charge_flow_widget.h"
 
 #include "user_api_client.h"
+#include "client_ui/apple_widgets.h"
 #include "user_session_state.h"
 
 #include <QDateTime>
@@ -11,6 +12,7 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QStackedWidget>
+#include <QStyle>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -47,7 +49,19 @@ ChargeFlowWidget::ChargeFlowWidget(ev::UserApiClient *api, QWidget *parent)
     : QWidget(parent), api_(api)
 {
     auto *root = new QVBoxLayout(this);
-    root->setContentsMargins(24, 20, 24, 20);
+    root->setContentsMargins(0, 8, 0, 0);
+    root->setSpacing(20);
+    auto *steps = new QHBoxLayout;
+    steps->setSpacing(4);
+    const QStringList captions {QStringLiteral("01  确认设备"), QStringLiteral("02  预约就绪"),
+        QStringLiteral("03  正在充电"), QStringLiteral("04  订单结算")};
+    for (const QString &caption : captions) {
+        auto *label = new QLabel(caption, this);
+        label->setProperty("uiClass", "flowStep");
+        stageLabels_.append(label);
+        steps->addWidget(label, 1);
+    }
+    root->addLayout(steps);
     pages_ = new QStackedWidget(this);
     root->addWidget(pages_);
 
@@ -66,13 +80,38 @@ ChargeFlowWidget::ChargeFlowWidget(ev::UserApiClient *api, QWidget *parent)
     selectPage_ = new QWidget(pages_);
     auto *selectLayout = new QVBoxLayout(selectPage_);
     selectLayout->addWidget(makeTitle(QStringLiteral("确认充电桩"), selectPage_));
-    selectInfo_ = new QLabel(selectPage_);
+    selectLayout->setSpacing(18);
+    auto *selectionCard = new QFrame(selectPage_);
+    selectionCard->setProperty("uiClass", "card");
+    auto *cardLayout = new QVBoxLayout(selectionCard);
+    cardLayout->setContentsMargins(26, 26, 26, 24);
+    cardLayout->setSpacing(22);
+    auto *summary = new QHBoxLayout;
+    summary->setSpacing(28);
+    auto *glyph = new QLabel(selectionCard);
+    glyph->setPixmap(ev::appSymbolIcon(ev::AppSymbol::Bolt).pixmap(64, 64));
+    glyph->setFixedSize(110, 116);
+    glyph->setProperty("uiClass", "chargeGlyph");
+    glyph->setAlignment(Qt::AlignCenter);
+    summary->addWidget(glyph);
+    auto *information = new QVBoxLayout;
+    information->setSpacing(14);
+    auto *caption = new QLabel(QStringLiteral("已选择的充电设备"), selectionCard);
+    caption->setProperty("uiClass", "eyebrow");
+    information->addWidget(caption);
+    selectInfo_ = new QLabel(selectionCard);
+    selectInfo_->setProperty("uiClass", "chargeInfo");
     selectInfo_->setWordWrap(true);
-    selectLayout->addWidget(selectInfo_);
-    selectPrice_ = new QLabel(selectPage_);
-    selectPrice_->setProperty("uiClass", "muted");
-    selectLayout->addWidget(selectPrice_);
-    selectLayout->addStretch();
+    information->addWidget(selectInfo_);
+    selectPrice_ = new QLabel(selectionCard);
+    selectPrice_->setProperty("uiClass", "chargePrice");
+    information->addWidget(selectPrice_);
+    auto *instruction = new QLabel(QStringLiteral("核对站点与设备，预约成功后可开始充电。"), selectionCard);
+    instruction->setProperty("uiClass", "muted");
+    instruction->setWordWrap(true);
+    information->addWidget(instruction);
+    summary->addLayout(information, 1);
+    cardLayout->addLayout(summary);
     auto *selectButtons = new QHBoxLayout;
     reselectButton_ = new QPushButton(QStringLiteral("返回重新选桩"), selectPage_);
     reselectButton_->setProperty("uiClass", "text");
@@ -81,7 +120,9 @@ ChargeFlowWidget::ChargeFlowWidget(ev::UserApiClient *api, QWidget *parent)
     reserveButton_ = new QPushButton(QStringLiteral("预约充电"), selectPage_);
     reserveButton_->setProperty("uiClass", "primary");
     selectButtons->addWidget(reserveButton_);
-    selectLayout->addLayout(selectButtons);
+    cardLayout->addLayout(selectButtons);
+    selectLayout->addWidget(selectionCard);
+    selectLayout->addStretch();
     pages_->addWidget(selectPage_);
 
     // ── Progress page: reserved and charging share one page ─────────────
@@ -147,6 +188,7 @@ ChargeFlowWidget::ChargeFlowWidget(ev::UserApiClient *api, QWidget *parent)
     settleTitle_->setProperty("uiClass", "pageTitle");
     settleLayout->addWidget(settleTitle_);
     settleDetail_ = new QLabel(settlePage_);
+    settleDetail_->setProperty("uiClass", "stationMeta");
     settleDetail_->setWordWrap(true);
     settleLayout->addWidget(settleDetail_);
     settleLayout->addStretch();
@@ -230,6 +272,8 @@ void ChargeFlowWidget::reset()
     pileType_.clear();
     powerKw_ = 0.0;
     pricePerKwh_ = 0.0;
+    membershipLevel_ = QStringLiteral("NORMAL");
+    discountBps_ = 10000;
     idleLabel_->setText(QStringLiteral("进入充电流程后将自动检查未完成订单。"));
     pages_->setCurrentWidget(idlePage_);
 }
@@ -237,6 +281,13 @@ void ChargeFlowWidget::reset()
 void ChargeFlowWidget::setStage(Stage stage)
 {
     stage_ = stage;
+    const int currentStep = stage == Stage::Reserved ? 1 : stage == Stage::Charging ? 2
+        : (stage == Stage::Settled || stage == Stage::PendingSettlement) ? 3 : 0;
+    for (int i = 0; i < stageLabels_.size(); ++i) {
+        stageLabels_[i]->setProperty("active", i == currentStep);
+        stageLabels_[i]->style()->unpolish(stageLabels_[i]);
+        stageLabels_[i]->style()->polish(stageLabels_[i]);
+    }
     if (stage_ != Stage::Charging) {
         elapsedTimer_->stop();
     }
@@ -313,7 +364,15 @@ void ChargeFlowWidget::renderPileInfo(QLabel *infoLabel, QLabel *priceLabel) con
     infoLabel->setText(QStringLiteral("%1 · %2（%3，%4 kW）")
                            .arg(stationName_, pileNumber_, pileTypeText(pileType_))
                            .arg(powerKw_, 0, 'f', 1));
-    priceLabel->setText(QStringLiteral("充电单价 ¥%1 / 度").arg(pricePerKwh_, 0, 'f', 2));
+    QString text = QStringLiteral("充电原价 ¥%1 / 度").arg(pricePerKwh_, 0, 'f', 2);
+    if (orderId_ > 0) {
+        text += discountBps_ < 10000
+            ? QStringLiteral(" · 本单 %1 %2折（预约时锁定）").arg(membershipLevel_).arg(discountBps_ / 1000.0, 0, 'g', 4)
+            : QStringLiteral(" · 本单无会员优惠");
+    } else {
+        text += QStringLiteral(" · 会员优惠将在预约时确定");
+    }
+    priceLabel->setText(text);
 }
 
 void ChargeFlowWidget::reservePile()
@@ -331,6 +390,8 @@ void ChargeFlowWidget::reservePile()
                 return;
             }
             orderId_ = result.value(QStringLiteral("order_id")).toInteger();
+            membershipLevel_ = result.value("membership_level").toString("NORMAL");
+            discountBps_ = result.value("discount_bps").toInt(10000);
             QMessageBox::information(this, QStringLiteral("预约成功"),
                 QStringLiteral("充电桩已为您保留，请点击“开始充电”。"));
             showReservedPage();
@@ -353,6 +414,8 @@ void ChargeFlowWidget::startCharging()
             startTimeText_ = result.value(QStringLiteral("start_time")).toString();
             powerKw_ = result.value(QStringLiteral("power_kw")).toDouble(powerKw_);
             pricePerKwh_ = result.value(QStringLiteral("price_per_kwh")).toDouble(pricePerKwh_);
+            membershipLevel_ = result.value("membership_level").toString(membershipLevel_);
+            discountBps_ = result.value("discount_bps").toInt(discountBps_);
             showChargingPage();
         });
 }
@@ -439,6 +502,8 @@ void ChargeFlowWidget::applyPendingOrder(const QJsonObject &order)
     pileType_ = order.value(QStringLiteral("pile_type")).toString();
     powerKw_ = order.value(QStringLiteral("power_kw")).toDouble();
     pricePerKwh_ = order.value(QStringLiteral("price_per_kwh")).toDouble();
+    membershipLevel_ = order.value("membership_level").toString("NORMAL");
+    discountBps_ = order.value("discount_bps").toInt(10000);
     const QString status = order.value(QStringLiteral("status")).toString();
 
     QMessageBox::information(this, QStringLiteral("未完成订单"),
@@ -471,6 +536,7 @@ void ChargeFlowWidget::applyPendingOrder(const QJsonObject &order)
         {QStringLiteral("total_kwh"),
          order.value(QStringLiteral("charge_amount_kwh")).toDouble()},
         {QStringLiteral("total_fee_cent"), feeCent},
+        {QStringLiteral("gross_fee_cent"), order.value("gross_fee_cent").toInteger(feeCent)},
         {QStringLiteral("balance_cent"), balanceCent},
         {QStringLiteral("shortfall_cent"), qMax<qint64>(0, feeCent - balanceCent)}
     });
@@ -530,10 +596,11 @@ void ChargeFlowWidget::showSettledPage(const QJsonObject &result)
     const qint64 balanceCent = result.value(QStringLiteral("balance_cent")).toInteger();
     UserSessionState::instance().setBalanceCent(balanceCent);
     settleTitle_->setText(QStringLiteral("充电完成"));
-    settleDetail_->setText(QStringLiteral("充电量 %1 度 · 费用 %2 · 当前余额 %3")
+    const auto net = result.value("total_fee_cent").toInteger();
+    const auto gross = result.value("gross_fee_cent").toInteger(net);
+    settleDetail_->setText(QStringLiteral("充电量 %1 度 · 原价 %2 · 优惠 %3\n实付 %4 · 当前余额 %5")
         .arg(result.value(QStringLiteral("total_kwh")).toDouble(), 0, 'f', 2)
-        .arg(yuanText(result.value(QStringLiteral("total_fee_cent")).toInteger()),
-             yuanText(balanceCent)));
+        .arg(yuanText(gross), yuanText(gross - net), yuanText(net), yuanText(balanceCent)));
     pages_->setCurrentWidget(settlePage_);
 }
 
@@ -546,10 +613,13 @@ void ChargeFlowWidget::showPendingPage(const QJsonObject &result)
     pendingTitle_->setText(QStringLiteral("余额不足，订单待结算"));
     pendingDetail_->setText(QStringLiteral(
         "充电已完成，但余额不足以支付本次费用。\n"
-        "充电量 %1 度 · 费用 %2 · 当前余额 %3 · 差额 %4\n"
+        "充电量 %1 度 · 应付 %2 · 当前余额 %3 · 差额 %4\n"
+        "原价 %5 · 优惠 %6（预约时锁定）\n"
         "请先充值，然后返回本页点击“重新结算”；结算前充电桩保持占用。")
         .arg(result.value(QStringLiteral("total_kwh")).toDouble(), 0, 'f', 2)
-        .arg(yuanText(feeCent), yuanText(balanceCent), yuanText(shortfallCent)));
+        .arg(yuanText(feeCent), yuanText(balanceCent), yuanText(shortfallCent),
+             yuanText(result.value("gross_fee_cent").toInteger(feeCent)),
+             yuanText(result.value("gross_fee_cent").toInteger(feeCent) - feeCent)));
     pages_->setCurrentWidget(pendingPage_);
 }
 

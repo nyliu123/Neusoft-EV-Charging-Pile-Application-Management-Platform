@@ -361,9 +361,9 @@ void NavigationMapDialog::renderRoute(const QVector<QPointF> &route, double dist
         routeJson.append(QJsonArray {coordinate.x(), coordinate.y()});
     }
     const int minutes = qMax(1, qRound(durationSeconds / 60.0));
-    const QString modeColor = mode_->currentIndex() == 1 ? QStringLiteral("#188038")
-        : mode_->currentIndex() == 2 ? QStringLiteral("#7b1fa2")
-                                     : QStringLiteral("#1a73e8");
+    const QString modeColor = mode_->currentIndex() == 1 ? QStringLiteral("#237746")
+        : mode_->currentIndex() == 2 ? QStringLiteral("#9653c4")
+                                     : QStringLiteral("#007aff");
     const auto jsonLiteral = [](const QString &value) {
         const QByteArray array = QJsonDocument(QJsonArray {value}).toJson(QJsonDocument::Compact);
         return QString::fromUtf8(array.mid(1, array.size() - 2));
@@ -371,17 +371,17 @@ void NavigationMapDialog::renderRoute(const QVector<QPointF> &route, double dist
     const QString formattedDistance = distanceText(distanceKm);
     QString html = QStringLiteral(R"HTML(
 <!doctype html><html><head><meta charset="utf-8"><title>地图路线</title><style>
-html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#e8eef3;font-family:sans-serif;user-select:none}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans CJK SC',sans-serif;user-select:none}
 #map{position:absolute;inset:0;overflow:hidden;cursor:grab;touch-action:none}#map.dragging{cursor:grabbing}
 #tiles,.overlay{position:absolute;inset:0}.tile{position:absolute;max-width:none}.overlay{width:100%;height:100%;pointer-events:none}
 .route{fill:none;stroke:__COLOR__;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 1px 2px #fff)}
 .pin{position:absolute;width:30px;height:30px;margin:-18px;border-radius:50%;color:#fff;text-align:center;line-height:30px;font-weight:bold;border:3px solid #fff;box-shadow:0 2px 7px #555}
-.start{background:#188038}.end{background:#d93025}.marker-label{position:absolute;color:#111;background:rgba(255,255,255,.9);padding:3px 6px;border-radius:4px;font-size:13px;font-weight:600;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.25)}
-.summary{position:absolute;left:16px;top:16px;background:rgba(255,255,255,.94);padding:10px 14px;border-radius:9px;box-shadow:0 2px 8px #777;font-size:14px;line-height:1.65}.summary-title{font-size:16px;font-weight:700;margin-bottom:2px}
-#bottomControls{position:absolute;right:16px;bottom:16px;display:flex;align-items:flex-end;gap:8px}#scaleControl{min-width:112px;background:rgba(255,255,255,.94);border:1px solid #c8cdd3;border-radius:8px;box-shadow:0 2px 8px #777;padding:5px 9px;color:#202124;font-size:12px}
-#scaleLine{height:6px;border-left:2px solid #202124;border-right:2px solid #202124;border-bottom:2px solid #202124;margin-top:2px}
-#zoomControls{display:flex;align-items:center;background:#fff;border:1px solid #c8cdd3;border-radius:8px;box-shadow:0 2px 8px #777;overflow:hidden}
-#zoomControls button{width:38px;height:38px;border:0;background:#fff;font-size:23px;cursor:pointer;color:#27313b}#zoomControls button:hover{background:#eef2f6}#zoomControls button:disabled{color:#a0a6af;background:#f3f4f6;cursor:default}#zoomControls #resetZoom{width:58px;font-size:14px;font-weight:600;border-left:1px solid #ddd}#zoomPercent{width:58px;text-align:center;font-size:13px;border-left:1px solid #ddd;border-right:1px solid #ddd}
+.start{background:#237746}.end{background:#d93025}.marker-label{position:absolute;color:#111;background:rgba(255,255,255,.9);padding:3px 6px;border-radius:4px;font-size:13px;font-weight:600;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.summary{position:absolute;left:16px;top:16px;background:rgba(255,255,255,.94);padding:14px 18px;border-radius:14px;box-shadow:0 4px 16px rgba(29,29,31,.12);font-size:14px;line-height:1.65}.summary-title{font-size:16px;font-weight:700;margin-bottom:2px}
+#bottomControls{position:absolute;right:16px;bottom:16px;display:flex;align-items:flex-end;gap:8px}#scaleControl{min-width:112px;background:rgba(255,255,255,.94);border:1px solid #d9d9e1;border-radius:8px;box-shadow:0 4px 16px rgba(29,29,31,.12);padding:5px 9px;color:#1d1d1f;font-size:12px}
+#scaleLine{height:6px;border-left:2px solid #1d1d1f;border-right:2px solid #1d1d1f;border-bottom:2px solid #1d1d1f;margin-top:2px}
+#zoomControls{display:flex;align-items:center;background:#fff;border:1px solid #d9d9e1;border-radius:8px;box-shadow:0 4px 16px rgba(29,29,31,.12);overflow:hidden}
+#zoomControls button{width:38px;height:38px;border:0;background:#fff;font-size:23px;cursor:pointer;color:#27313b}#zoomControls button:hover{background:#eef2f6}#zoomControls button:active{background:#dcecff}#zoomControls button:focus-visible{outline:2px solid #007aff;outline-offset:-3px}#zoomControls button:disabled{color:#a0a6af;background:#f3f4f6;cursor:default}#zoomControls #resetZoom{width:58px;font-size:14px;font-weight:600;border-left:1px solid #ddd}#zoomPercent{width:58px;text-align:center;font-size:13px;border-left:1px solid #ddd;border-right:1px solid #ddd}
 .attribution{position:absolute;left:4px;bottom:3px;background:rgba(255,255,255,.88);padding:3px 6px;font-size:11px;color:#333}.attribution a{color:#075da8}
 </style></head><body><div id="map"><div id="tiles"></div><svg class="overlay"><polyline id="route" class="route"/></svg>
 <div id="start" class="pin start">起</div><div id="startLabel" class="marker-label"></div><div id="end" class="pin end">终</div><div id="endLabel" class="marker-label"></div>

@@ -2,6 +2,7 @@
 
 #include <QJsonObject>
 #include <QWidget>
+#include <QVector>
 
 class QFrame;
 class QLabel;
@@ -69,6 +70,7 @@ private:
     void updateElapsedLabel();
 
     ev::UserApiClient *api_ = nullptr;
+    QVector<QLabel *> stageLabels_;
     QStackedWidget *pages_ = nullptr;
     QWidget *idlePage_ = nullptr;
     QLabel *idleLabel_ = nullptr;
@@ -110,4 +112,6 @@ private:
     QString pileType_;
     double powerKw_ = 0.0;
     double pricePerKwh_ = 0.0;
+    QString membershipLevel_ = QStringLiteral("NORMAL");
+    int discountBps_ = 10000;
 };

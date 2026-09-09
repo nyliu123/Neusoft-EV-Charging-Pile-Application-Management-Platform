@@ -15,6 +15,12 @@ OTHER_FILES += \
     data/ev_charging.sqlite3 \
     docs/02概要设计说明书第5组（最终版）.docx \
     docs/development/architecture.md \
+    docs/development/membership.md \
+    docs/development/apple-ui.md \
+    resources/styles/apple.qss \
+    resources/styles/modern.qss \
+    tests/theme_ui/theme_ui.pro \
+    tests/theme_ui/tst_theme_ui.cpp \
     docs/development/shared-identifiers.md \
     scripts/smoke-test.sh \
     analysis/README.md \
@@ -63,3 +69,8 @@ SUBDIRS += order_ui_tests
 order_ui_tests.subdir = tests/order_ui
 order_ui_tests.target = order_ui_tests
 order_ui_tests.depends = common network
+
+SUBDIRS += membership_tests
+membership_tests.subdir = tests/membership
+membership_tests.target = membership_tests
+membership_tests.depends = common data services

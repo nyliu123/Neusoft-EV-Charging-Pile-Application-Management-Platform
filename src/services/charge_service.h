@@ -19,6 +19,7 @@ struct ChargeSnapshot {
     qint64 elapsedSec = 0;
     double kwh = 0.0;
     qint64 feeCent = 0;
+    qint64 grossFeeCent = 0;
     double progressPercent = 0.0;   // 0..100, assumes a 50 kWh full charge
 };
 
@@ -40,6 +41,8 @@ struct PileCheckInfo {
 };
 
 struct ReserveOutcome {
+    QString membershipLevel = QStringLiteral("NORMAL");
+    int discountBps = 10000;
     qint64 orderId = 0;
     PileRecord pile;
     QString stationName;
@@ -56,6 +59,9 @@ struct SettleOutcome {
     qint64 orderId = 0;
     double totalKwh = 0.0;
     qint64 totalFeeCent = 0;
+    qint64 grossFeeCent = 0;
+    QString membershipLevel;
+    int discountBps = 10000;
     qint64 balanceCent = 0;  // new balance after deduction, or current balance
     qint64 shortfallCent = 0;
 };
@@ -71,7 +77,7 @@ public:
     static QDateTime parseDbDateTime(const QString &value);
     static Result<ChargeSnapshot> computeChargeData(const QDateTime &startTime,
                                                     double powerKw,
-                                                    double pricePerKwh);
+                                                    double pricePerKwh, int discountBps = 10000);
 
     // UML-025: latest non-terminal order for the user, enriched for display.
     Result<std::optional<PendingOrderInfo>> checkPending(QSqlDatabase &database,

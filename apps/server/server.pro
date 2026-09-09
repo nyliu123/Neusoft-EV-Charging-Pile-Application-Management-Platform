@@ -15,6 +15,7 @@ include($$PLATFORM_ROOT/config/common.pri)
 DEFINES += EV_SERVER_SOURCE_DIR=\\\"$$PWD\\\"
 
 INCLUDEPATH += $$PLATFORM_ROOT/src
+SOURCES += membership_handler.cpp
 
 HEADERS += \
     server_application.h \

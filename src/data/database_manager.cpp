@@ -1,4 +1,5 @@
 #include "data/database_manager.h"
+#include "data/membership_schema.h"
 
 #include <QDir>
 #include <QFile>
@@ -130,7 +131,7 @@ Result<int> DatabaseManager::migrate(QSqlDatabase &database) const
                     .arg(query.lastError().text()));
         }
     }
-    return Result<int>::ok(0);
+    return migrateMembership(database);
 }
 
 // ── UML-053: transaction wrapper ─────────────────────────────────────────

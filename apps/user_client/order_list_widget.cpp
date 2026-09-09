@@ -31,7 +31,7 @@ OrderListWidget::OrderListWidget(ev::UserApiClient *api, QWidget *parent)
     : QWidget(parent), api_(api)
 {
     auto *root = new QVBoxLayout(this);
-    root->setContentsMargins(24, 20, 24, 20);
+    root->setContentsMargins(0, 8, 0, 0);
     auto *header = new QHBoxLayout;
     auto *title = plainLabel(QStringLiteral("我的订单"), this);
     title->setProperty("uiClass", "pageTitle");
@@ -131,6 +131,13 @@ void OrderListWidget::renderOrders(const QJsonArray &orders)
             .arg(order.value(QStringLiteral("price_per_kwh")).toDouble(), 0, 'f', 2), card));
         layout->addWidget(plainLabel(QStringLiteral("预约时间：%1")
             .arg(displayTime(order.value(QStringLiteral("reserve_time")))), card));
+        if (order.value("discount_bps").toInt(10000) < 10000) {
+            layout->addWidget(plainLabel(QStringLiteral("本单 %1 %2折 · 原价 ¥%3 · 已优惠 ¥%4（预约时锁定）")
+                .arg(order.value("membership_level").toString())
+                .arg(order.value("discount_bps").toInt() / 1000.0, 0, 'g', 4)
+                .arg(order.value("gross_fee_cent").toInteger() / 100.0, 0, 'f', 2)
+                .arg(order.value("discount_fee_cent").toInteger() / 100.0, 0, 'f', 2), card));
+        }
         if (order.value(QStringLiteral("status")).toString() == QStringLiteral("pending_settlement")) {
             auto *hint = plainLabel(QStringLiteral("此订单待结算，请前往充电流程完成结算。"), card);
             hint->setProperty("uiClass", "orderSettlementHint");

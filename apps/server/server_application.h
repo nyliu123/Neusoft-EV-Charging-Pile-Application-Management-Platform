@@ -9,6 +9,8 @@
 #include <QHash>
 #include <QHostAddress>
 #include <QJsonObject>
+#include <QJsonArray>
+#include <QTimer>
 #include <QObject>
 #include <QSet>
 #include <QSqlDatabase>
@@ -20,6 +22,7 @@ namespace ev {
 
 class AdminHandler;
 class MapApiAdapter;
+class ConsultApiAdapter;
 
 class ServerApplication final : public QObject {
 public:
@@ -38,6 +41,10 @@ private:
     void processUserRequest(QTcpSocket *socket, const Frame &frame);
     void processStationRequest(QTcpSocket *socket, const Frame &frame);
     void processChargeRequest(QTcpSocket *socket, const Frame &frame);
+    void processMembershipRequest(QTcpSocket *socket, const Frame &frame);
+    void processConsultRequest(QTcpSocket *socket, const Frame &frame);
+    Result<qint64> authenticateFeatureUser(QTcpSocket *socket, const Frame &frame);
+    void sendFeatureResponse(QTcpSocket *socket, const QString &requestId, quint32 type, const Result<QJsonObject> &result);
     void processAdminQuery(QTcpSocket *socket, const Frame &frame);
     void processAdminAction(QTcpSocket *socket, const Frame &frame);
     void processAdminRequest(QTcpSocket *socket, const Frame &frame, bool isAction);
@@ -64,6 +71,12 @@ private:
     QSet<QString> adminSessions_;
     std::unique_ptr<AdminHandler> adminHandler_;
     std::unique_ptr<MapApiAdapter> mapApiAdapter_;
+    std::unique_ptr<ConsultApiAdapter> consultApiAdapter_;
+    QTimer renewalTimer_;
+    QSet<qint64> consultBusy_;
+    QHash<QString, qint64> consultLastAt_;
+    QHash<QString, QJsonArray> consultHistory_;
+    QHash<QString, quint64> consultEpoch_;
 };
 
 } // namespace ev

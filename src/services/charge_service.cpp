@@ -1,6 +1,7 @@
 #include "services/charge_service.h"
 
 #include "services/fee_calculator.h"
+#include "services/membership_service.h"
 
 #include <QtGlobal>
 
@@ -30,7 +31,7 @@ QDateTime ChargeService::parseDbDateTime(const QString &value)
 
 Result<ChargeSnapshot> ChargeService::computeChargeData(const QDateTime &startTime,
                                                         double powerKw,
-                                                        double pricePerKwh)
+                                                        double pricePerKwh, int discountBps)
 {
     if (!startTime.isValid() || powerKw <= 0.0 || pricePerKwh <= 0.0) {
         return Result<ChargeSnapshot>::fail(ErrorCode::InvalidInput,
@@ -41,11 +42,12 @@ Result<ChargeSnapshot> ChargeService::computeChargeData(const QDateTime &startTi
     snapshot.kwh = powerKw * static_cast<double>(snapshot.elapsedSec) / 3600.0;
     const qint64 priceCent = static_cast<qint64>(std::llround(pricePerKwh * 100.0));
     const auto fee = FeeCalculator::calculate(
-        static_cast<long double>(snapshot.kwh), priceCent, 10000);
+        static_cast<long double>(snapshot.kwh), priceCent, discountBps);
     if (!fee.success) {
         return Result<ChargeSnapshot>::fail(fee.code, fee.message);
     }
     snapshot.feeCent = fee.data.netCent;
+    snapshot.grossFeeCent = fee.data.grossCent;
     snapshot.progressPercent = qMin(100.0, snapshot.kwh / kFullChargeKwh * 100.0);
     return Result<ChargeSnapshot>::ok(snapshot);
 }
@@ -77,7 +79,7 @@ Result<std::optional<PendingOrderInfo>> ChargeService::checkPending(
 
     if (info.order.status == QStringLiteral("charging")) {
         const QDateTime start = parseDbDateTime(info.order.startTime);
-        const auto snapshot = computeChargeData(start, info.powerKw, info.order.pricePerKwh);
+        const auto snapshot = computeChargeData(start, info.powerKw, info.order.pricePerKwh, info.order.discountBps);
         if (snapshot.success) {
             info.liveSnapshot = snapshot.data;
         }
@@ -163,9 +165,15 @@ Result<ReserveOutcome> ChargeService::reserve(QSqlDatabase &database, qint64 use
         database.rollback();
         return Result<ReserveOutcome>::fail(locked.code, transitionFailureMessage(locked));
     }
+    const auto membership = MembershipService().snapshot(database, userId);
+    if (!membership.success) {
+        database.rollback();
+        return Result<ReserveOutcome>::fail(membership.code, membership.message);
+    }
     const auto order = orderRepository_.insertOrder(
         database, userId, pileId, pile.data->stationId,
-        station.data->station.pricePerKwh);
+        station.data->station.pricePerKwh, membership.data.value("level").toString(),
+        membership.data.value("discount_bps").toInt(), membership.data.value("version").toInt());
     if (!order.success) {
         database.rollback();
         return Result<ReserveOutcome>::fail(order.code, order.message);
@@ -178,6 +186,8 @@ Result<ReserveOutcome> ChargeService::reserve(QSqlDatabase &database, qint64 use
 
     ReserveOutcome outcome;
     outcome.orderId = order.data;
+    outcome.membershipLevel = membership.data.value("level").toString();
+    outcome.discountBps = membership.data.value("discount_bps").toInt();
     outcome.pile = *pile.data;
     outcome.stationName = station.data->station.stationName;
     outcome.pricePerKwh = station.data->station.pricePerKwh;
@@ -283,21 +293,24 @@ Result<SettleOutcome> ChargeService::endCharge(QSqlDatabase &database, qint64 us
 
     double finalKwh = 0.0;
     qint64 feeCent = 0;
+    qint64 grossFeeCent = 0;
     qint64 elapsedSec = 0;
     if (order.status == QStringLiteral("charging")) {
         const QDateTime start = parseDbDateTime(order.startTime);
         const auto snapshot = computeChargeData(start, pile.data->powerKw,
-                                                order.pricePerKwh);
+                                                order.pricePerKwh, order.discountBps);
         if (!snapshot.success) {
             return Result<SettleOutcome>::fail(snapshot.code, snapshot.message);
         }
         finalKwh = snapshot.data.kwh;
         feeCent = snapshot.data.feeCent;
+        grossFeeCent = snapshot.data.grossFeeCent;
         elapsedSec = snapshot.data.elapsedSec;
     } else {
         // Values were persisted when the order entered pending_settlement.
         finalKwh = order.chargeAmountKwh;
         feeCent = order.totalFeeCent;
+        grossFeeCent = order.grossFeeCent;
         elapsedSec = qMax<qint64>(0, parseDbDateTime(order.startTime)
                                .secsTo(QDateTime::currentDateTime()));
     }
@@ -316,6 +329,9 @@ Result<SettleOutcome> ChargeService::endCharge(QSqlDatabase &database, qint64 us
     outcome.orderId = orderId;
     outcome.totalKwh = finalKwh;
     outcome.totalFeeCent = feeCent;
+    outcome.grossFeeCent = grossFeeCent;
+    outcome.membershipLevel = order.membershipLevel;
+    outcome.discountBps = order.discountBps;
 
     if (balanceCent >= feeCent) {
         if (!database.transaction()) {
@@ -325,7 +341,7 @@ Result<SettleOutcome> ChargeService::endCharge(QSqlDatabase &database, qint64 us
         const auto balanceUpdate = userRepository_.updateBalance(
             database, order.userId, balanceCent - feeCent);
         const auto orderUpdate = orderRepository_.settleOrder(
-            database, orderId, finalKwh, feeCent);
+            database, orderId, finalKwh, feeCent, grossFeeCent);
         const auto pileUpdate = pileRepository_.updateStatus(
             database, order.pileId, QStringLiteral("idle"), QStringLiteral("in_use"));
         const auto statsUpdate = pileRepository_.updateStats(
@@ -363,7 +379,7 @@ Result<SettleOutcome> ChargeService::endCharge(QSqlDatabase &database, qint64 us
     }
     if (!failure.has_value()) {
         const auto dataUpdate = orderRepository_.updateChargeData(
-            database, orderId, finalKwh, feeCent);
+            database, orderId, finalKwh, feeCent, grossFeeCent);
         if (!dataUpdate.success) {
             failure = dataUpdate;
         }

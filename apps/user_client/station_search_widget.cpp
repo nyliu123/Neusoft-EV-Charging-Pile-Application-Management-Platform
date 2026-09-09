@@ -3,6 +3,7 @@
 #include "navigation_map_dialog.h"
 #include "user_api_client.h"
 #include "client_ui/animated_combo_box.h"
+#include "client_ui/apple_widgets.h"
 
 #include <QComboBox>
 #include <QFrame>
@@ -49,22 +50,21 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
     : QWidget(parent), api_(api)
 {
     auto *root = new QVBoxLayout(this);
-    root->setContentsMargins(24, 20, 24, 20);
+    root->setContentsMargins(0, 0, 0, 0);
     pages_ = new QStackedWidget(this);
     root->addWidget(pages_);
 
     listPage_ = new QWidget(pages_);
     auto *listPageLayout = new QVBoxLayout(listPage_);
-    auto *title = new QLabel(QStringLiteral("附近充电站"), listPage_);
-    title->setProperty("uiClass", "pageTitle");
-    listPageLayout->addWidget(title);
-    auto *description = new QLabel(
-        QStringLiteral("输入当前位置或从区域列表中选择。（位置数据 © OpenStreetMap contributors）"),
-        listPage_);
-    description->setProperty("uiClass", "muted");
-    listPageLayout->addWidget(description);
-
-    auto *searchRow = new QHBoxLayout;
+    listPageLayout->setContentsMargins(0, 0, 0, 0);
+    listPageLayout->setSpacing(12);
+    heroBanner_ = new ev::ModernHeroBanner(listPage_);
+    listPageLayout->addWidget(heroBanner_);
+    auto *searchCard = new QFrame(listPage_);
+    searchCard->setObjectName(QStringLiteral("discoverySearch"));
+    auto *searchRow = new QHBoxLayout(searchCard);
+    searchRow->setContentsMargins(14, 12, 14, 12);
+    searchRow->setSpacing(12);
     areaBox_ = new ev::AnimatedComboBox(listPage_);
     areaBox_->addItem(QStringLiteral("当前区域"), QString());
     const QStringList stationProvinces {
@@ -92,23 +92,28 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
     searchRow->addWidget(areaBox_);
     searchRow->addWidget(addressEdit_, 1);
     searchRow->addWidget(searchButton_);
-    listPageLayout->addLayout(searchRow);
+    listPageLayout->addWidget(searchCard);
+    auto *resultHeading = new QHBoxLayout;
+    auto *title = new QLabel(QStringLiteral("探索附近"), listPage_);
+    title->setProperty("uiClass", "sectionTitle");
+    resultHeading->addWidget(title);
+    resultHeading->addStretch();
 
     statusLabel_ = new QLabel(listPage_);
     statusLabel_->setProperty("uiClass", "muted");
-    listPageLayout->addWidget(statusLabel_);
+    resultHeading->addWidget(statusLabel_);
+    listPageLayout->addLayout(resultHeading);
 
     auto *scroll = new QScrollArea(listPage_);
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
-    auto *stationList = new QWidget(scroll);
-    stationList->setObjectName(QStringLiteral("stationList"));
-    stationListLayout_ = new QVBoxLayout(stationList);
-    stationListLayout_->setContentsMargins(0, 4, 8, 4);
-    stationListLayout_->setSpacing(12);
-    stationListLayout_->addStretch();
-    scroll->setWidget(stationList);
+    stationGrid_ = new ev::AdaptiveStationGrid(scroll);
+    scroll->setWidget(stationGrid_);
     listPageLayout->addWidget(scroll, 1);
+    auto *attribution = new QLabel(QStringLiteral("输入位置或选择区域搜索 · 位置数据 © OpenStreetMap contributors"), listPage_);
+    attribution->setProperty("uiClass", "muted");
+    attribution->setWordWrap(true);
+    listPageLayout->addWidget(attribution);
     pages_->addWidget(listPage_);
 
     detailPage_ = new QWidget(pages_);
@@ -117,7 +122,7 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
     detailTitle_->setProperty("uiClass", "pageTitle");
     detailLayout->addWidget(detailTitle_);
     detailMeta_ = new QLabel(detailPage_);
-    detailMeta_->setProperty("uiClass", "muted");
+    detailMeta_->setProperty("uiClass", "stationMeta");
     detailMeta_->setWordWrap(true);
     detailLayout->addWidget(detailMeta_);
 
@@ -179,8 +184,10 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
     starRow->addWidget(new QLabel(QStringLiteral("打星："), composeCard));
     for (int i = 1; i <= 5; ++i) {
         auto *star = new QPushButton(QStringLiteral("☆"), composeCard);
-        star->setProperty("uiClass", "text");
-        star->setFixedSize(36, 28);
+        star->setProperty("uiClass", "ratingStar");
+        star->setAccessibleName(QStringLiteral("%1 星").arg(i));
+        star->setObjectName(QStringLiteral("ratingStar%1").arg(i));
+        star->setFixedSize(36, 36);
         starRow->addWidget(star);
         connect(star, &QPushButton::clicked, this, [this, i] {
             setStarRating(starRating_ == i ? 0 : i);
@@ -193,6 +200,7 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
     starRow->addStretch();
     composeLayout->addLayout(starRow);
     commentInput_ = new QPlainTextEdit(composeCard);
+    commentInput_->setAccessibleName(QStringLiteral("站点评价内容"));
     commentInput_->setPlaceholderText(QStringLiteral("说说这次充电的体验（1~200 字）"));
     commentInput_->setMaximumHeight(76);
     composeLayout->addWidget(commentInput_);
@@ -238,6 +246,13 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
     });
 }
 
+void StationSearchWidget::resizeEvent(QResizeEvent *event)
+{
+    QWidget::resizeEvent(event);
+    // Short windows prioritize complete station cards over decorative content.
+    heroBanner_->setCompact(height() < 590);
+}
+
 void StationSearchWidget::refresh()
 {
     pages_->setCurrentWidget(listPage_);
@@ -245,11 +260,7 @@ void StationSearchWidget::refresh()
     addressEdit_->clear();
     hasOriginLocation_ = false;
     originAddress_.clear();
-    while (stationListLayout_->count() > 1) {
-        QLayoutItem *item = stationListLayout_->takeAt(0);
-        delete item->widget();
-        delete item;
-    }
+    stationGrid_->clear();
     statusLabel_->setText(QStringLiteral("请选择区域或输入地址后搜索"));
 }
 
@@ -302,11 +313,7 @@ void StationSearchWidget::loadStations(bool hasLocation, double longitude, doubl
 
 void StationSearchWidget::renderStations(const QJsonObject &result, bool locationAvailable)
 {
-    while (stationListLayout_->count() > 1) {
-        QLayoutItem *item = stationListLayout_->takeAt(0);
-        delete item->widget();
-        delete item;
-    }
+    stationGrid_->clear();
     const QJsonArray stations = result.value(QStringLiteral("stations")).toArray();
     statusLabel_->setProperty("tone", "muted");
     statusLabel_->style()->unpolish(statusLabel_);
@@ -319,7 +326,6 @@ void StationSearchWidget::renderStations(const QJsonObject &result, bool locatio
         ? QStringLiteral("共找到 %1 个模拟站点，已按直线距离排序").arg(stations.size())
         : QStringLiteral("尚未定位或地图位置不可用，当前按站点编号展示 %1 个模拟站点")
               .arg(stations.size()));
-    int index = 0;
     for (const QJsonValue &value : stations) {
         const QJsonObject station = value.toObject();
         const int idle = station.value(QStringLiteral("idle_count")).toInt();
@@ -346,22 +352,15 @@ void StationSearchWidget::renderStations(const QJsonObject &result, bool locatio
         } else {
             ratingText = QStringLiteral("暂无评分");
         }
-        auto *card = new QPushButton(
-            QStringLiteral("%1    ·    %2\n%3\n¥%4/度    %5\n%6")
-                .arg(station.value(QStringLiteral("station_name")).toString(), distanceText,
-                     station.value(QStringLiteral("address")).toString())
-                .arg(station.value(QStringLiteral("price_per_kwh")).toDouble(), 0, 'f', 2)
-                .arg(availability)
-                .arg(ratingText),
-            listPage_);
-        card->setProperty("uiClass", "stationCard");
-        card->setProperty("available", idle > 0);
-        card->setCursor(Qt::PointingHandCursor);
-        card->setMinimumHeight(108);
+        auto *card = new ev::AppleStationCard(
+            station.value(QStringLiteral("station_name")).toString(),
+            station.value(QStringLiteral("address")).toString(), distanceText,
+            QStringLiteral("¥%1/度").arg(station.value(QStringLiteral("price_per_kwh")).toDouble(), 0, 'f', 2),
+            availability, ratingText, idle > 0, listPage_);
         connect(card, &QPushButton::clicked, this, [this, station] {
             showStationDetail(station);
         });
-        stationListLayout_->insertWidget(index++, card);
+        stationGrid_->addCard(card);
     }
 }
 

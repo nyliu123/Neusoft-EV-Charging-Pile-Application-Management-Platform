@@ -84,10 +84,18 @@ AdminDashboardPage::AdminDashboardPage(AdminApiClient *api, QWidget *parent)
     // Charts row (UML-036/037).
     trendChart_ = new LineChartWidget(this);
     pileChart_ = new PieChartWidget(this);
-    rootLayout->addWidget(chartCard(QStringLiteral("近 7 日营收趋势（元）"),
-                                    trendChart_, this), 3);
-    rootLayout->addWidget(chartCard(QStringLiteral("充电桩状态分布"),
-                                    pileChart_, this), 2);
+    auto *chartsLayout = new QHBoxLayout;
+    chartsLayout->setSpacing(16);
+    chartsLayout->addWidget(chartCard(QStringLiteral("近 7 日营收趋势（元）"),
+                                     trendChart_, this), 3);
+    chartsLayout->addWidget(chartCard(QStringLiteral("充电桩状态分布"),
+                                     pileChart_, this), 2);
+    trendChart_->setMinimumHeight(250);
+    pileChart_->setMinimumHeight(250);
+    rootLayout->addLayout(chartsLayout, 1);
+    auto *footnote = new QLabel(QStringLiteral("运营数据由服务端同步 · 金额与充电量以实际订单为准"), this);
+    footnote->setProperty("uiClass", "muted");
+    rootLayout->addWidget(footnote);
 
     // Error line.
     errorLabel_ = new QLabel(this);
@@ -184,7 +192,12 @@ void AdminDashboardPage::applyStats(bool ok, const QJsonObject &result,
         const QString status = entry.value(QStringLiteral("status")).toString();
         const int count = entry.value(QStringLiteral("count")).toInt();
         slices.append({entry.value(QStringLiteral("label")).toString(),
-                       static_cast<double>(count), pileStatusColor(status)});
+                       static_cast<double>(count),
+                       status == QStringLiteral("idle") ? QColor("#72bba3")
+                       : status == QStringLiteral("in_use") ? QColor("#7c8cda")
+                       : status == QStringLiteral("reserved") ? QColor("#e5be78")
+                       : status == QStringLiteral("fault") ? QColor("#d78b98")
+                       : pileStatusColor(status)});
         if (status == QStringLiteral("fault")) {
             faultCount = count;
         }

@@ -1,4 +1,6 @@
 #include "user_info_widget.h"
+#include "membership_dialog.h"
+#include "client_ui/apple_widgets.h"
 
 #include "user_api_client.h"
 #include "user_session_state.h"
@@ -17,6 +19,7 @@
 #include <QRegularExpression>
 #include <QRegularExpressionValidator>
 #include <QStyle>
+#include <QScrollArea>
 #include <QVBoxLayout>
 
 namespace {
@@ -60,8 +63,17 @@ UserInfoWidget::UserInfoWidget(ev::UserApiClient *api, QWidget *parent)
 {
     setObjectName(QStringLiteral("userInfoRoot"));
 
-    auto *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(28, 22, 28, 22);
+    auto *outer = new QVBoxLayout(this);
+    outer->setContentsMargins(0,0,0,0);
+    auto *scroll = new QScrollArea(this);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setWidgetResizable(true);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    auto *content = new QWidget(scroll);
+    scroll->setWidget(content);
+    outer->addWidget(scroll);
+    auto *mainLayout = new QVBoxLayout(content);
+    mainLayout->setContentsMargins(0, 8, 0, 0);
     mainLayout->setSpacing(18);
 
     auto *header = new QHBoxLayout;
@@ -128,10 +140,22 @@ UserInfoWidget::UserInfoWidget(ev::UserApiClient *api, QWidget *parent)
     auto *operationLayout = new QHBoxLayout(operationCard);
     operationLayout->setContentsMargins(26, 18, 26, 18);
     auto *operationHint = new QLabel(
-        QStringLiteral("首屏使用登录缓存；如需获取服务端最新数据，请点击刷新。"), operationCard);
+        QStringLiteral("会员权益 · VIP充电优惠 / SVIP专属AI咨询"), operationCard);
     operationHint->setWordWrap(true);
     operationHint->setProperty("uiClass", "muted");
     operationLayout->addWidget(operationHint);
+    auto *membership = new QPushButton(QStringLiteral("会员中心"), operationCard);
+    membership->setObjectName("membershipEntry");membership->setProperty("uiClass","primary");
+    auto *consult = new QPushButton(QStringLiteral("AI咨询"), operationCard);
+    consult->setObjectName("consultEntry");consult->setProperty("uiClass","secondary");
+    operationLayout->addWidget(membership);operationLayout->addWidget(consult);
+    const auto openMembership = [this](bool ai) {
+        auto *dialog = new MembershipDialog(api_,ai,this);
+        connect(dialog,&QDialog::finished,this,[this]{refreshFromServer();});
+        dialog->show();
+    };
+    connect(membership,&QPushButton::clicked,this,[openMembership]{openMembership(false);});
+    connect(consult,&QPushButton::clicked,this,[openMembership]{openMembership(true);});
     mainLayout->addWidget(operationCard);
     mainLayout->addStretch();
 
@@ -155,14 +179,14 @@ void UserInfoWidget::refreshFromSession()
 
     QPixmap avatar(session.avatarPath());
     if (avatar.isNull()) {
-        avatar = QPixmap(QStringLiteral(":/images/default-avatar.svg"));
-    }
-    if (avatar.isNull()) {
-        avatarLabel_->setPixmap({});
-        avatarLabel_->setText(QStringLiteral("默认头像"));
+        // A vector fallback also works on Qt installations without the SVG image plugin.
+        avatarLabel_->setText({});
+        avatarLabel_->setPixmap(ev::appSymbolIcon(ev::AppSymbol::Person).pixmap(56, 56));
+        avatarLabel_->setAccessibleName(QStringLiteral("默认头像"));
         avatarLabel_->setProperty("empty", true);
     } else {
         avatarLabel_->setText({});
+        avatarLabel_->setAccessibleName(QStringLiteral("用户头像"));
         avatarLabel_->setProperty("empty", false);
         avatarLabel_->setPixmap(avatar.scaled(avatarLabel_->size(),
             Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation));

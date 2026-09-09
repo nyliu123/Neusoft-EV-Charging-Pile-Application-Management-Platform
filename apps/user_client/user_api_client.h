@@ -22,6 +22,8 @@ public:
 
     bool queryUserInfo(QObject *context, Callback callback);
     bool queryOrders(QObject *context, Callback callback);
+    bool membership(const QString &type, const QJsonObject &params, QObject *context, Callback callback);
+    bool consult(const QString &type, const QJsonObject &params, QObject *context, Callback callback);
     bool updateNickname(const QString &nickname, QObject *context, Callback callback);
     bool updateAvatar(const QByteArray &jpegData, QObject *context, Callback callback);
     bool recharge(qint64 amountCent, QObject *context, Callback callback);

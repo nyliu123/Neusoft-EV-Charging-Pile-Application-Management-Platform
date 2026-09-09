@@ -63,10 +63,9 @@ void AnimatedComboBox::paintEvent(QPaintEvent *event)
 
 void AnimatedComboBox::animateArrow(qreal targetAngle)
 {
+    // A frequent form interaction: no decorative motion or keyboard delay.
     arrowAnimation_.stop();
-    arrowAnimation_.setStartValue(arrowAngle_);
-    arrowAnimation_.setEndValue(targetAngle);
-    arrowAnimation_.start();
+    setArrowAngle(targetAngle);
 }
 
 } // namespace ev

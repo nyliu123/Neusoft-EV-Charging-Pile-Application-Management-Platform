@@ -9,6 +9,8 @@ PLATFORM_ROOT = $$clean_path($$PWD/../..)
 include($$PLATFORM_ROOT/config/common.pri)
 
 INCLUDEPATH += $$PLATFORM_ROOT/src
+HEADERS += membership_schema.h
+SOURCES += membership_schema.cpp
 
 HEADERS += \
     database_manager.h \

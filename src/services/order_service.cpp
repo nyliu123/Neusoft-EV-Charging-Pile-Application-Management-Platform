@@ -70,7 +70,11 @@ Result<QJsonObject> OrderService::queryOrders(QSqlDatabase &database,
             {QStringLiteral("duration_hours"), duration},
             {QStringLiteral("charge_amount_kwh"), record.chargeAmountKwh},
             {QStringLiteral("price_per_kwh"), record.pricePerKwh},
-            {QStringLiteral("total_fee"), record.totalFeeCent / 100.0}
+            {QStringLiteral("total_fee"), record.totalFeeCent / 100.0},
+            {"gross_fee_cent",record.grossFeeCent},
+            {"discount_fee_cent",record.grossFeeCent-record.totalFeeCent},
+            {"membership_level",record.membershipLevel},
+            {"discount_bps",record.discountBps}
         });
     }
     return Result<QJsonObject>::ok({{QStringLiteral("orders"), orders}});
