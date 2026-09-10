@@ -47,6 +47,7 @@ private:
     QWebEngineView *view_;
     QComboBox *mode_;
     QLabel *status_;
+    QLabel *routeSummary_;
     QTimer *timeout_;
     QNetworkAccessManager *network_;
     QNetworkReply *reply_ = nullptr;

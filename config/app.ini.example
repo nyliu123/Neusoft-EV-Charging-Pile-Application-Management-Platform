@@ -8,9 +8,10 @@ reconnect_attempts=10
 
 [database]
 driver=QSQLITE
-path=data/ev_charging.sqlite3
+# Optional override; use a local filesystem, not a VMware shared folder.
+# path=/absolute/local/path/ev_charging.sqlite3
 busy_timeout_ms=5000
-wal_enabled=true
+wal_enabled=false
 
 [runtime]
 timezone=Asia/Shanghai

@@ -69,8 +69,13 @@ cp config/app.ini.example config/app.ini
 ./build/bin/ev_server -c config/app.ini
 ```
 
-未提供配置文件时，服务端使用本机地址和仓库内的 `data/ev_charging.sqlite3`
-等演示默认值。数据库模板随仓库提交；指定其他不存在的数据库路径时，服务端会从该模板创建副本。密钥和本地配置不得提交。
+服务端默认使用本机地址，运行数据库存放在 Qt 本机应用数据目录
+（Linux 默认 `~/.local/share/ev_server/ev_charging.sqlite3`，遵循 `XDG_DATA_HOME`）。
+首次启动时从随程序打包的 `data/ev_charging.sqlite3` 模板创建副本；后续启动保留运行数据。
+模板不再承接默认运行写入，避免 VMware 共享目录的锁与缓存问题影响 SQLite。
+`--database` 或配置项 `database/path` 可以覆盖此路径，建议指定本机磁盘目录。
+迁移已有独立数据库时，请停止服务后将数据库及同目录的 `avatars/` 一并迁移，再指定新路径。
+密钥和本地配置不得提交。
 
 ## 最小运行
 

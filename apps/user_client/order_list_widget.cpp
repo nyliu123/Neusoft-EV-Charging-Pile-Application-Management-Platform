@@ -33,11 +33,12 @@ OrderListWidget::OrderListWidget(ev::UserApiClient *api, QWidget *parent)
     auto *root = new QVBoxLayout(this);
     root->setContentsMargins(0, 8, 0, 0);
     auto *header = new QHBoxLayout;
+    auto *back = new QPushButton(QStringLiteral("< 返回首页"), this);
+    back->setProperty("uiClass", "text");
+    header->addWidget(back);
     auto *title = plainLabel(QStringLiteral("我的订单"), this);
     title->setProperty("uiClass", "pageTitle");
     header->addWidget(title, 1);
-    auto *back = new QPushButton(QStringLiteral("返回首页"), this);
-    header->addWidget(back);
     refreshButton_ = new QPushButton(QStringLiteral("刷新"), this);
     refreshButton_->setObjectName(QStringLiteral("refreshOrdersButton"));
     refreshButton_->setProperty("uiClass", "primary");

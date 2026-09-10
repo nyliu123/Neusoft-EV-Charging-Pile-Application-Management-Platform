@@ -17,6 +17,7 @@
 #include <QPushButton>
 #include <QRadioButton>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QSpacerItem>
 #include <QStackedWidget>
 #include <QStringList>
@@ -46,6 +47,16 @@ QString distanceText(double distanceKm)
     return QStringLiteral("%1 公里").arg(value);
 }
 
+QString priceText(double price, int discountBps)
+{
+    if (discountBps >= 10000) {
+        return QStringLiteral("¥%1/度").arg(price, 0, 'f', 2);
+    }
+    return QStringLiteral("<span style='text-decoration:line-through;color:#7a8190;'>¥%1/度</span>&nbsp;&nbsp;¥%2/度")
+        .arg(price, 0, 'f', 2)
+        .arg(price * discountBps / 10000.0, 0, 'f', 2);
+}
+
 } // namespace
 
 StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent)
@@ -61,6 +72,12 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
     listPageLayout->setContentsMargins(0, 0, 0, 0);
     listPageLayout->setSpacing(12);
     heroBanner_ = new ev::ModernHeroBanner(listPage_);
+    heroBanner_->setCompact(true);
+    heroBanner_->layout()->itemAt(1)->widget()->hide();
+    heroBanner_->layout()->setContentsMargins(16, 10, 16, 10);
+    for (auto *label : heroBanner_->findChildren<QLabel *>()) {
+        label->setWordWrap(true);
+    }
     listPageLayout->addWidget(heroBanner_);
     auto *searchCard = new QFrame(listPage_);
     searchCard->setObjectName(QStringLiteral("discoverySearch"));
@@ -68,10 +85,10 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
     searchCardLayout->setContentsMargins(14, 12, 14, 12);
     searchCardLayout->setSpacing(8);
     auto *locationModeRow = new QHBoxLayout;
-    locationModeRow->setSpacing(16);
+    locationModeRow->setSpacing(6);
     auto *locationModeLabel = new QLabel(QStringLiteral("定位方式："), searchCard);
     locationModeLabel->setProperty("uiClass", "muted");
-    listLocationButton_ = new QRadioButton(QStringLiteral("从列表中选择"), searchCard);
+    listLocationButton_ = new QRadioButton(QStringLiteral("列表选择"), searchCard);
     manualLocationButton_ = new QRadioButton(QStringLiteral("手动输入"), searchCard);
     listLocationButton_->setChecked(true);
     locationModeRow->addWidget(locationModeLabel);
@@ -148,6 +165,7 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
     resultPages_ = new QStackedWidget(listPage_);
     resultPages_->addWidget(stationResultsPage_);
     resultMessageLabel_ = new QLabel(resultPages_);
+    resultMessageLabel_->setWordWrap(true);
     resultMessageLabel_->setAlignment(Qt::AlignCenter);
     resultMessageLabel_->setProperty("uiClass", "sectionTitle");
     resultMessageLabel_->setText(QStringLiteral("你似乎来到了没有充电站的荒漠～"));
@@ -162,13 +180,31 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
 
     detailPage_ = new QWidget(pages_);
     auto *detailLayout = new QVBoxLayout(detailPage_);
+    auto *backButton = new QPushButton(QStringLiteral("< 返回站点列表"), detailPage_);
+    backButton->setProperty("uiClass", "text");
+    detailLayout->addWidget(backButton, 0, Qt::AlignLeft);
     detailTitle_ = new QLabel(detailPage_);
+    detailTitle_->setObjectName(QStringLiteral("stationDetailTitle"));
+    detailTitle_->setWordWrap(true);
     detailTitle_->setProperty("uiClass", "pageTitle");
     detailLayout->addWidget(detailTitle_);
     detailMeta_ = new QLabel(detailPage_);
+    detailMeta_->setObjectName(QStringLiteral("stationDetailMeta"));
     detailMeta_->setProperty("uiClass", "stationMeta");
     detailMeta_->setWordWrap(true);
     detailLayout->addWidget(detailMeta_);
+    auto *ratingRow = new QHBoxLayout;
+    detailRatingLabel_ = new QLabel(detailPage_);
+    detailRatingLabel_->setObjectName(QStringLiteral("stationDetailRating"));
+    detailRatingLabel_->setProperty("uiClass", "muted");
+    ratingRow->addWidget(detailRatingLabel_);
+    commentsButton_ = new QPushButton(detailPage_);
+    commentsButton_->setObjectName(QStringLiteral("stationCommentCount"));
+    commentsButton_->setProperty("uiClass", "text");
+    commentsButton_->setStyleSheet(QStringLiteral("QPushButton { padding:0; min-height:0; }"));
+    ratingRow->addWidget(commentsButton_);
+    ratingRow->addStretch();
+    detailLayout->addLayout(ratingRow);
 
     pileTable_ = new QTableWidget(detailPage_);
     pileTable_->setColumnCount(4);
@@ -185,14 +221,7 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
     pileTable_->setColumnWidth(3, 64);
     pileTable_->verticalHeader()->setDefaultSectionSize(34);
     detailLayout->addWidget(pileTable_, 1);
-    auto *detailFooter = new QHBoxLayout;
-    auto *backButton = new QPushButton(QStringLiteral("< 返回站点列表"), detailPage_);
-    backButton->setProperty("uiClass", "text");
-    detailFooter->addWidget(backButton);
-    detailFooter->addStretch();
-    commentsButton_ = new QPushButton(QStringLiteral("查看评论"), detailPage_);
-    commentsButton_->setProperty("uiClass", "secondary");
-    detailFooter->addWidget(commentsButton_);
+    auto *detailFooter = new QVBoxLayout;
     startNavigationButton_ = new QPushButton(QStringLiteral("打开地图导航"), detailPage_);
     startNavigationButton_->setProperty("uiClass", "primary");
     detailFooter->addWidget(startNavigationButton_);
@@ -201,6 +230,10 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
 
     commentsPage_ = new QWidget(pages_);
     auto *commentsLayout = new QVBoxLayout(commentsPage_);
+    auto *backFromComments = new QPushButton(
+        QStringLiteral("< 返回站点详情"), commentsPage_);
+    backFromComments->setProperty("uiClass", "text");
+    commentsLayout->addWidget(backFromComments, 0, Qt::AlignLeft);
     commentsTitle_ = new QLabel(commentsPage_);
     commentsTitle_->setProperty("uiClass", "pageTitle");
     commentsLayout->addWidget(commentsTitle_);
@@ -240,7 +273,7 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
     }
     starValueLabel_ = new QLabel(QStringLiteral("未打星（0 分）"), composeCard);
     starValueLabel_->setProperty("uiClass", "muted");
-    starRow->addWidget(starValueLabel_);
+    composeLayout->addWidget(starValueLabel_);
     starRow->addStretch();
     composeLayout->addLayout(starRow);
     commentInput_ = new QPlainTextEdit(composeCard);
@@ -256,13 +289,6 @@ StationSearchWidget::StationSearchWidget(ev::UserApiClient *api, QWidget *parent
     composeLayout->addLayout(composeButtons);
     commentsLayout->addWidget(composeCard);
 
-    auto *commentsFooter = new QHBoxLayout;
-    auto *backFromComments = new QPushButton(
-        QStringLiteral("< 返回站点详情"), commentsPage_);
-    backFromComments->setProperty("uiClass", "text");
-    commentsFooter->addWidget(backFromComments);
-    commentsFooter->addStretch();
-    commentsLayout->addLayout(commentsFooter);
     pages_->addWidget(commentsPage_);
 
     connect(searchButton_, &QPushButton::clicked, this, &StationSearchWidget::search);
@@ -324,7 +350,7 @@ void StationSearchWidget::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
     // Short windows prioritize complete station cards over decorative content.
-    heroBanner_->setCompact(height() < 590);
+    heroBanner_->setCompact(true);
 }
 
 void StationSearchWidget::refresh()
@@ -399,6 +425,7 @@ void StationSearchWidget::renderStations(const QJsonObject &result, bool locatio
 {
     stationGrid_->clear();
     const QJsonArray allStations = result.value(QStringLiteral("stations")).toArray();
+    const int discountBps = result.value("discount_bps").toInt(10000);
     QJsonArray stations;
     const double radiusKm = distanceBox_->currentData().toDouble();
     for (const QJsonValue &value : allStations) {
@@ -450,12 +477,15 @@ void StationSearchWidget::renderStations(const QJsonObject &result, bool locatio
         auto *card = new ev::AppleStationCard(
             station.value(QStringLiteral("station_name")).toString(),
             station.value(QStringLiteral("address")).toString(), distanceText,
-            QStringLiteral("¥%1/度").arg(station.value(QStringLiteral("price_per_kwh")).toDouble(), 0, 'f', 2),
+            priceText(station.value(QStringLiteral("price_per_kwh")).toDouble(), discountBps),
             availability, ratingValue, hotReview, idle > 0, listPage_);
         connect(card, &QPushButton::clicked, this, [this, station] {
             showStationDetail(station);
         });
         stationGrid_->addCard(card);
+    }
+    if (auto *scroll = qobject_cast<QScrollArea *>(stationResultsPage_)) {
+        scroll->verticalScrollBar()->setValue(0);
     }
 }
 
@@ -498,22 +528,24 @@ void StationSearchWidget::renderStationDetail(const QJsonObject &result)
     detailTitle_->setText(station.value(QStringLiteral("station_name")).toString());
     const QJsonObject rating = station.value(QStringLiteral("rating")).toObject();
     QString ratingText;
+    const int commentCount = rating.value(QStringLiteral("count")).toInt();
     if (rating.value(QStringLiteral("count")).toInt() > 0) {
-        ratingText = QStringLiteral("  ·  ★ %1 %2（%3 条评论）")
+        ratingText = QStringLiteral("评分：★ %1 %2")
             .arg(rating.value(QStringLiteral("avg")).toDouble(), 0, 'f', 1)
-            .arg(rating.value(QStringLiteral("tier")).toString())
-            .arg(rating.value(QStringLiteral("count")).toInt());
+            .arg(rating.value(QStringLiteral("tier")).toString());
     } else {
-        ratingText = QStringLiteral("  ·  暂无评分");
+        ratingText = QStringLiteral("评分：暂无评分");
     }
-    detailMeta_->setText(QStringLiteral("%1  ·  ¥%2/度%3")
-        .arg(station.value(QStringLiteral("address")).toString())
-        .arg(station.value(QStringLiteral("price_per_kwh")).toDouble(), 0, 'f', 2)
-        .arg(ratingText));
-    commentsButton_->setText(
-        rating.value(QStringLiteral("count")).toInt() > 0
-            ? QStringLiteral("查看评论（%1）").arg(rating.value(QStringLiteral("count")).toInt())
-            : QStringLiteral("查看评论"));
+    const QJsonObject stats = result.value(QStringLiteral("stats")).toObject();
+    detailMeta_->setTextFormat(Qt::RichText);
+    detailMeta_->setText(QStringLiteral("地址：%1<br>电价：%2<br>空闲充电桩：%3 / %4")
+        .arg(station.value(QStringLiteral("address")).toString(),
+             priceText(station.value(QStringLiteral("price_per_kwh")).toDouble(),
+                       result.value("discount_bps").toInt(10000)))
+        .arg(stats.value(QStringLiteral("idle")).toInt())
+        .arg(stats.value(QStringLiteral("total")).toInt()));
+    detailRatingLabel_->setText(ratingText);
+    commentsButton_->setText(QStringLiteral("（%1条评论）").arg(commentCount));
 
     const QJsonArray piles = result.value(QStringLiteral("piles")).toArray();
     QJsonArray idlePiles;
@@ -562,7 +594,7 @@ void StationSearchWidget::startNavigation()
         destinationLongitude_, destinationLatitude_, originAddress_, destinationName_,
         destinationAddress_, 0, this);
     connect(api_, &ev::UserApiClient::sessionExpired, map, &QDialog::close);
-    map->show();
+    emit pageRequested(map);
 }
 
 void StationSearchWidget::setBusy(bool busy, const QString &message)

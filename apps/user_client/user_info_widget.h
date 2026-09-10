@@ -3,6 +3,7 @@
 #include <QWidget>
 
 class QLabel;
+class QDialog;
 class QPushButton;
 
 namespace ev {
@@ -15,6 +16,11 @@ class UserInfoWidget final : public QWidget {
 public:
     explicit UserInfoWidget(ev::UserApiClient *api, QWidget *parent = nullptr);
     void refreshFromSession();
+    void setLogoutInProgress(bool inProgress);
+
+signals:
+    void logoutRequested();
+    void pageRequested(QDialog *page);
 
 private:
     void refreshFromServer();
@@ -32,4 +38,5 @@ private:
     QPushButton *changeAvatarButton_ = nullptr;
     QPushButton *editNicknameButton_ = nullptr;
     QPushButton *rechargeButton_ = nullptr;
+    QPushButton *logoutButton_ = nullptr;
 };

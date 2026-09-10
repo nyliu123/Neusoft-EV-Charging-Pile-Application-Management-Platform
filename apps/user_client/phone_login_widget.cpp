@@ -27,15 +27,11 @@ PhoneLoginWidget::PhoneLoginWidget(QWidget *parent)
 {
     setObjectName(QStringLiteral("userLoginCard"));
     setAttribute(Qt::WA_StyledBackground, true);
-    setMinimumSize(360, 360);
-    setMaximumWidth(440);
+    setMinimumHeight(360);
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(32, 28, 32, 24);
+    layout->setContentsMargins(24, 28, 24, 24);
     layout->setSpacing(16);
 
-    auto *eyebrow = new QLabel(QStringLiteral("轻充账号"), this);
-    eyebrow->setProperty("uiClass", "eyebrow");
-    layout->addWidget(eyebrow);
     auto *title = new QLabel(QStringLiteral("欢迎回来"), this);
     title->setProperty("uiClass", "dialogTitle");
     title->setAlignment(Qt::AlignLeft);
@@ -76,9 +72,9 @@ PhoneLoginWidget::PhoneLoginWidget(QWidget *parent)
     loginButton_->setObjectName(QStringLiteral("userLoginButton"));
     loginButton_->setProperty("uiClass", "primary");
     loginButton_->setDefault(true);
-    loginButton_->setMinimumHeight(36);
+    loginButton_->setMinimumHeight(44);
     layout->addWidget(loginButton_);
-    auto *hint = new QLabel(QStringLiteral("未注册的手机号将自动创建账号。"), this);
+    auto *hint = new QLabel(QStringLiteral("注：未注册的手机号将自动创建账号。"), this);
     hint->setProperty("uiClass", "muted");
     hint->setWordWrap(true);
     layout->addWidget(hint);

@@ -161,25 +161,29 @@ NavigationMapDialog::NavigationMapDialog(
     setObjectName(QStringLiteral("navigationMapDialog"));
     setAttribute(Qt::WA_DeleteOnClose);
     setWindowModality(Qt::WindowModal);
-    resize(1000, 700);
+    resize(410, 720);
+    setMinimumSize(0, 0);
 
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(12, 12, 12, 10);
     layout->setSpacing(8);
-    auto *toolbar = new QHBoxLayout;
+    auto *toolbar = new QVBoxLayout;
+    auto *back = new QPushButton(QStringLiteral("< 返回站点"), this);
+    toolbar->addWidget(back, 0, Qt::AlignLeft);
     auto *title = new QLabel(destinationName, this);
     title->setTextFormat(Qt::PlainText);
+    title->setWordWrap(true);
     title->setProperty("uiClass", "pageTitle");
     toolbar->addWidget(title, 1);
-    toolbar->addWidget(new QLabel(QStringLiteral("出行方式："), this));
+    auto *actions = new QHBoxLayout;
+    actions->addWidget(new QLabel(QStringLiteral("出行方式："), this));
     mode_ = new ev::AnimatedComboBox(this);
     mode_->setObjectName(QStringLiteral("navigationMode"));
     mode_->addItems({QStringLiteral("驾车"), QStringLiteral("步行"),
                      QStringLiteral("骑行")});
     mode_->setCurrentIndex(qBound(0, initialMode, 2));
-    toolbar->addWidget(mode_);
-    auto *back = new QPushButton(QStringLiteral("返回站点"), this);
-    toolbar->addWidget(back);
+    actions->addWidget(mode_, 1);
+    toolbar->addLayout(actions);
     layout->addLayout(toolbar);
 
     status_ = new QLabel(this);
@@ -188,7 +192,7 @@ NavigationMapDialog::NavigationMapDialog(
     status_->setAlignment(Qt::AlignCenter);
     status_->setWordWrap(true);
     status_->hide();
-    layout->addWidget(status_);
+    layout->addWidget(status_, 1);
 
     profile_ = new QWebEngineProfile(QStringLiteral("navigation"), this);
     profile_->setPersistentCookiesPolicy(QWebEngineProfile::NoPersistentCookies);
@@ -200,6 +204,12 @@ NavigationMapDialog::NavigationMapDialog(
     view_->settings()->setAttribute(QWebEngineSettings::JavascriptCanOpenWindows, false);
     view_->settings()->setAttribute(QWebEngineSettings::LocalContentCanAccessRemoteUrls, true);
     layout->addWidget(view_, 1);
+    routeSummary_ = new QLabel(this);
+    routeSummary_->setObjectName(QStringLiteral("routeSummary"));
+    routeSummary_->setProperty("uiClass", "stationMeta");
+    routeSummary_->setWordWrap(true);
+    routeSummary_->hide();
+    layout->addWidget(routeSummary_);
 
     network_ = new QNetworkAccessManager(this);
     timeout_ = new QTimer(this);
@@ -246,6 +256,8 @@ void NavigationMapDialog::loadMap()
     accumulatedRoute_.clear();
     accumulatedDistanceKm_ = 0.0;
     accumulatedDurationSeconds_ = 0;
+    routeSummary_->hide();
+    status_->setText(QStringLiteral("正在加载地图…\n正在规划%1路线").arg(mode_->currentText()));
     status_->show();
     view_->hide();
     requestRouteSegment(generation);
@@ -376,6 +388,8 @@ void NavigationMapDialog::renderRoute(const QVector<QPointF> &route, double dist
         return QString::fromUtf8(array.mid(1, array.size() - 2));
     };
     const QString formattedDistance = distanceText(distanceKm);
+    routeSummary_->setText(QStringLiteral("路线详情\n出行方式：%1    路线距离：%2\n预计耗时：%3")
+        .arg(mode_->currentText(), formattedDistance, formattedDuration));
     QString html = QStringLiteral(R"HTML(
 <!doctype html><html><head><meta charset="utf-8"><title>地图路线</title><style>
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans CJK SC',sans-serif;user-select:none}
@@ -384,7 +398,6 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#f5f5f7;fon
 .route{fill:none;stroke:__COLOR__;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 1px 2px #fff)}
 .pin{position:absolute;width:30px;height:30px;margin:-18px;border-radius:50%;color:#fff;text-align:center;line-height:30px;font-weight:bold;border:3px solid #fff;box-shadow:0 2px 7px #555}
 .start{background:#237746}.end{background:#d93025}.marker-label{position:absolute;color:#111;background:rgba(255,255,255,.9);padding:3px 6px;border-radius:4px;font-size:13px;font-weight:600;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.25)}
-.summary{position:absolute;left:16px;top:16px;background:rgba(255,255,255,.94);padding:14px 18px;border-radius:14px;box-shadow:0 4px 16px rgba(29,29,31,.12);font-size:14px;line-height:1.65}.summary-title{font-size:16px;font-weight:700;margin-bottom:2px}
 #bottomControls{position:absolute;right:16px;bottom:16px;display:flex;align-items:flex-end;gap:8px}#scaleControl{min-width:112px;background:rgba(255,255,255,.94);border:1px solid #d9d9e1;border-radius:8px;box-shadow:0 4px 16px rgba(29,29,31,.12);padding:5px 9px;color:#1d1d1f;font-size:12px}
 #scaleLine{height:6px;border-left:2px solid #1d1d1f;border-right:2px solid #1d1d1f;border-bottom:2px solid #1d1d1f;margin-top:2px}
 #zoomControls{display:flex;align-items:center;background:#fff;border:1px solid #d9d9e1;border-radius:8px;box-shadow:0 4px 16px rgba(29,29,31,.12);overflow:hidden}
@@ -392,13 +405,13 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#f5f5f7;fon
 .attribution{position:absolute;left:4px;bottom:3px;background:rgba(255,255,255,.88);padding:3px 6px;font-size:11px;color:#333}.attribution a{color:#075da8}
 </style></head><body><div id="map"><div id="tiles"></div><svg class="overlay"><polyline id="route" class="route"/></svg>
 <div id="start" class="pin start">起</div><div id="startLabel" class="marker-label"></div><div id="end" class="pin end">终</div><div id="endLabel" class="marker-label"></div>
-<div id="summary" class="summary"><div class="summary-title">路线详情</div><div id="modeDetail"></div><div id="distanceDetail"></div><div id="durationDetail"></div></div><div class="attribution">© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a> · Route: Valhalla</div>
+<div class="attribution">© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a> · Route: Valhalla</div>
 <div id="bottomControls"><div id="scaleControl"><span id="scaleText"></span><div id="scaleLine"></div></div><div id="zoomControls"><button id="zoomOut" title="缩小">−</button><span id="zoomPercent">100%</span><button id="zoomIn" title="放大">+</button><button id="resetZoom" title="重置初始显示">重置</button></div></div></div>
 <script>
 const routeCoordinates=__ROUTE__,tileTemplate=__TILES__,modeName=__MODE__,routeDistance=__DISTANCE_TEXT__,routeDuration=__DURATION_TEXT__,originAddress=__ORIGIN_ADDRESS__,destinationAddress=__DESTINATION_ADDRESS__;
 const baseZoom=__ZOOM__,initialCenterX=__CENTER_X__,initialCenterY=__CENTER_Y__,zoomLevels=[25,50,75,100,125,150,200,300,400,500,750,1000,1500,2000];let centerX=initialCenterX,centerY=initialCenterY,zoomPercent=100,dragging=false,lastX=0,lastY=0,frame=0;
 const map=document.getElementById('map'),tiles=document.getElementById('tiles'),routeLine=document.getElementById('route');
-document.getElementById('modeDetail').textContent='出行方式：'+modeName;document.getElementById('distanceDetail').textContent='路线距离：'+routeDistance;document.getElementById('durationDetail').textContent='预计耗时：'+routeDuration;document.getElementById('startLabel').textContent=originAddress;document.getElementById('endLabel').textContent=destinationAddress;
+document.getElementById('startLabel').textContent=originAddress;document.getElementById('endLabel').textContent=destinationAddress;
 function normalized(coordinate){const lon=coordinate[0],lat=Math.max(-85.05112878,Math.min(85.05112878,coordinate[1]));const sine=Math.sin(lat*Math.PI/180);return [(lon+180)/360,.5-Math.log((1+sine)/(1-sine))/(4*Math.PI)]}
 const normalizedRoute=routeCoordinates.map(normalized);
 function worldSize(){return 256*Math.pow(2,baseZoom)*(zoomPercent/100)}
@@ -444,6 +457,7 @@ window.navigationMapState={get centerX(){return centerX},get centerY(){return ce
     }, Qt::SingleShotConnection);
     view_->setHtml(html.toUtf8(), QUrl(QStringLiteral("https://www.openstreetmap.org/")));
     view_->show();
+    routeSummary_->show();
     status_->clear();
     status_->hide();
 }
@@ -451,6 +465,7 @@ window.navigationMapState={get centerX(){return centerX},get centerY(){return ce
 void NavigationMapDialog::showFailure(const QString &message)
 {
     view_->hide();
+    routeSummary_->hide();
     status_->show();
     status_->setText(message);
 }

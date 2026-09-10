@@ -21,6 +21,10 @@ Result<std::optional<AdminRecord>> AdminRepository::findByCredentials(
                                                           query.lastError().text());
     }
     if (!query.next()) {
+        if (query.lastError().isValid()) {
+            return Result<std::optional<AdminRecord>>::fail(
+                ErrorCode::StorageError, query.lastError().text());
+        }
         return Result<std::optional<AdminRecord>>::ok(std::nullopt);
     }
     AdminRecord admin;

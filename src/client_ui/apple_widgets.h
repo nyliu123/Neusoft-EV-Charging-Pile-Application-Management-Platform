@@ -107,7 +107,7 @@ inline QWidget *makeAppleBrand(QWidget *parent)
     labels->setSpacing(0);
     auto *name = new QLabel(QStringLiteral("轻充"), brand);
     name->setProperty("uiClass", "brandName");
-    auto *caption = new QLabel(QStringLiteral("CHARGE"), brand);
+    auto *caption = new QLabel(QStringLiteral("LIGHT CHARGE"), brand);
     caption->setProperty("uiClass", "eyebrow");
     labels->addWidget(name); labels->addWidget(caption);
     row->addLayout(labels);
@@ -416,16 +416,20 @@ public:
             column->addWidget(elided(QStringLiteral("暂无评分"), "stationRating"));
         }
         if (!hotReview.isEmpty()) {
-            auto *hotReviewLabel = elided(hotReview, "stationHotReview");
+            auto *hotReviewLabel = new QLabel(hotReview, this);
+            hotReviewLabel->setProperty("uiClass", "stationHotReview");
+            hotReviewLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
+            hotReviewLabel->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Preferred);
             hotReviewLabel->setStyleSheet(QStringLiteral(
                 "background-color:#fff0df;color:#c43f2c;border-radius:8px;"
                 "padding:4px 7px;font-size:11px;"));
-            column->addWidget(hotReviewLabel);
+            column->addWidget(hotReviewLabel, 0, Qt::AlignLeft);
         }
         column->addStretch();
         auto *bottom = new QHBoxLayout;
         bottom->setSpacing(8);
         auto *priceLabel = new QLabel(price, this);
+        priceLabel->setTextFormat(Qt::RichText);
         priceLabel->setProperty("uiClass", "stationPrice");
         priceLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
         bottom->addWidget(priceLabel);
@@ -512,9 +516,11 @@ private:
     void updateContentHeight()
     {
         const int rows = (cards_.size() + columns_ - 1) / columns_;
-        setMinimumHeight(rows ? rows * 238 + (rows - 1) * 16 + 8 : 0);
+        const int contentHeight = rows ? rows * 238 + (rows - 1) * 16 + 8 : 0;
+        setFixedHeight(contentHeight);
         emptyHint_->setGeometry(rect());
         emptyHint_->setVisible(cards_.isEmpty());
+        updateGeometry();
     }
     QGridLayout *grid_;
     QLabel *emptyHint_;

@@ -8,6 +8,9 @@
 #include <QLibraryInfo>
 #include <QPainter>
 #include <QProxyStyle>
+#include <QScreen>
+#include <QTimer>
+#include <QWidget>
 
 namespace {
 
@@ -72,6 +75,27 @@ void configureClientInputMethod()
         {QStringLiteral("*fcitx*")}, QDir::Files).isEmpty();
     qputenv("QT_IM_MODULE", hasFcitxQt6Plugin ? QByteArray("fcitx")
                                                : QByteArray("ibus"));
+}
+
+void centerClientWindow(QWidget &window, const QPoint &center)
+{
+    const auto reposition = [&window, center] {
+        if (!window.isMaximized() && !window.isFullScreen()) {
+            QRect frame = window.frameGeometry();
+            frame.moveCenter(center);
+            window.move(frame.topLeft());
+        }
+    };
+    reposition();
+    // Native decorations and layout constraints settle after show/page changes.
+    QTimer::singleShot(0, &window, reposition);
+}
+
+void centerClientWindowOnScreen(QWidget &window)
+{
+    if (QScreen *screen = window.screen()) {
+        centerClientWindow(window, screen->availableGeometry().center());
+    }
 }
 
 void installClientStyle(QApplication &application)

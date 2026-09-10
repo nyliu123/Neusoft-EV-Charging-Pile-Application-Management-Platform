@@ -386,9 +386,10 @@ void ServerApplication::processStationRequest(QTcpSocket *socket, const Frame &f
 
     const QJsonObject data = frame.payload.value(QStringLiteral("data")).toObject();
     const QString sessionId = data.value(QStringLiteral("session_id")).toString();
+    const qint64 userId = sessionManager_.authenticatedUserId(sessionId);
     if (!connectionSessions_.value(socket).contains(sessionId)
         || adminSessions_.contains(sessionId)
-        || sessionManager_.authenticatedUserId(sessionId) <= 0) {
+        || userId <= 0) {
         connectionSessions_[socket].remove(sessionId);
         sendStationResponse(socket, requestId, false, QStringLiteral("UNAUTHORIZED"),
                             QStringLiteral("登录已过期，请重新登录"));
@@ -475,8 +476,12 @@ void ServerApplication::processStationRequest(QTcpSocket *socket, const Frame &f
                     summaries.data.value(item.station.stationId)));
             stations.append(station);
         }
+        const auto membership = MembershipService().snapshot(mainDatabase_, userId);
+        const QJsonObject pricing = membership.success ? membership.data : QJsonObject{};
         sendStationResponse(socket, requestId, true, QStringLiteral("OK"), {},
-                            QJsonObject {{QStringLiteral("stations"), stations}});
+                            QJsonObject {{QStringLiteral("stations"), stations},
+                                {"membership_level", pricing.value("level").toString("NORMAL")},
+                                {"discount_bps", pricing.value("discount_bps").toInt(10000)}});
         return;
     }
 
@@ -533,9 +538,13 @@ void ServerApplication::processStationRequest(QTcpSocket *socket, const Frame &f
             rating.data.has_value()
                 ? CommentService::summaryJson(rating.data.value())
                 : CommentService::summaryJson(StationRatingSummary{}));
+        const auto membership = MembershipService().snapshot(mainDatabase_, userId);
+        const QJsonObject pricing = membership.success ? membership.data : QJsonObject{};
         sendStationResponse(socket, requestId, true, QStringLiteral("OK"), {}, QJsonObject {
             {QStringLiteral("station"), station},
             {QStringLiteral("piles"), piles},
+            {"membership_level", pricing.value("level").toString("NORMAL")},
+            {"discount_bps", pricing.value("discount_bps").toInt(10000)},
             {QStringLiteral("stats"), QJsonObject {
                 {QStringLiteral("total"), total},
                 {QStringLiteral("idle"), detail.station.idlePiles},
@@ -675,12 +684,16 @@ void ServerApplication::processChargeRequest(QTcpSocket *socket, const Frame &fr
             return;
         }
         const PileCheckInfo &info = result.data;
+        const auto membership = MembershipService().snapshot(mainDatabase_, userId);
+        const QJsonObject pricing = membership.success ? membership.data : QJsonObject{};
         sendChargeResponse(socket, requestId, true, QStringLiteral("OK"), {}, QJsonObject {
             {QStringLiteral("available"), info.available},
             {QStringLiteral("reason"), info.reason},
             {QStringLiteral("pile"), chargePileJson(info.pile)},
             {QStringLiteral("station_name"), info.stationName},
-            {QStringLiteral("price_per_kwh"), info.pricePerKwh}
+            {QStringLiteral("price_per_kwh"), info.pricePerKwh},
+            {"membership_level", pricing.value("level").toString("NORMAL")},
+            {"discount_bps", pricing.value("discount_bps").toInt(10000)}
         });
         return;
     }

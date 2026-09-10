@@ -70,7 +70,7 @@ private:
     void updateElapsedLabel();
 
     ev::UserApiClient *api_ = nullptr;
-    QVector<QLabel *> stageLabels_;
+    QWidget *stepBar_ = nullptr;
     QStackedWidget *pages_ = nullptr;
     QWidget *idlePage_ = nullptr;
     QLabel *idleLabel_ = nullptr;

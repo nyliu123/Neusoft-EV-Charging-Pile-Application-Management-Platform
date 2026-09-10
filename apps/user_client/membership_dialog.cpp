@@ -45,12 +45,27 @@ void styleChatAction(QPushButton *button){
 QString toolFieldTitle(const QString &field){static const QHash<QString,QString> names{{"user_id",QStringLiteral("用户编号")},{"phone",QStringLiteral("手机号")},{"nickname",QStringLiteral("昵称")},{"balance",QStringLiteral("余额")},{"register_time",QStringLiteral("注册时间")},{"status",QStringLiteral("状态")},{"station_id",QStringLiteral("站点编号")},{"station_name",QStringLiteral("充电站")},{"address",QStringLiteral("地址")},{"longitude",QStringLiteral("经度")},{"latitude",QStringLiteral("纬度")},{"price_per_kwh",QStringLiteral("电价")},{"pile_id",QStringLiteral("充电桩编号")},{"pile_number",QStringLiteral("桩号")},{"pile_type",QStringLiteral("类型")},{"power_kw",QStringLiteral("功率(kW)")},{"total_charge_count",QStringLiteral("充电次数")},{"total_charge_duration",QStringLiteral("累计时长")},{"comment_id",QStringLiteral("评价编号")},{"display_name",QStringLiteral("用户")},{"content",QStringLiteral("评价内容")},{"rating",QStringLiteral("评分")},{"average_rating",QStringLiteral("平均评分")},{"comment_count",QStringLiteral("评价数")},{"like_count",QStringLiteral("点赞数")},{"created_at",QStringLiteral("评价时间")},{"latest_comment_at",QStringLiteral("最新评价时间")}};return names.value(field,field);}
 QString toolDisplayName(const QString &tool){static const QHash<QString,QString> names{{"query_current_user",QStringLiteral("个人资料查询")},{"query_stations",QStringLiteral("充电站查询")},{"query_piles",QStringLiteral("充电桩查询")},{"query_station_comments",QStringLiteral("用户评价查询")}};return names.value(tool,tool);}
 QString toolValueText(const QJsonValue &value){if(value.isBool())return value.toBool()?QStringLiteral("是"):QStringLiteral("否");if(value.isDouble())return QString::number(value.toDouble(),'g',12);if(value.isNull()||value.isUndefined())return QStringLiteral("—");return value.toString();}
+class OverlayGeometryFilter final : public QObject {
+public:
+    OverlayGeometryFilter(QWidget *overlay,QObject *parent):QObject(parent),overlay_(overlay){}
+protected:
+    bool eventFilter(QObject *watched,QEvent *event) override {
+        if(event->type()==QEvent::Resize || event->type()==QEvent::Show){
+            if(auto *host=qobject_cast<QWidget *>(watched))
+                overlay_->setGeometry(0,8,248,qMax(0,host->height()-8));
+        }
+        return false;
+    }
+private:
+    QWidget *overlay_;
+};
 }
 MembershipDialog::MembershipDialog(ev::UserApiClient *api,bool openConsult,QWidget *parent):QDialog(parent),api_(api),consultOnly_(openConsult){
-    setObjectName("membershipDialog");setWindowTitle(openConsult?QStringLiteral("小轻 AI助手"):QStringLiteral("轻充 · 会员中心"));resize(1000,720);setMinimumSize(880,620);
+    setObjectName("membershipDialog");setWindowTitle(openConsult?QStringLiteral("小轻 AI助手"):QStringLiteral("轻充 · 会员中心"));resize(410,720);setMinimumSize(0,0);
     setAttribute(Qt::WA_DeleteOnClose);setWindowModality(Qt::WindowModal);
-    auto *root=new QVBoxLayout(this);root->setContentsMargins(24,20,24,20);root->setSpacing(12);
+    auto *root=new QVBoxLayout(this);root->setContentsMargins(10,10,10,10);root->setSpacing(8);
     auto *top=new QHBoxLayout;
+    auto *back=new QPushButton(QStringLiteral("< 返回"),this);back->setProperty("uiClass","text");top->addWidget(back);
     top->addWidget(label(openConsult?QStringLiteral("小轻 AI助手"):QStringLiteral("会员中心"),"pageTitle",this));top->addStretch();
     auto *refresh=new QPushButton(QStringLiteral("刷新权益"),this);refresh->setProperty("uiClass","secondary");top->addWidget(refresh);root->addLayout(top);
     status_=label(QStringLiteral("正在查询会员权益…"),"membershipStatus",this);status_->setObjectName("membershipStatus");root->addWidget(status_);
@@ -65,33 +80,35 @@ MembershipDialog::MembershipDialog(ev::UserApiClient *api,bool openConsult,QWidg
     const auto addPlanPage=[this](const QString &name,QWidget *&container,QGridLayout *&grid){auto *scroll=new QScrollArea(planLevelTabs_);scroll->setWidgetResizable(true);container=new QWidget(scroll);grid=new QGridLayout(container);grid->setSpacing(12);grid->setContentsMargins(0,8,8,0);grid->setAlignment(Qt::AlignTop);scroll->setWidget(container);planLevelTabs_->addTab(scroll,name);};
     addPlanPage(QStringLiteral("VIP"),vipCardContainer_,vipCards_);addPlanPage(QStringLiteral("SVIP"),svipCardContainer_,svipCards_);layout->addWidget(planLevelTabs_,1);
     if(!openConsult)tabs_->addTab(membership,QString());else membership->hide();
-    auto *consult=new QWidget(tabs_);auto *consultRoot=new QHBoxLayout(consult);consultRoot->setContentsMargins(0,8,0,0);consultRoot->setSpacing(14);
-    auto *historyPanel=new QFrame(consult);historyPanel->setObjectName("chatHistoryPanel");historyPanel->setFixedWidth(230);auto *historyLayout=new QVBoxLayout(historyPanel);historyLayout->setContentsMargins(12,14,12,12);historyLayout->setSpacing(10);
-    auto *historyHeader=new QHBoxLayout;auto *historyTitle=label(QStringLiteral("历史会话"),"sectionTitle",historyPanel);historyHeader->addWidget(historyTitle);historyHeader->addStretch();auto *collapseHistory=new QToolButton(historyPanel);collapseHistory->setIcon(svgIcon(QStringLiteral(":/icons/chat-back.svg")));collapseHistory->setIconSize(QSize(22,22));collapseHistory->setObjectName("collapseHistory");collapseHistory->setFixedSize(32,32);historyHeader->addWidget(collapseHistory);historyLayout->addLayout(historyHeader);
+    auto *consult=new QWidget(tabs_);auto *consultRoot=new QGridLayout(consult);consultRoot->setContentsMargins(0,8,0,0);consultRoot->setSpacing(0);
+    auto *historyRail=new QWidget(consult);auto *railLayout=new QHBoxLayout(historyRail);railLayout->setContentsMargins(0,0,18,0);
+    auto *historyPanel=new QFrame(historyRail);historyPanel->setObjectName("chatHistoryPanel");auto *historyLayout=new QVBoxLayout(historyPanel);historyLayout->setContentsMargins(12,14,12,12);historyLayout->setSpacing(10);railLayout->addWidget(historyPanel);
+    auto *historyHeader=new QHBoxLayout;auto *historyTitle=label(QStringLiteral("历史会话"),"sectionTitle",historyPanel);historyHeader->addWidget(historyTitle);historyHeader->addStretch();historyLayout->addLayout(historyHeader);
+    auto *collapseHistory=new QToolButton(historyRail);collapseHistory->setIcon(svgIcon(QStringLiteral(":/icons/chat-back.svg")));collapseHistory->setIconSize(QSize(22,22));collapseHistory->setObjectName("collapseHistory");collapseHistory->setStyleSheet(QStringLiteral("QToolButton { background:#f3f4f8; border:none; border-radius:10px; } QToolButton:hover { background:#f3f4f8; }"));collapseHistory->setFixedSize(36,36);collapseHistory->move(212,18);collapseHistory->raise();
     auto *newChat=new QPushButton(QStringLiteral("+ 新对话"),historyPanel);newChat->setObjectName("newChatButton");newChat->setProperty("uiClass","secondary");historyLayout->addWidget(newChat);
     chatSessionList_=new QListWidget(historyPanel);chatSessionList_->setObjectName("chatSessionList");chatSessionList_->setSpacing(4);historyLayout->addWidget(chatSessionList_,1);
     auto *deleteChat=new QPushButton(QStringLiteral("清空历史会话"),historyPanel);deleteChat->setProperty("uiClass","danger");historyLayout->addWidget(deleteChat);
-    consultRoot->addWidget(historyPanel);
     auto *chatPanel=new QWidget(consult);auto *cl=new QVBoxLayout(chatPanel);cl->setContentsMargins(0,0,0,0);cl->setSpacing(10);consultHint_=label({},"muted",chatPanel);consultHint_->hide();
     auto *collapsedHeader=new QHBoxLayout;auto *openHistory=new QToolButton(chatPanel);openHistory->setObjectName("openChatHistory");openHistory->setAccessibleName(QStringLiteral("打开历史会话"));openHistory->setIcon(svgIcon(QStringLiteral(":/icons/chat-menu.svg")));openHistory->setIconSize(QSize(22,22));openHistory->setFixedSize(36,36);collapsedHeader->addWidget(openHistory);collapsedHeader->addStretch();cl->addLayout(collapsedHeader);
     auto *messagesScroll=new QScrollArea(chatPanel);messagesScroll->setObjectName("chatMessagesScroll");messagesScroll->setWidgetResizable(true);messagesScroll->setFrameShape(QFrame::NoFrame);
     chatMessagesContainer_=new QWidget(messagesScroll);chatMessagesLayout_=new QVBoxLayout(chatMessagesContainer_);chatMessagesLayout_->setContentsMargins(18,16,18,16);chatMessagesLayout_->setSpacing(14);chatMessagesLayout_->addStretch();messagesScroll->setWidget(chatMessagesContainer_);cl->addWidget(messagesScroll,1);
-    auto *composer=new QFrame(chatPanel);composer->setObjectName("chatComposer");auto *composerLayout=new QHBoxLayout(composer);composerLayout->setContentsMargins(12,10,10,10);composerLayout->setSpacing(10);
+    auto *composer=new QFrame(chatPanel);composer->setObjectName("chatComposer");auto *composerLayout=new QVBoxLayout(composer);composerLayout->setContentsMargins(10,8,10,8);composerLayout->setSpacing(8);
     question_=new QPlainTextEdit(composer);question_->setObjectName("consultQuestion");question_->setPlaceholderText(QStringLiteral("给小轻发消息…"));question_->setMaximumHeight(96);composerLayout->addWidget(question_,1);
     question_->installEventFilter(this);
-    send_=new QPushButton(QStringLiteral("一键咨询"),composer);send_->setObjectName("consultSend");send_->setProperty("uiClass","primary");send_->setMinimumWidth(96);composerLayout->addWidget(send_,0,Qt::AlignBottom);cl->addWidget(composer);
-    consultRoot->addWidget(chatPanel,1);
+    send_=new QPushButton(QStringLiteral("一键咨询"),composer);send_->setObjectName("consultSend");send_->setProperty("uiClass","primary");send_->setMinimumHeight(42);composerLayout->addWidget(send_);cl->addWidget(composer);
+    consultRoot->addWidget(chatPanel,0,0);consult->installEventFilter(new OverlayGeometryFilter(historyRail,consult));historyRail->setGeometry(0,8,248,qMax(0,consult->height()-8));historyRail->raise();
     if(openConsult){tabs_->addTab(consult,QStringLiteral("小轻 AI助手"));}else consult->hide();
     tabs_->tabBar()->hide();
     tabs_->setCurrentIndex(0);
     connect(refresh,&QPushButton::clicked,this,[this]{if(!busy_)reload();});
+    connect(back,&QPushButton::clicked,this,&QDialog::reject);
     connect(billing_,&QComboBox::currentIndexChanged,this,[this]{renderPlans();});
     connect(send_,&QPushButton::clicked,this,&MembershipDialog::ask);
     connect(newChat,&QPushButton::clicked,this,[this]{createChatSession();api_->consult("clear",{},this,[](bool,const QJsonObject &,const QString &){});});
     connect(deleteChat,&QPushButton::clicked,this,&MembershipDialog::deleteChatSession);
-    connect(openHistory,&QToolButton::clicked,this,[historyPanel,openHistory]{historyPanel->show();openHistory->hide();});
-    connect(collapseHistory,&QToolButton::clicked,this,[historyPanel,openHistory]{historyPanel->hide();openHistory->show();});
-    historyPanel->hide();
+    connect(openHistory,&QToolButton::clicked,this,[historyRail]{historyRail->show();historyRail->raise();});
+    connect(collapseHistory,&QToolButton::clicked,this,[historyRail]{historyRail->hide();});
+    historyRail->hide();
     connect(chatSessionList_,&QListWidget::currentRowChanged,this,[this](int row){if(row>=0)selectChatSession(chatSessionList_->item(row)->data(Qt::UserRole).toString());});
     connect(api_,&ev::UserApiClient::sessionExpired,this,[this]{busy_=false;QDialog::reject();});
     if(openConsult)loadChatSessions();
@@ -128,11 +145,11 @@ void MembershipDialog::renderPlans(){
         auto *card=new QFrame(container);card->setProperty("uiClass","memberPlan");card->setProperty("level",p.value("level").toString());card->setMinimumHeight(155);auto *l=new QVBoxLayout(card);l->setContentsMargins(18,14,18,14);l->setSpacing(7);
         l->addWidget(label(planName(p),"sectionTitle",card));
         l->addWidget(label(money(p.value("price_cent").toInteger()),"stationPrice",card));
-        l->addWidget(label(QString("充电 %1 折 · %2").arg(p.value("discount_bps").toInt()/1000.0,0,'g',3).arg(p.value("level").toString()=="SVIP"?QStringLiteral("含AI咨询"):QStringLiteral("不含AI咨询")),"muted",card));
+        auto *benefit=label(QString("充电 %1 折 · %2").arg(p.value("discount_bps").toInt()/1000.0,0,'g',3).arg(p.value("level").toString()=="SVIP"?QStringLiteral("含AI咨询"):QStringLiteral("不含AI咨询")),"muted",card);benefit->setWordWrap(true);l->addWidget(benefit);
         const bool sameCurrentPlan=state_.value("valid").toBool() && state_.value("plan_id").toInteger()==p.value("plan_id").toInteger();
-        auto *b=new QPushButton(sameCurrentPlan?QStringLiteral("续费"):QStringLiteral("开通"),card);b->setObjectName(QString("buyPlan%1").arg(p.value("plan_id").toInt()));b->setProperty("uiClass",p.value("level").toString()=="SVIP"?"primary":"secondary");l->addWidget(b);connect(b,&QPushButton::clicked,this,[this,p]{buy(p);});grid->addWidget(card,index/2,index%2);++index;
+        auto *b=new QPushButton(sameCurrentPlan?QStringLiteral("续费"):QStringLiteral("开通"),card);b->setObjectName(QString("buyPlan%1").arg(p.value("plan_id").toInt()));b->setProperty("uiClass",p.value("level").toString()=="SVIP"?"primary":"secondary");l->addWidget(b);connect(b,&QPushButton::clicked,this,[this,p]{buy(p);});grid->addWidget(card,index,0);++index;
     }
-    for(auto *grid:{vipCards_,svipCards_}){grid->setColumnStretch(0,1);grid->setColumnStretch(1,1);}
+    for(auto *grid:{vipCards_,svipCards_})grid->setColumnStretch(0,1);
 }
 void MembershipDialog::buy(const QJsonObject &p){
     if(busy_)return;

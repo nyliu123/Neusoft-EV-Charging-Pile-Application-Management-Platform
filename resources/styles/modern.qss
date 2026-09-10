@@ -133,10 +133,10 @@ QPushButton[uiClass="stationCard"][available="false"] QLabel[uiClass="stationPri
 QFrame#userTopBar { background: #ffffff; border: 1px solid #edf0f6; border-radius: 18px; }
 QWidget#userBottomBar { background: transparent; border: none; }
 QToolButton[uiClass="bottomNavigation"] { min-height: 65px; padding: 5px 18px; background: transparent; border: none; border-radius: 14px; color: #626d82; font-size: 12px; }
-QToolButton[uiClass="bottomNavigation"]:hover { background: transparent; }
+QToolButton[uiClass="bottomNavigation"]:hover { background: transparent; color: #626d82; font-size: 12px; font-weight: 400; }
 QToolButton[uiClass="bottomNavigation"]:checked { background: transparent; color: #5264d6; font-weight: 600; }
 QToolButton#xiaoqingButton { padding: 0; background: transparent; border: none; color: #4659bf; font-weight: 600; }
-QToolButton#xiaoqingButton:hover { background: transparent; color: #4659bf; }
+QToolButton#xiaoqingButton:hover { background: transparent; color: #4659bf; font-weight: 600; }
 QFrame#chatHistoryPanel { background: #f3f4f8; border: none; border-radius: 16px; }
 QListWidget#chatSessionList { background: transparent; border: none; outline: none; }
 QListWidget#chatSessionList::item { padding: 0; border-radius: 9px; color: #3d4558; }
@@ -147,9 +147,10 @@ QPushButton[uiClass="chatSessionOpen"] { min-height: 20px; padding: 4px 2px; bac
 QPushButton[uiClass="chatSessionOpen"]:hover { background: transparent; color: #202637; }
 QToolButton[uiClass="chatSessionDelete"] { background: transparent; border: none; color: #8991a2; font-size: 17px; }
 QToolButton[uiClass="chatSessionDelete"]:hover { background: #ffe8e8; color: #c53535; border-radius: 7px; }
-QToolButton#collapseHistory { background: transparent; border: none; color: #687286; font-size: 22px; }
+QToolButton#collapseHistory { background: #f3f4f8; border: none; border-radius: 10px; color: #4659bf; font-size: 22px; }
 QToolButton#openChatHistory { background: #ffffff; border: 1px solid #e2e5ed; border-radius: 10px; }
-QToolButton#openChatHistory:hover, QToolButton#collapseHistory:hover { background: #f0f2f7; }
+QToolButton#openChatHistory:hover { background: #f0f2f7; }
+QToolButton#collapseHistory:hover { background: #f3f4f8; }
 QScrollArea#chatMessagesScroll { background: #ffffff; border: 1px solid #e8eaf0; border-radius: 16px; }
 QScrollArea#chatMessagesScroll > QWidget > QWidget { background: #ffffff; }
 QWidget[uiClass="chatMessageRow"] { background: transparent; }

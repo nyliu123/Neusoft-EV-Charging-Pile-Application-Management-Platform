@@ -64,6 +64,7 @@ Result<QSqlDatabase> DatabaseManager::openForCurrentThread() const
     // DELETE journal mode keeps per-query read visibility correct there.
     // The switch also checkpoints and converts databases already flagged WAL.
     const QStringList pragmas {
+        QStringLiteral("PRAGMA mmap_size = 0"),
         QStringLiteral("PRAGMA foreign_keys = ON"),
         QStringLiteral("PRAGMA busy_timeout = %1").arg(busyTimeoutMs_),
         QStringLiteral("PRAGMA journal_mode = DELETE")

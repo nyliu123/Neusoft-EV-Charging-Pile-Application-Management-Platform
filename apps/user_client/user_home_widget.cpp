@@ -10,10 +10,13 @@
 #include "user_api_client.h"
 
 #include <QLabel>
+#include <QScrollArea>
+#include <QEnterEvent>
 #include <QButtonGroup>
 #include <QPainter>
 #include <QPainterPath>
 #include <QMessageBox>
+#include <QDialog>
 #include <QPushButton>
 #include <QTimer>
 #include <QTabWidget>
@@ -106,10 +109,54 @@ QIcon selectedNavigationIcon(ev::AppSymbol symbol)
     return QIcon(pixmap);
 }
 
+class BottomNavigationButton final : public QToolButton {
+public:
+    BottomNavigationButton(ev::AppSymbol symbol, QWidget *parent)
+        : QToolButton(parent), symbol_(symbol) {}
+
+protected:
+    void enterEvent(QEnterEvent *event) override
+    {
+        setIconSize(QSize(36, 36));
+        setIcon(isChecked() ? selectedNavigationIcon(symbol_)
+                            : ev::appSymbolIcon(symbol_));
+        QToolButton::enterEvent(event);
+    }
+
+    void leaveEvent(QEvent *event) override
+    {
+        setIconSize(QSize(32, 32));
+        setIcon(isChecked() ? selectedNavigationIcon(symbol_)
+                            : ev::appSymbolIcon(symbol_));
+        QToolButton::leaveEvent(event);
+    }
+
+private:
+    ev::AppSymbol symbol_;
+};
+
+class AssistantNavigationButton final : public QToolButton {
+public:
+    using QToolButton::QToolButton;
+
+protected:
+    void enterEvent(QEnterEvent *event) override
+    {
+        setIconSize(QSize(72, 72));
+        QToolButton::enterEvent(event);
+    }
+
+    void leaveEvent(QEvent *event) override
+    {
+        setIconSize(QSize(68, 68));
+        QToolButton::leaveEvent(event);
+    }
+};
+
 QToolButton *navigationButton(const QString &text, ev::AppSymbol symbol,
                               QWidget *parent)
 {
-    auto *button = new QToolButton(parent);
+    auto *button = new BottomNavigationButton(symbol, parent);
     button->setText(text);
     button->setIcon(ev::appSymbolIcon(symbol));
     button->setIconSize(QSize(32, 32));
@@ -131,8 +178,8 @@ UserHomeWidget::UserHomeWidget(ev::UserApiClient *api, QWidget *parent)
     : QWidget(parent)
 {
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(24, 14, 24, 14);
-    layout->setSpacing(16);
+    layout->setContentsMargins(10, 10, 10, 10);
+    layout->setSpacing(8);
     auto *header = new QFrame(this);
     header->setObjectName(QStringLiteral("userTopBar"));
     auto *toolbar = new QHBoxLayout(header);
@@ -142,11 +189,14 @@ UserHomeWidget::UserHomeWidget(ev::UserApiClient *api, QWidget *parent)
     brand->setFixedWidth(142);
     toolbar->addWidget(brand);
     toolbar->addStretch();
-    logoutButton_ = new QPushButton(QStringLiteral("退出登录"), header);
-    logoutButton_->setProperty("uiClass", "text");
-    toolbar->addWidget(logoutButton_);
     layout->addWidget(header);
-    connect(logoutButton_, &QPushButton::clicked, this, [this] {
+    auto *tabs = new QTabWidget(this);
+    tabs_ = tabs;
+    stationSearchWidget_ = new StationSearchWidget(api, tabs);
+    chargeFlowWidget_ = new ChargeFlowWidget(api, tabs);
+    connect(api, &ev::UserApiClient::sessionExpired, chargeFlowWidget_, &ChargeFlowWidget::reset);
+    userInfoWidget_ = new UserInfoWidget(api, tabs);
+    connect(userInfoWidget_, &UserInfoWidget::logoutRequested, this, [this] {
         const auto answer = QMessageBox::question(this, QStringLiteral("退出登录"),
             QStringLiteral("确定退出当前用户账号？"),
             QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
@@ -156,12 +206,6 @@ UserHomeWidget::UserHomeWidget(ev::UserApiClient *api, QWidget *parent)
         setLogoutInProgress(true);
         emit logoutRequested();
     });
-    auto *tabs = new QTabWidget(this);
-    tabs_ = tabs;
-    stationSearchWidget_ = new StationSearchWidget(api, tabs);
-    chargeFlowWidget_ = new ChargeFlowWidget(api, tabs);
-    connect(api, &ev::UserApiClient::sessionExpired, chargeFlowWidget_, &ChargeFlowWidget::reset);
-    userInfoWidget_ = new UserInfoWidget(api, tabs);
     tabs->addTab(stationSearchWidget_, QStringLiteral("找桩"));
     tabs->addTab(chargeFlowWidget_, QStringLiteral("充电"));
     tabs->addTab(userInfoWidget_, QStringLiteral("个人中心"));
@@ -177,26 +221,61 @@ UserHomeWidget::UserHomeWidget(ev::UserApiClient *api, QWidget *parent)
     connect(orderListWidget_, &OrderListWidget::backRequested, this, [this] {
         tabs_->setCurrentWidget(stationSearchWidget_);
     });
+    const auto openPage = [this](QDialog *page, QWidget *returnPage) {
+        page->setWindowFlags(Qt::Widget);
+        page->setWindowModality(Qt::NonModal);
+        page->setMinimumSize(0, 0);
+        page->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
+        tabs_->addTab(page, QString());
+        tabs_->setCurrentWidget(page);
+        connect(page, &QDialog::finished, this, [this, page, returnPage] {
+            const int index = tabs_->indexOf(page);
+            if (index >= 0) {
+                tabs_->removeTab(index);
+            }
+            tabs_->setCurrentWidget(returnPage);
+        });
+    };
+    connect(stationSearchWidget_, &StationSearchWidget::pageRequested,
+            this, [openPage, this](QDialog *page) {
+                openPage(page, stationSearchWidget_);
+            });
+    connect(userInfoWidget_, &UserInfoWidget::pageRequested,
+            this, [openPage, this](QDialog *page) {
+                openPage(page, userInfoWidget_);
+            });
+    for (QWidget *page : {static_cast<QWidget *>(chargeFlowWidget_),
+                          static_cast<QWidget *>(userInfoWidget_)}) {
+        auto *content = new QWidget;
+        content->setLayout(page->layout());
+        auto *scroll = new QScrollArea(page);
+        scroll->setWidgetResizable(true);
+        scroll->setFrameShape(QFrame::NoFrame);
+        scroll->setWidget(content);
+        auto *pageLayout = new QVBoxLayout(page);
+        pageLayout->setContentsMargins(0, 0, 0, 0);
+        pageLayout->addWidget(scroll);
+    }
     tabs->tabBar()->hide();
     layout->addWidget(tabs, 1);
 
     auto *bottomBar = new BottomNavigationBar(this);
     bottomBar->setObjectName(QStringLiteral("userBottomBar"));
     auto *bottomLayout = new QHBoxLayout(bottomBar);
-    bottomLayout->setContentsMargins(18, 4, 18, 5);
-    bottomLayout->setSpacing(8);
+    bottomLayout->setContentsMargins(2, 4, 2, 5);
+    bottomLayout->setSpacing(0);
     auto *stationButton = navigationButton(QStringLiteral("找桩"), ev::AppSymbol::Compass, bottomBar);
     auto *chargeButton = navigationButton(QStringLiteral("充电"), ev::AppSymbol::Bolt, bottomBar);
-    auto *profileButton = navigationButton(QStringLiteral("个人中心"), ev::AppSymbol::Person, bottomBar);
-    auto *ordersButton = navigationButton(QStringLiteral("我的订单"), ev::AppSymbol::Receipt, bottomBar);
-    auto *assistantButton = new QToolButton(bottomBar);
+    auto *ordersButton = navigationButton(QStringLiteral("订单"), ev::AppSymbol::Receipt, bottomBar);
+    auto *profileButton = navigationButton(QStringLiteral("我的"), ev::AppSymbol::Person, bottomBar);
+    auto *assistantButton = new AssistantNavigationButton(bottomBar);
     assistantButton->setObjectName(QStringLiteral("xiaoqingButton"));
     assistantButton->setAccessibleName(QStringLiteral("小轻 AI助手"));
     assistantButton->setText(QStringLiteral("小轻"));
     assistantButton->setIcon(xiaoqingIcon());
     assistantButton->setIconSize(QSize(68, 68));
     assistantButton->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
-    assistantButton->setFixedSize(112, 92);
+    assistantButton->setFixedSize(76, 92);
     bottomBar->setCenterWidget(assistantButton);
     stationButton->setFixedHeight(74);
     chargeButton->setFixedHeight(74);
@@ -205,8 +284,8 @@ UserHomeWidget::UserHomeWidget(ev::UserApiClient *api, QWidget *parent)
     bottomLayout->addWidget(stationButton, 1, Qt::AlignBottom);
     bottomLayout->addWidget(chargeButton, 1, Qt::AlignBottom);
     bottomLayout->addWidget(assistantButton, 0, Qt::AlignBottom);
-    bottomLayout->addWidget(profileButton, 1, Qt::AlignBottom);
     bottomLayout->addWidget(ordersButton, 1, Qt::AlignBottom);
+    bottomLayout->addWidget(profileButton, 1, Qt::AlignBottom);
     layout->addWidget(bottomBar);
 
     auto *navigationGroup = new QButtonGroup(this);
@@ -227,9 +306,9 @@ UserHomeWidget::UserHomeWidget(ev::UserApiClient *api, QWidget *parent)
         }
     });
     stationButton->setChecked(true);
-    connect(assistantButton, &QToolButton::clicked, this, [this, api] {
+    connect(assistantButton, &QToolButton::clicked, this, [this, api, openPage] {
         auto *dialog = new MembershipDialog(api, true, this);
-        dialog->show();
+        openPage(dialog, stationSearchWidget_);
     });
 
     connect(stationSearchWidget_, &StationSearchWidget::pileChosen, this, [this, tabs](qint64 pileId) {
@@ -271,7 +350,5 @@ void UserHomeWidget::showWelcome(bool isNewUser)
 
 void UserHomeWidget::setLogoutInProgress(bool inProgress)
 {
-    logoutButton_->setEnabled(!inProgress);
-    logoutButton_->setText(inProgress ? QStringLiteral("正在退出...")
-                                      : QStringLiteral("退出登录"));
+    userInfoWidget_->setLogoutInProgress(inProgress);
 }

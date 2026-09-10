@@ -32,5 +32,4 @@ private:
     OrderListWidget *orderListWidget_ = nullptr;
     StationSearchWidget *stationSearchWidget_ = nullptr;
     UserInfoWidget *userInfoWidget_ = nullptr;
-    QPushButton *logoutButton_ = nullptr;
 };

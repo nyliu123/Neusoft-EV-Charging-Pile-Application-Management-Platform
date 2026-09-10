@@ -84,8 +84,6 @@ UserInfoWidget::UserInfoWidget(ev::UserApiClient *api, QWidget *parent)
     refreshButton_ = new QPushButton(QStringLiteral("刷新"), this);
     refreshButton_->setProperty("uiClass", "secondary");
     header->addWidget(title);
-    header->addSpacing(10);
-    header->addWidget(userIdLabel_);
     header->addStretch();
     header->addWidget(refreshButton_);
     mainLayout->addLayout(header);
@@ -98,8 +96,15 @@ UserInfoWidget::UserInfoWidget(ev::UserApiClient *api, QWidget *parent)
     avatarLabel_->setObjectName(QStringLiteral("profileAvatar"));
     avatarLabel_->setFixedSize(96, 96);
     avatarLabel_->setAlignment(Qt::AlignCenter);
-    profileLayout->addWidget(avatarLabel_);
+    auto *avatarColumn = new QVBoxLayout;
+    avatarColumn->setSpacing(10);
+    avatarColumn->addWidget(avatarLabel_);
+    changeAvatarButton_ = new QPushButton(QStringLiteral("更换头像"), profileCard);
+    changeAvatarButton_->setProperty("uiClass", "secondary");
+    avatarColumn->addWidget(changeAvatarButton_);
+    profileLayout->addLayout(avatarColumn);
     auto *profileText = new QVBoxLayout;
+    profileText->setAlignment(Qt::AlignTop);
     auto *nameRow = new QHBoxLayout;
     nicknameLabel_ = new QLabel(profileCard);
     nicknameLabel_->setProperty("uiClass", "profileName");
@@ -109,58 +114,67 @@ UserInfoWidget::UserInfoWidget(ev::UserApiClient *api, QWidget *parent)
     nameRow->addWidget(editNicknameButton_);
     nameRow->addStretch();
     profileText->addLayout(nameRow);
-    auto *hint = new QLabel(QStringLiteral("头像与昵称修改后会同步到服务端"), profileCard);
-    hint->setProperty("uiClass", "muted");
-    profileText->addWidget(hint);
-    changeAvatarButton_ = new QPushButton(QStringLiteral("更换头像"), profileCard);
-    changeAvatarButton_->setProperty("uiClass", "secondary");
-    changeAvatarButton_->setMaximumWidth(120);
-    profileText->addWidget(changeAvatarButton_);
+    profileText->addWidget(userIdLabel_, 0, Qt::AlignLeft);
     profileLayout->addLayout(profileText);
     profileLayout->addStretch();
     mainLayout->addWidget(profileCard);
 
     auto *walletCard = createCard(this);
-    auto *walletLayout = new QHBoxLayout(walletCard);
+    auto *walletLayout = new QVBoxLayout(walletCard);
     walletLayout->setContentsMargins(26, 20, 26, 20);
+    auto *balanceRow = new QHBoxLayout;
     auto *walletTitle = new QLabel(QStringLiteral("钱包余额"), walletCard);
     walletTitle->setProperty("uiClass", "sectionTitle");
     balanceLabel_ = new QLabel(walletCard);
     balanceLabel_->setProperty("uiClass", "balanceValue");
     rechargeButton_ = new QPushButton(QStringLiteral("充值"), walletCard);
     rechargeButton_->setProperty("uiClass", "primary");
-    walletLayout->addWidget(walletTitle);
-    walletLayout->addStretch();
-    walletLayout->addWidget(balanceLabel_);
-    walletLayout->addSpacing(14);
-    walletLayout->addWidget(rechargeButton_);
+    balanceRow->addWidget(walletTitle);
+    balanceRow->addStretch();
+    balanceRow->addWidget(balanceLabel_);
+    balanceRow->addStretch();
+    balanceRow->addWidget(rechargeButton_);
+    walletLayout->addLayout(balanceRow);
     mainLayout->addWidget(walletCard);
 
     auto *operationCard = createCard(this);
-    auto *operationLayout = new QHBoxLayout(operationCard);
+    auto *operationLayout = new QVBoxLayout(operationCard);
     operationLayout->setContentsMargins(26, 18, 26, 18);
     auto *operationHint = new QLabel(
         QStringLiteral("会员权益 · VIP充电优惠 / SVIP专属AI咨询"), operationCard);
     operationHint->setWordWrap(true);
+    operationHint->setAlignment(Qt::AlignCenter);
     operationHint->setProperty("uiClass", "muted");
-    operationLayout->addWidget(operationHint);
     auto *membership = new QPushButton(QStringLiteral("会员中心"), operationCard);
     membership->setObjectName("membershipEntry");membership->setProperty("uiClass","primary");
     operationLayout->addWidget(membership);
+    operationLayout->addWidget(operationHint);
     const auto openMembership = [this] {
         auto *dialog = new MembershipDialog(api_,false,this);
         connect(dialog,&QDialog::finished,this,[this]{refreshFromServer();});
-        dialog->show();
+        emit pageRequested(dialog);
     };
     connect(membership,&QPushButton::clicked,this,openMembership);
     mainLayout->addWidget(operationCard);
+    logoutButton_ = new QPushButton(QStringLiteral("退出登录"), content);
+    logoutButton_->setProperty("uiClass", "danger");
+    logoutButton_->setMinimumHeight(44);
+    mainLayout->addWidget(logoutButton_);
     mainLayout->addStretch();
 
     connect(refreshButton_, &QPushButton::clicked, this, &UserInfoWidget::refreshFromServer);
     connect(changeAvatarButton_, &QPushButton::clicked, this, &UserInfoWidget::changeAvatar);
     connect(editNicknameButton_, &QPushButton::clicked, this, &UserInfoWidget::editNickname);
     connect(rechargeButton_, &QPushButton::clicked, this, &UserInfoWidget::recharge);
+    connect(logoutButton_, &QPushButton::clicked, this, &UserInfoWidget::logoutRequested);
     refreshFromSession();
+}
+
+void UserInfoWidget::setLogoutInProgress(bool inProgress)
+{
+    logoutButton_->setEnabled(!inProgress);
+    logoutButton_->setText(inProgress ? QStringLiteral("正在退出...")
+                                      : QStringLiteral("退出登录"));
 }
 
 void UserInfoWidget::refreshFromSession()
@@ -212,8 +226,13 @@ void UserInfoWidget::refreshFromServer()
 
 void UserInfoWidget::changeAvatar()
 {
-    const QString path = QFileDialog::getOpenFileName(
-        this, QStringLiteral("选择头像"), {}, QStringLiteral("图片文件 (*.jpg *.jpeg *.png)"));
+    QFileDialog picker(this, QStringLiteral("选择头像"));
+    picker.setOption(QFileDialog::DontUseNativeDialog);
+    picker.setFileMode(QFileDialog::ExistingFile);
+    picker.setNameFilter(QStringLiteral("图片文件 (*.jpg *.jpeg *.png)"));
+    picker.resize(qMin(390, width() - 20), qMin(700, window()->height() - 48));
+    const QString path = picker.exec() == QDialog::Accepted
+        ? picker.selectedFiles().value(0) : QString();
     if (path.isEmpty()) {
         return;
     }
@@ -252,7 +271,7 @@ void UserInfoWidget::editNickname()
 {
     QDialog dialog(this);
     dialog.setWindowTitle(QStringLiteral("修改昵称"));
-    dialog.setMinimumWidth(400);
+    dialog.resize(qMin(390, width() - 20), dialog.sizeHint().height());
     auto *layout = new QVBoxLayout(&dialog);
     auto *edit = new QLineEdit(UserSessionState::instance().nickname(), &dialog);
     edit->setMaxLength(20);
@@ -306,7 +325,7 @@ void UserInfoWidget::recharge()
 {
     QDialog dialog(this);
     dialog.setWindowTitle(QStringLiteral("钱包充值"));
-    dialog.setMinimumWidth(410);
+    dialog.resize(qMin(390, width() - 20), dialog.sizeHint().height());
     auto *layout = new QVBoxLayout(&dialog);
     auto *hint = new QLabel(QStringLiteral("模拟支付：充值范围 ¥0.01 ~ ¥9999.99"), &dialog);
     auto *edit = new QLineEdit(&dialog);

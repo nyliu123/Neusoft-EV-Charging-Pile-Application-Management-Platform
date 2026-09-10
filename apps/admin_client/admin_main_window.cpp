@@ -1,5 +1,6 @@
 #include "admin_main_window.h"
 #include "client_ui/apple_widgets.h"
+#include "client_ui/client_style.h"
 
 #include "admin_dashboard_page.h"
 #include "admin_login_dialog.h"
@@ -223,9 +224,11 @@ void AdminMainWindow::showLoginAgain(const QString &reason)
     }
     reloginActive_ = true;
     api_.setSession(AdminSession {});
+    const QPoint windowCenter = frameGeometry().center();
     hide();
 
     AdminLoginDialog dialog(client_);
+    centerClientWindow(dialog, windowCenter);
     const bool accepted = dialog.exec() == QDialog::Accepted;
     reloginActive_ = false;
 
@@ -235,6 +238,7 @@ void AdminMainWindow::showLoginAgain(const QString &reason)
     }
     applySession(dialog.session());
     show();
+    centerClientWindow(*this, dialog.frameGeometry().center());
     raise();
     activateWindow();
     refreshCurrentPage();

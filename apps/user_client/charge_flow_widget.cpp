@@ -9,6 +9,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMessageBox>
+#include <QPainter>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QStackedWidget>
@@ -43,6 +44,47 @@ QLabel *makeTitle(const QString &text, QWidget *parent)
     return label;
 }
 
+class ChargingStepBar final : public QWidget {
+public:
+    explicit ChargingStepBar(QWidget *parent = nullptr) : QWidget(parent)
+    {
+        setFixedHeight(70);
+        setProperty("currentStep", 0);
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        static const QStringList captions {QStringLiteral("确认设备"), QStringLiteral("预约就绪"),
+            QStringLiteral("正在充电"), QStringLiteral("订单结算")};
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        const int current = property("currentStep").toInt();
+        const qreal step = width() / 4.0;
+        const qreal left = step / 2.0;
+        const qreal right = width() - step / 2.0;
+        const qreal centerY = 23.0;
+        painter.setPen(QPen(QColor("#dfe3ec"), 6, Qt::SolidLine, Qt::RoundCap));
+        painter.drawLine(QPointF(left, centerY), QPointF(right, centerY));
+        if (current > 0) {
+            painter.setPen(QPen(QColor("#5b6ee1"), 6, Qt::SolidLine, Qt::RoundCap));
+            painter.drawLine(QPointF(left, centerY), QPointF(left + step * current, centerY));
+        }
+        for (int i = 0; i < 4; ++i) {
+            const QPointF center(left + step * i, centerY);
+            painter.setPen(QPen(i <= current ? QColor("#5b6ee1") : QColor("#cfd4df"), 2));
+            painter.setBrush(i <= current ? QColor("#5b6ee1") : QColor("#f6f7fa"));
+            painter.drawEllipse(center, i == current ? 13 : 10, i == current ? 13 : 10);
+            painter.setPen(i <= current ? Qt::white : QColor("#8991a2"));
+            painter.drawText(QRectF(center.x() - 12, center.y() - 12, 24, 24),
+                             Qt::AlignCenter, QString::number(i + 1));
+            painter.setPen(i == current ? QColor("#4659bf") : QColor("#687286"));
+            painter.drawText(QRectF(center.x() - step / 2, 45, step, 20),
+                             Qt::AlignHCenter | Qt::AlignTop, captions.at(i));
+        }
+    }
+};
+
 } // namespace
 
 ChargeFlowWidget::ChargeFlowWidget(ev::UserApiClient *api, QWidget *parent)
@@ -51,17 +93,9 @@ ChargeFlowWidget::ChargeFlowWidget(ev::UserApiClient *api, QWidget *parent)
     auto *root = new QVBoxLayout(this);
     root->setContentsMargins(0, 8, 0, 0);
     root->setSpacing(20);
-    auto *steps = new QHBoxLayout;
-    steps->setSpacing(4);
-    const QStringList captions {QStringLiteral("01  确认设备"), QStringLiteral("02  预约就绪"),
-        QStringLiteral("03  正在充电"), QStringLiteral("04  订单结算")};
-    for (const QString &caption : captions) {
-        auto *label = new QLabel(caption, this);
-        label->setProperty("uiClass", "flowStep");
-        stageLabels_.append(label);
-        steps->addWidget(label, 1);
-    }
-    root->addLayout(steps);
+    stepBar_ = new ChargingStepBar(this);
+    stepBar_->setObjectName(QStringLiteral("chargingStepBar"));
+    root->addWidget(stepBar_);
     pages_ = new QStackedWidget(this);
     root->addWidget(pages_);
 
@@ -79,6 +113,9 @@ ChargeFlowWidget::ChargeFlowWidget(ev::UserApiClient *api, QWidget *parent)
     // ── Pile confirmation page (UML-026) ────────────────────────────────
     selectPage_ = new QWidget(pages_);
     auto *selectLayout = new QVBoxLayout(selectPage_);
+    reselectButton_ = new QPushButton(QStringLiteral("< 返回重新选桩"), selectPage_);
+    reselectButton_->setProperty("uiClass", "text");
+    selectLayout->addWidget(reselectButton_, 0, Qt::AlignLeft);
     selectLayout->addWidget(makeTitle(QStringLiteral("确认充电桩"), selectPage_));
     selectLayout->setSpacing(18);
     auto *selectionCard = new QFrame(selectPage_);
@@ -87,35 +124,31 @@ ChargeFlowWidget::ChargeFlowWidget(ev::UserApiClient *api, QWidget *parent)
     cardLayout->setContentsMargins(26, 26, 26, 24);
     cardLayout->setSpacing(22);
     auto *summary = new QHBoxLayout;
-    summary->setSpacing(28);
+    summary->setSpacing(18);
     auto *glyph = new QLabel(selectionCard);
-    glyph->setPixmap(ev::appSymbolIcon(ev::AppSymbol::Bolt).pixmap(64, 64));
+    glyph->setPixmap(ev::appSymbolIcon(ev::AppSymbol::Station).pixmap(64, 64));
     glyph->setFixedSize(110, 116);
     glyph->setProperty("uiClass", "chargeGlyph");
     glyph->setAlignment(Qt::AlignCenter);
-    summary->addWidget(glyph);
+    summary->addWidget(glyph, 0, Qt::AlignTop);
     auto *information = new QVBoxLayout;
-    information->setSpacing(14);
-    auto *caption = new QLabel(QStringLiteral("已选择的充电设备"), selectionCard);
-    caption->setProperty("uiClass", "eyebrow");
-    information->addWidget(caption);
+    information->setSpacing(0);
     selectInfo_ = new QLabel(selectionCard);
+    selectInfo_->setObjectName(QStringLiteral("selectedPileInfo"));
     selectInfo_->setProperty("uiClass", "chargeInfo");
     selectInfo_->setWordWrap(true);
     information->addWidget(selectInfo_);
     selectPrice_ = new QLabel(selectionCard);
-    selectPrice_->setProperty("uiClass", "chargePrice");
+    selectPrice_->setObjectName(QStringLiteral("selectedPilePrice"));
+    selectPrice_->setProperty("uiClass", "chargeInfo");
     information->addWidget(selectPrice_);
+    summary->addLayout(information, 1);
+    cardLayout->addLayout(summary);
     auto *instruction = new QLabel(QStringLiteral("核对站点与设备，预约成功后可开始充电。"), selectionCard);
     instruction->setProperty("uiClass", "muted");
     instruction->setWordWrap(true);
-    information->addWidget(instruction);
-    summary->addLayout(information, 1);
-    cardLayout->addLayout(summary);
+    cardLayout->addWidget(instruction);
     auto *selectButtons = new QHBoxLayout;
-    reselectButton_ = new QPushButton(QStringLiteral("返回重新选桩"), selectPage_);
-    reselectButton_->setProperty("uiClass", "text");
-    selectButtons->addWidget(reselectButton_);
     selectButtons->addStretch();
     reserveButton_ = new QPushButton(QStringLiteral("预约充电"), selectPage_);
     reserveButton_->setProperty("uiClass", "primary");
@@ -184,6 +217,9 @@ ChargeFlowWidget::ChargeFlowWidget(ev::UserApiClient *api, QWidget *parent)
     // ── Settlement result page (UML-031, balance sufficient) ────────────
     settlePage_ = new QWidget(pages_);
     auto *settleLayout = new QVBoxLayout(settlePage_);
+    homeButton_ = new QPushButton(QStringLiteral("< 返回首页"), settlePage_);
+    homeButton_->setProperty("uiClass", "text");
+    settleLayout->addWidget(homeButton_, 0, Qt::AlignLeft);
     settleTitle_ = new QLabel(settlePage_);
     settleTitle_->setProperty("uiClass", "pageTitle");
     settleLayout->addWidget(settleTitle_);
@@ -192,9 +228,6 @@ ChargeFlowWidget::ChargeFlowWidget(ev::UserApiClient *api, QWidget *parent)
     settleDetail_->setWordWrap(true);
     settleLayout->addWidget(settleDetail_);
     settleLayout->addStretch();
-    homeButton_ = new QPushButton(QStringLiteral("返回首页"), settlePage_);
-    homeButton_->setProperty("uiClass", "primary");
-    settleLayout->addWidget(homeButton_, 0, Qt::AlignRight);
     pages_->addWidget(settlePage_);
 
     // ── Pending-settlement page (UML-031, insufficient balance) ─────────
@@ -283,11 +316,8 @@ void ChargeFlowWidget::setStage(Stage stage)
     stage_ = stage;
     const int currentStep = stage == Stage::Reserved ? 1 : stage == Stage::Charging ? 2
         : (stage == Stage::Settled || stage == Stage::PendingSettlement) ? 3 : 0;
-    for (int i = 0; i < stageLabels_.size(); ++i) {
-        stageLabels_[i]->setProperty("active", i == currentStep);
-        stageLabels_[i]->style()->unpolish(stageLabels_[i]);
-        stageLabels_[i]->style()->polish(stageLabels_[i]);
-    }
+    stepBar_->setProperty("currentStep", currentStep);
+    stepBar_->update();
     if (stage_ != Stage::Charging) {
         elapsedTimer_->stop();
     }
@@ -353,6 +383,8 @@ void ChargeFlowWidget::verifyPile(qint64 pileId)
             powerKw_ = pile.value(QStringLiteral("power_kw")).toDouble();
             stationName_ = result.value(QStringLiteral("station_name")).toString();
             pricePerKwh_ = result.value(QStringLiteral("price_per_kwh")).toDouble();
+            membershipLevel_ = result.value("membership_level").toString("NORMAL");
+            discountBps_ = result.value("discount_bps").toInt(10000);
             renderPileInfo(selectInfo_, selectPrice_);
             setStage(Stage::SelectPile);
             pages_->setCurrentWidget(selectPage_);
@@ -361,17 +393,15 @@ void ChargeFlowWidget::verifyPile(qint64 pileId)
 
 void ChargeFlowWidget::renderPileInfo(QLabel *infoLabel, QLabel *priceLabel) const
 {
-    infoLabel->setText(QStringLiteral("%1 · %2（%3，%4 kW）")
+    infoLabel->setText(QStringLiteral("站点：%1\n桩编号：%2\n类型：%3\n功率：%4 kW")
                            .arg(stationName_, pileNumber_, pileTypeText(pileType_))
                            .arg(powerKw_, 0, 'f', 1));
-    QString text = QStringLiteral("充电原价 ¥%1 / 度").arg(pricePerKwh_, 0, 'f', 2);
-    if (orderId_ > 0) {
-        text += discountBps_ < 10000
-            ? QStringLiteral(" · 本单 %1 %2折（预约时锁定）").arg(membershipLevel_).arg(discountBps_ / 1000.0, 0, 'g', 4)
-            : QStringLiteral(" · 本单无会员优惠");
-    } else {
-        text += QStringLiteral(" · 会员优惠将在预约时确定");
-    }
+    priceLabel->setTextFormat(Qt::RichText);
+    const double memberPrice = pricePerKwh_ * discountBps_ / 10000.0;
+    const QString text = discountBps_ < 10000
+        ? QStringLiteral("电价：<span style='text-decoration:line-through;color:#7a8190;'>¥%1/度</span>&nbsp;&nbsp;¥%2/度")
+              .arg(pricePerKwh_, 0, 'f', 2).arg(memberPrice, 0, 'f', 2)
+        : QStringLiteral("电价：¥%1/度").arg(pricePerKwh_, 0, 'f', 2);
     priceLabel->setText(text);
 }
 

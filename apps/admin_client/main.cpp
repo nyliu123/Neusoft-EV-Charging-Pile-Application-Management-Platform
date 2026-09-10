@@ -77,14 +77,17 @@ int main(int argc, char *argv[])
     // Wait for connection to be ready before showing login dialog.
     // Show dialog immediately, but disable login button until ready.
     ev::AdminLoginDialog loginDialog(&client);
+    ev::centerClientWindowOnScreen(loginDialog);
     const int dialogResult = loginDialog.exec();
 
     if (dialogResult != QDialog::Accepted) {
         return 0;
     }
 
+    const QPoint windowCenter = loginDialog.frameGeometry().center();
     ev::AdminMainWindow mainWindow(&client, loginDialog.session());
     mainWindow.show();
+    ev::centerClientWindow(mainWindow, windowCenter);
 
     return application.exec();
 }

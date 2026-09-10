@@ -7,6 +7,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QSettings>
+#include <QStandardPaths>
 
 namespace {
 
@@ -26,21 +27,10 @@ void applyAiConfiguration(QSettings &settings)
 
 QString defaultDatabasePath()
 {
-#ifdef EV_SERVER_SOURCE_DIR
-    // Absolute source directory from server.pro. Resolving __FILE__ at
-    // runtime depends on the process working directory: Qt Creator launches
-    // the binary from bin/, which makes the build-relative __FILE__ miss the
-    // source tree and fall back to a private per-build-dir database.
-    const QDir sourceDirectory(QString::fromUtf8(EV_SERVER_SOURCE_DIR));
-#else
-    const QDir sourceDirectory = QFileInfo(QString::fromUtf8(__FILE__)).absoluteDir();
-#endif
-    const QString sourceDatabase = QDir::cleanPath(sourceDirectory.absoluteFilePath(
-        QStringLiteral("../../data/ev_charging.sqlite3")));
-    if (QFileInfo::exists(sourceDatabase)) {
-        return sourceDatabase;
-    }
-    return QDir::current().absoluteFilePath(QStringLiteral("data/ev_charging.sqlite3"));
+    // Runtime writes must not modify the bundled template or depend on hgfs
+    // locking/cache coherence. Explicit --database/config paths still override.
+    return QDir(QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation))
+        .filePath(QStringLiteral("ev_charging.sqlite3"));
 }
 
 } // namespace

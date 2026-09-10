@@ -5,6 +5,7 @@
 #include <QWidget>
 
 class QComboBox;
+class QDialog;
 class QLabel;
 class QLineEdit;
 class QPlainTextEdit;
@@ -31,6 +32,7 @@ signals:
     // Emitted when the user picks an idle pile in the station detail page;
     // the charging flow (UML-025~032) is entered with this pile.
     void pileChosen(qint64 pileId);
+    void pageRequested(QDialog *page);
 
 protected:
     void resizeEvent(QResizeEvent *event) override;
@@ -71,6 +73,7 @@ private:
     ev::ModernHeroBanner *heroBanner_ = nullptr;
     QLabel *detailTitle_ = nullptr;
     QLabel *detailMeta_ = nullptr;
+    QLabel *detailRatingLabel_ = nullptr;
     QPushButton *startNavigationButton_ = nullptr;
     QTableWidget *pileTable_ = nullptr;
     QPushButton *commentsButton_ = nullptr;
